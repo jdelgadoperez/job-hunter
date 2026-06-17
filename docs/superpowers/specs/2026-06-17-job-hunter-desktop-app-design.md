@@ -123,7 +123,9 @@ type LiveStatus = "live" | "expired" | "unknown";
 
 ### 1. Profile — `buildProfile(input) → SkillProfile`
 
-- **Resume path:** parse PDF/docx → plain text → extract skills/keywords. Default
+- **Resume path:** parse the uploaded file (PDF, docx, Markdown, or plain text) →
+  plain text → extract skills/keywords. Markdown and `.txt` are read directly;
+  PDF/docx go through the parsing library. Default
   extraction is a heuristic skill-dictionary match; LLM extraction is used when an
   API key resolves. Manual keywords/categories merge into the result.
 - Pure transformation, no network.
@@ -252,8 +254,8 @@ The system degrades gracefully and never hard-crashes:
 Included:
 
 - macOS + Windows desktop app, double-click install, no accounts, all data local
-- Input: paste keywords/categories and/or upload a resume (PDF/docx) to auto-extract
-  skills (editable before searching)
+- Input: paste keywords/categories and/or upload a resume (PDF, docx, Markdown, or
+  plain text) to auto-extract skills (editable before searching)
 - Discovery via `stillhiring.today` → resolve each company's job board
   (Greenhouse / Lever / Ashby, with a generic browser fallback)
 - Match % + matched skills + skill gaps per role
