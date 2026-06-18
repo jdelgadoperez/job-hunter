@@ -1,0 +1,16 @@
+[
+  {
+    "id": "b1a9f0c2-1111-4a2b-9c3d-000000000001",
+    "text": "Backend Engineer",
+    "hostedUrl": "https://jobs.lever.co/acme/b1a9f0c2-1111-4a2b-9c3d-000000000001",
+    "descriptionPlain": "Build resilient services in Go and PostgreSQL.",
+    "categories": { "location": "Remote", "team": "Platform", "commitment": "Full-time" }
+  },
+  {
+    "id": "b1a9f0c2-2222-4a2b-9c3d-000000000002",
+    "text": "Growth Marketing Manager",
+    "hostedUrl": "https://jobs.lever.co/acme/b1a9f0c2-2222-4a2b-9c3d-000000000002",
+    "descriptionPlain": "Own SEO and lifecycle campaigns.",
+    "categories": { "location": "San Francisco, CA", "team": "Marketing" }
+  }
+]

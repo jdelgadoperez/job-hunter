@@ -1,0 +1,21 @@
+{
+  "jobs": [
+    {
+      "id": 5612345,
+      "title": "Senior Software Engineer",
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/5612345",
+      "content": "We are looking for a Senior Software Engineer with TypeScript and React experience.",
+      "location": { "name": "Remote - US" },
+      "updated_at": "2026-05-01T12:00:00-04:00"
+    },
+    {
+      "id": 5612346,
+      "title": "Product Designer",
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/5612346",
+      "content": "Design delightful experiences. Figma and Adobe Photoshop required.",
+      "location": { "name": "New York, NY" },
+      "updated_at": "2026-05-02T09:30:00-04:00"
+    }
+  ],
+  "meta": { "total": 2 }
+}
