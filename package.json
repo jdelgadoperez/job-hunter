@@ -15,10 +15,16 @@
     "@biomejs/biome": "^1.9.4",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.0.0",
+    "playwright": "^1.61.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   },
   "dependencies": {
-    "better-sqlite3": "^11.3.0"
+    "better-sqlite3": "^11.3.0",
+    "mammoth": "^1.12.0",
+    "p-limit": "^7.3.0",
+    "pdfjs-dist": "^6.0.227",
+    "zod": "^4.4.3"
   }
 }
