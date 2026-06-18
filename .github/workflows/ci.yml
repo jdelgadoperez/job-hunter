@@ -8,6 +8,11 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # The automated suite drives connectors against recorded fixtures and never
+    # launches a real browser, so skip Playwright's ~150MB Chromium download on
+    # install. The opt-in smoke script installs it on demand.
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
 

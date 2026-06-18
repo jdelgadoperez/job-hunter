@@ -35,4 +35,10 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS skills (
+  name TEXT PRIMARY KEY,
+  category TEXT,
+  source TEXT
+);
 `;

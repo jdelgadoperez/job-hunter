@@ -9,6 +9,7 @@
     },
     "lib": ["ES2022"],
     "strict": true,
+    "resolveJsonModule": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noEmit": true,

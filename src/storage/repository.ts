@@ -75,6 +75,28 @@ export class Repository {
       .run(postingId, action);
   }
 
+  /** Idempotent upsert of the seeded skill dictionary; re-seeding never duplicates. */
+  seedSkills(skills: { name: string; category: string }[]): void {
+    const insert = this.db.prepare(
+      `INSERT INTO skills (name, category, source) VALUES (@name, @category, 'open-taxonomy')
+       ON CONFLICT(name) DO UPDATE SET category = excluded.category`,
+    );
+    const insertMany = this.db.transaction((rows: { name: string; category: string }[]) => {
+      for (const row of rows) {
+        insert.run(row);
+      }
+    });
+    insertMany(skills);
+  }
+
+  /** Normalized skill names from the seeded dictionary; empty when unseeded. */
+  getSkillDictionary(): string[] {
+    const rows = this.db.prepare("SELECT name FROM skills ORDER BY name").all() as {
+      name: string;
+    }[];
+    return rows.map((row) => row.name);
+  }
+
   getSetting(key: string): string | undefined {
     const row = this.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
       | { value: string }

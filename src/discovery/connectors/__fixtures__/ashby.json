@@ -1,0 +1,18 @@
+{
+  "jobs": [
+    {
+      "id": "c2b8e1d3-aaaa-4b3c-8d4e-000000000001",
+      "title": "Staff Frontend Engineer",
+      "jobUrl": "https://jobs.ashbyhq.com/acme/c2b8e1d3-aaaa-4b3c-8d4e-000000000001",
+      "descriptionPlain": "Lead our React and TypeScript front-end architecture.",
+      "location": "Remote - Worldwide"
+    },
+    {
+      "id": "c2b8e1d3-bbbb-4b3c-8d4e-000000000002",
+      "title": "Finance Analyst",
+      "jobUrl": "https://jobs.ashbyhq.com/acme/c2b8e1d3-bbbb-4b3c-8d4e-000000000002",
+      "descriptionPlain": "Financial modeling and forecasting.",
+      "location": "London, UK"
+    }
+  ]
+}

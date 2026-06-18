@@ -1,0 +1,26 @@
+{
+  "note": "Lower-cased substrings indicating a posting has been taken down. Each marker is confirmed against a captured expired-page fixture under ../__fixtures__ (representative samples modeled on real ATS close-out pages). Markers not observed in any fixture are flagged `unverified`.",
+  "markers": [
+    {
+      "marker": "no longer accepting applications",
+      "spec": true,
+      "confirmedAgainst": "expired-greenhouse.html"
+    },
+    {
+      "marker": "this job is no longer available",
+      "confirmedAgainst": "expired-greenhouse.html"
+    },
+    {
+      "marker": "this position has been filled",
+      "confirmedAgainst": "expired-lever.html"
+    },
+    {
+      "marker": "position is no longer available",
+      "confirmedAgainst": "expired-ashby.html"
+    },
+    {
+      "marker": "job posting not found",
+      "confirmedAgainst": "expired-generic.html"
+    }
+  ]
+}
