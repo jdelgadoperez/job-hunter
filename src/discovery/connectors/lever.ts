@@ -1,33 +1,21 @@
-import type { JobPosting } from "@app/domain/types";
 import type { Fetcher } from "@app/net/fetcher";
 import { makePostingId } from "../posting-id";
+import { fetchFeed } from "./fetch-feed";
 import { LeverFeed } from "./schemas";
-import type { AtsConnector } from "./types";
+import type { AtsConnector, ConnectorResult } from "./types";
 
 export class LeverConnector implements AtsConnector {
   readonly source = "lever";
 
-  async fetchPostings(boardToken: string, fetcher: Fetcher): Promise<JobPosting[]> {
+  async fetchPostings(boardToken: string, fetcher: Fetcher): Promise<ConnectorResult> {
     const url = `https://api.lever.co/v0/postings/${boardToken}?mode=json`;
-    const res = await fetcher.fetch(url);
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      return [];
-    }
-
-    let raw: unknown;
-    try {
-      raw = JSON.parse(res.bodyText);
-    } catch {
-      return [];
-    }
-
-    const parsed = LeverFeed.safeParse(raw);
-    if (!parsed.success) {
-      return [];
+    const result = await fetchFeed(fetcher, url, LeverFeed);
+    if (!result.ok) {
+      return result;
     }
 
     const fetchedAt = new Date();
-    return parsed.data.map((posting) => ({
+    const postings = result.data.map((posting) => ({
       id: makePostingId({ company: boardToken, title: posting.text, url: posting.hostedUrl }),
       company: boardToken,
       title: posting.text,
@@ -37,5 +25,6 @@ export class LeverConnector implements AtsConnector {
       location: posting.categories?.location,
       fetchedAt,
     }));
+    return { ok: true, postings };
   }
 }

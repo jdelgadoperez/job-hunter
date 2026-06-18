@@ -23,7 +23,8 @@ async function acmePosting(): Promise<JobPosting> {
   const fetcher = new FakeFetcher({
     [GH_ENDPOINT]: { statusCode: 200, finalUrl: GH_ENDPOINT, bodyText: greenhouseBody() },
   });
-  const [posting] = await new GreenhouseConnector().fetchPostings("acme", fetcher);
+  const result = await new GreenhouseConnector().fetchPostings("acme", fetcher);
+  const posting = result.ok ? result.postings[0] : undefined;
   if (!posting) {
     throw new Error("fixture did not yield a posting");
   }
@@ -37,7 +38,7 @@ describe("fetchLivenessSignal", () => {
       [GH_ENDPOINT]: { statusCode: 200, finalUrl: GH_ENDPOINT, bodyText: greenhouseBody() },
     });
     const signal = await fetchLivenessSignal(posting, { fetcher });
-    expect(signal).toEqual({ kind: "ats-feed", postingPresent: true });
+    expect(signal).toEqual({ kind: "ats-feed", feedAvailable: true, postingPresent: true });
     expect(detectLiveness(signal)).toBe("live");
   });
 
@@ -48,8 +49,19 @@ describe("fetchLivenessSignal", () => {
       [GH_ENDPOINT]: { statusCode: 200, finalUrl: GH_ENDPOINT, bodyText: emptyFeed },
     });
     const signal = await fetchLivenessSignal(posting, { fetcher });
-    expect(signal).toEqual({ kind: "ats-feed", postingPresent: false });
+    expect(signal).toEqual({ kind: "ats-feed", feedAvailable: true, postingPresent: false });
     expect(detectLiveness(signal)).toBe("expired");
+  });
+
+  it("reports a transient ATS feed failure as unknown, not expired", async () => {
+    const posting = await acmePosting();
+    // Board API 503s on the re-check: the feed is unavailable, not proof of removal.
+    const fetcher = new FakeFetcher({
+      [GH_ENDPOINT]: { statusCode: 503, finalUrl: GH_ENDPOINT, bodyText: "" },
+    });
+    const signal = await fetchLivenessSignal(posting, { fetcher });
+    expect(signal).toEqual({ kind: "ats-feed", feedAvailable: false, postingPresent: false });
+    expect(detectLiveness(signal)).toBe("unknown");
   });
 
   it("reports a browser posting returning 404 as expired", async () => {
@@ -66,5 +78,29 @@ describe("fetchLivenessSignal", () => {
     const signal = await fetchLivenessSignal(posting, { fetcher });
     expect(signal.kind).toBe("http");
     expect(detectLiveness(signal)).toBe("expired");
+  });
+
+  it("treats a re-fetch that throws as unknown rather than crashing", async () => {
+    const posting: JobPosting = {
+      id: "def456",
+      company: "Acme",
+      title: "Designer",
+      url: "https://acme.com/careers/designer",
+      source: "browser",
+      description: "",
+      fetchedAt: new Date(),
+    };
+    const throwingFetcher = {
+      fetch: () => Promise.reject(new Error("network down")),
+    };
+    const signal = await fetchLivenessSignal(posting, { fetcher: throwingFetcher });
+    expect(signal).toEqual({
+      kind: "http",
+      statusCode: 0,
+      finalUrl: posting.url,
+      originalUrl: posting.url,
+      bodyText: "",
+    });
+    expect(detectLiveness(signal)).toBe("unknown");
   });
 });

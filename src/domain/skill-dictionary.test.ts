@@ -35,4 +35,16 @@ describe("expanded skill taxonomy coverage", () => {
     expect(found).toContain("adobe photoshop");
     expect(found).toContain("seo");
   });
+
+  it("contains no bare 1–2 char alphabetic tokens that match common words", () => {
+    const ambiguous = skillSeed.skills.filter((s) => /^[a-z]{1,2}$/.test(s.name));
+    expect(ambiguous).toEqual([]);
+  });
+
+  it("does not false-positive on common words like 'go' and 'r'", () => {
+    const dictionary = skillSeed.skills.map((s) => s.name);
+    const found = extractSkills("We go to market fast and invest in R&D.", dictionary);
+    expect(found).not.toContain("go");
+    expect(found).not.toContain("r");
+  });
 });

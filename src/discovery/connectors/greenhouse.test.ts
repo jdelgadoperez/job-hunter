@@ -18,10 +18,12 @@ describe("GreenhouseConnector", () => {
       [ENDPOINT]: { statusCode: 200, finalUrl: ENDPOINT, bodyText: await fixtureBody() },
     });
 
-    const postings = await new GreenhouseConnector().fetchPostings("acme", fetcher);
-
-    expect(postings).toHaveLength(2);
-    const [first] = postings;
+    const result = await new GreenhouseConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) {
+      throw new Error("expected ok result");
+    }
+    expect(result.postings).toHaveLength(2);
+    const [first] = result.postings;
     expect(first?.source).toBe("greenhouse");
     expect(first?.company).toBe("acme");
     expect(first?.title).toBe("Senior Software Engineer");
@@ -34,17 +36,21 @@ describe("GreenhouseConnector", () => {
     expect(first?.fetchedAt).toBeInstanceOf(Date);
   });
 
-  it("returns [] for a malformed feed", async () => {
+  it("fails (not empty) for a malformed feed", async () => {
     const fetcher = new FakeFetcher({
       [ENDPOINT]: { statusCode: 200, finalUrl: ENDPOINT, bodyText: '{"jobs":[{"nope":true}]}' },
     });
-    expect(await new GreenhouseConnector().fetchPostings("acme", fetcher)).toEqual([]);
+    expect(await new GreenhouseConnector().fetchPostings("acme", fetcher)).toEqual({
+      ok: false,
+      warning: "response failed schema validation",
+    });
   });
 
-  it("returns [] for a non-200 status", async () => {
+  it("fails for a non-200 status", async () => {
     const fetcher = new FakeFetcher({
       [ENDPOINT]: { statusCode: 500, finalUrl: ENDPOINT, bodyText: "" },
     });
-    expect(await new GreenhouseConnector().fetchPostings("acme", fetcher)).toEqual([]);
+    const result = await new GreenhouseConnector().fetchPostings("acme", fetcher);
+    expect(result.ok).toBe(false);
   });
 });

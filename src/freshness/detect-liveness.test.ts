@@ -21,11 +21,21 @@ function fixture(name: string): string {
 
 describe("detectLiveness", () => {
   it("treats an ATS feed containing the posting as live", () => {
-    expect(detectLiveness({ kind: "ats-feed", postingPresent: true })).toBe("live");
+    expect(detectLiveness({ kind: "ats-feed", feedAvailable: true, postingPresent: true })).toBe(
+      "live",
+    );
   });
 
   it("treats an ATS feed missing the posting as expired", () => {
-    expect(detectLiveness({ kind: "ats-feed", postingPresent: false })).toBe("expired");
+    expect(detectLiveness({ kind: "ats-feed", feedAvailable: true, postingPresent: false })).toBe(
+      "expired",
+    );
+  });
+
+  it("treats an unavailable ATS feed as unknown, not expired", () => {
+    expect(detectLiveness({ kind: "ats-feed", feedAvailable: false, postingPresent: false })).toBe(
+      "unknown",
+    );
   });
 
   it("treats 404/410 as expired", () => {

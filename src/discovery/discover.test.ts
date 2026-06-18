@@ -120,6 +120,53 @@ describe("discover", () => {
     expect(gauge.max).toBeGreaterThan(1);
   });
 
+  it("records a warning when a connector feed fails, keeping other postings", async () => {
+    const gauge = new Gauge();
+    const feed = JSON.stringify({
+      companies: [
+        { name: "Acme", careersUrl: "https://boards.greenhouse.io/acme", categories: [] },
+        // Failco's board endpoint is absent from the routes → fetcher 404 → connector fails.
+        { name: "Failco", careersUrl: "https://boards.greenhouse.io/failco", categories: [] },
+      ],
+    });
+    const fetcher = new GaugedFetcher(
+      {
+        [STILLHIRING_URL]: feed,
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
+      },
+      gauge,
+    );
+    const renderer = new GaugedRenderer("", "", gauge);
+
+    const { postings, warnings } = await discover(profile, { fetcher, renderer, delayMs: 0 });
+    expect(postings.map((p) => p.title)).toEqual(["Engineer at acme"]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.source).toBe("Failco");
+  });
+
+  it("floors concurrency at 1 instead of crashing on 0", async () => {
+    const gauge = new Gauge();
+    const fetcher = new GaugedFetcher(
+      {
+        [STILLHIRING_URL]: STILLHIRING_BODY,
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
+        "https://boards-api.greenhouse.io/v1/boards/globex/jobs?content=true":
+          greenhouseFeed("globex"),
+      },
+      gauge,
+    );
+    const renderer = new GaugedRenderer(JSONLD_HTML, "https://boom.com/careers", gauge);
+
+    const { postings } = await discover(profile, {
+      fetcher,
+      renderer,
+      concurrency: 0,
+      delayMs: 0,
+    });
+    expect(postings.length).toBeGreaterThan(0);
+    expect(gauge.max).toBe(1);
+  });
+
   it("de-duplicates postings that resolve to the same id", async () => {
     const gauge = new Gauge();
     const feed = JSON.stringify({

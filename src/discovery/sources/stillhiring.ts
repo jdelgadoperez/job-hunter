@@ -1,6 +1,7 @@
 import type { SkillProfile, Warning } from "@app/domain/types";
 import type { Fetcher } from "@app/net/fetcher";
 import { z } from "zod";
+import { fetchFeed } from "../connectors/fetch-feed";
 
 export const STILLHIRING_URL = "https://stillhiring.today/api/companies.json";
 
@@ -38,34 +39,13 @@ export async function discoverCompanies(
   profile: SkillProfile,
   fetcher: Fetcher,
 ): Promise<DiscoverCompaniesResult> {
-  const res = await fetcher.fetch(STILLHIRING_URL);
-  if (res.statusCode < 200 || res.statusCode >= 300) {
-    return {
-      leads: [],
-      warnings: [{ source: "stillhiring.today", message: `unexpected status ${res.statusCode}` }],
-    };
-  }
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(res.bodyText);
-  } catch {
-    return {
-      leads: [],
-      warnings: [{ source: "stillhiring.today", message: "response was not valid JSON" }],
-    };
-  }
-
-  const parsed = StillHiringFeed.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      leads: [],
-      warnings: [{ source: "stillhiring.today", message: "response failed schema validation" }],
-    };
+  const result = await fetchFeed(fetcher, STILLHIRING_URL, StillHiringFeed);
+  if (!result.ok) {
+    return { leads: [], warnings: [{ source: "stillhiring.today", message: result.warning }] };
   }
 
   const wanted = new Set(profile.categories.map((c) => c.toLowerCase()));
-  const leads = parsed.data.companies
+  const leads = result.data.companies
     .filter(
       (company) => wanted.size === 0 || company.categories.some((c) => wanted.has(c.toLowerCase())),
     )

@@ -1,33 +1,21 @@
-import type { JobPosting } from "@app/domain/types";
 import type { Fetcher } from "@app/net/fetcher";
 import { makePostingId } from "../posting-id";
+import { fetchFeed } from "./fetch-feed";
 import { AshbyFeed } from "./schemas";
-import type { AtsConnector } from "./types";
+import type { AtsConnector, ConnectorResult } from "./types";
 
 export class AshbyConnector implements AtsConnector {
   readonly source = "ashby";
 
-  async fetchPostings(boardToken: string, fetcher: Fetcher): Promise<JobPosting[]> {
+  async fetchPostings(boardToken: string, fetcher: Fetcher): Promise<ConnectorResult> {
     const url = `https://api.ashbyhq.com/posting-api/job-board/${boardToken}`;
-    const res = await fetcher.fetch(url);
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      return [];
-    }
-
-    let raw: unknown;
-    try {
-      raw = JSON.parse(res.bodyText);
-    } catch {
-      return [];
-    }
-
-    const parsed = AshbyFeed.safeParse(raw);
-    if (!parsed.success) {
-      return [];
+    const result = await fetchFeed(fetcher, url, AshbyFeed);
+    if (!result.ok) {
+      return result;
     }
 
     const fetchedAt = new Date();
-    return parsed.data.jobs.map((job) => ({
+    const postings = result.data.jobs.map((job) => ({
       id: makePostingId({ company: boardToken, title: job.title, url: job.jobUrl }),
       company: boardToken,
       title: job.title,
@@ -37,5 +25,6 @@ export class AshbyConnector implements AtsConnector {
       location: job.location,
       fetchedAt,
     }));
+    return { ok: true, postings };
   }
 }

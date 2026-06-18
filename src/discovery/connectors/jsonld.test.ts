@@ -41,4 +41,23 @@ describe("extractJsonLdPostings", () => {
     const [posting] = extractJsonLdPostings(html, PAGE_URL, "Acme");
     expect(posting?.url).toBe(PAGE_URL);
   });
+
+  it("resolves a relative posting url against the page url", () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Designer",
+      url: "/careers/designer",
+    })}</script>`;
+    const [posting] = extractJsonLdPostings(html, "https://acme.com/jobs", "Acme");
+    expect(posting?.url).toBe("https://acme.com/careers/designer");
+  });
+
+  it("finds a JobPosting nested outside @graph (e.g. itemListElement)", () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "ItemList",
+      itemListElement: [{ "@type": "ListItem", item: { "@type": "JobPosting", title: "Analyst" } }],
+    })}</script>`;
+    const postings = extractJsonLdPostings(html, PAGE_URL, "Acme");
+    expect(postings.map((p) => p.title)).toEqual(["Analyst"]);
+  });
 });

@@ -14,9 +14,11 @@ const ATS_CONNECTORS: Record<string, () => AtsConnector> = {
 
 /**
  * Produce the `LivenessSignal` that Plan 1's `detectLiveness` consumes. For an
- * ATS-sourced posting we re-fetch the board feed and report whether the posting's
- * id is still present; for anything else (the browser fallback) we re-fetch its URL
- * and emit the raw HTTP signal so the detector can inspect status and body markers.
+ * ATS-sourced posting we re-fetch the board feed and report whether the posting's id is
+ * still present (and whether the feed was even reachable, so a transient failure reads
+ * as "unknown" rather than "expired"); for anything else (the browser fallback) we
+ * re-fetch its URL and emit the raw HTTP signal. Never throws — a failed re-fetch is
+ * inconclusive, not proof of removal.
  */
 export async function fetchLivenessSignal(
   posting: JobPosting,
@@ -24,16 +26,34 @@ export async function fetchLivenessSignal(
 ): Promise<LivenessSignal> {
   const makeConnector = ATS_CONNECTORS[posting.source];
   if (makeConnector) {
-    const current = await makeConnector().fetchPostings(posting.company, deps.fetcher);
-    return { kind: "ats-feed", postingPresent: current.some((p) => p.id === posting.id) };
+    const result = await makeConnector().fetchPostings(posting.company, deps.fetcher);
+    if (!result.ok) {
+      return { kind: "ats-feed", feedAvailable: false, postingPresent: false };
+    }
+    return {
+      kind: "ats-feed",
+      feedAvailable: true,
+      postingPresent: result.postings.some((p) => p.id === posting.id),
+    };
   }
 
-  const res = await deps.fetcher.fetch(posting.url);
-  return {
-    kind: "http",
-    statusCode: res.statusCode,
-    finalUrl: res.finalUrl,
-    originalUrl: posting.url,
-    bodyText: res.bodyText,
-  };
+  try {
+    const res = await deps.fetcher.fetch(posting.url);
+    return {
+      kind: "http",
+      statusCode: res.statusCode,
+      finalUrl: res.finalUrl,
+      originalUrl: posting.url,
+      bodyText: res.bodyText,
+    };
+  } catch {
+    // Timeout / invalid URL: statusCode 0 maps to "unknown" in detectLiveness.
+    return {
+      kind: "http",
+      statusCode: 0,
+      finalUrl: posting.url,
+      originalUrl: posting.url,
+      bodyText: "",
+    };
+  }
 }

@@ -43,9 +43,13 @@ async function main(): Promise<void> {
 
   for (const { connector, token } of boards) {
     try {
-      const postings = await connector.fetchPostings(token, fetcher);
-      console.log(`\n[${connector.source}:${token}] ${postings.length} postings`);
-      for (const posting of postings.slice(0, 3)) {
+      const result = await connector.fetchPostings(token, fetcher);
+      if (!result.ok) {
+        console.error(`[${connector.source}:${token}] ${result.warning}`);
+        continue;
+      }
+      console.log(`\n[${connector.source}:${token}] ${result.postings.length} postings`);
+      for (const posting of result.postings.slice(0, 3)) {
         console.log(`  - ${posting.title} (${posting.url})`);
       }
     } catch (error) {

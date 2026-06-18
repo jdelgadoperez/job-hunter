@@ -2,7 +2,7 @@ import type { LiveStatus } from "@app/domain/types";
 import expiredMarkers from "./data/expired-markers.json";
 
 export type LivenessSignal =
-  | { kind: "ats-feed"; postingPresent: boolean }
+  | { kind: "ats-feed"; feedAvailable: boolean; postingPresent: boolean }
   | { kind: "http"; statusCode: number; finalUrl: string; originalUrl: string; bodyText: string };
 
 // Lower-cased substrings that indicate a posting has been taken down. Externalized to
@@ -12,6 +12,10 @@ const EXPIRED_MARKERS = expiredMarkers.markers.map((entry) => entry.marker);
 
 export function detectLiveness(signal: LivenessSignal): LiveStatus {
   if (signal.kind === "ats-feed") {
+    // A feed we couldn't fetch is inconclusive, not proof the posting was removed.
+    if (!signal.feedAvailable) {
+      return "unknown";
+    }
     return signal.postingPresent ? "live" : "expired";
   }
 

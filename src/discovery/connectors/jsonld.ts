@@ -14,6 +14,18 @@ function hasType(node: JsonLdNode, type: string): boolean {
   return Array.isArray(t) ? t.includes(type) : t === type;
 }
 
+/** Resolve a JSON-LD url against the page it was found on, so relative hrefs become absolute. */
+function resolveUrl(raw: string | undefined, pageUrl: string): string {
+  if (!raw) {
+    return pageUrl;
+  }
+  try {
+    return new URL(raw, pageUrl).toString();
+  } catch {
+    return pageUrl;
+  }
+}
+
 /** Pull the human-readable locality out of schema.org's nested jobLocation shape. */
 function readLocation(node: JsonLdNode): string | undefined {
   const location = node.jobLocation;
@@ -27,7 +39,11 @@ function readLocation(node: JsonLdNode): string | undefined {
   return undefined;
 }
 
-/** Recursively collect every JobPosting node, including those nested in `@graph`/arrays. */
+/**
+ * Recursively collect every JobPosting node — whether top-level, in `@graph`, in an
+ * `itemListElement`/`mainEntity`, or any other nesting — by descending into every array
+ * and object value. A JobPosting's own fields are not traversed further.
+ */
 function collectJobPostings(value: unknown, out: JsonLdNode[]): void {
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -41,16 +57,17 @@ function collectJobPostings(value: unknown, out: JsonLdNode[]): void {
   const node = value as JsonLdNode;
   if (hasType(node, "JobPosting")) {
     out.push(node);
+    return;
   }
-  if (Array.isArray(node["@graph"])) {
-    collectJobPostings(node["@graph"], out);
+  for (const child of Object.values(node)) {
+    collectJobPostings(child, out);
   }
 }
 
 /**
  * Deterministic, network-free core of the browser fallback: find every
- * `schema.org/JobPosting` embedded as JSON-LD in a page and normalize it. A block
- * with malformed JSON, or a posting missing a title, is skipped without throwing.
+ * `schema.org/JobPosting` embedded as JSON-LD in a page and normalize it. A block with
+ * malformed JSON, or a posting missing a title, is skipped without throwing.
  */
 export function extractJsonLdPostings(
   html: string,
@@ -77,7 +94,7 @@ export function extractJsonLdPostings(
     if (!title) {
       continue;
     }
-    const url = asString(node.url) ?? pageUrl;
+    const url = resolveUrl(asString(node.url), pageUrl);
     postings.push({
       id: makePostingId({ company, title, url }),
       company,

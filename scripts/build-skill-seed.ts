@@ -78,6 +78,12 @@ function main(): void {
       continue;
     }
     const name = normalizeSkill(label);
+    // Skip bare 1–2 char alphabetic tokens (e.g. "go", "r"): the substring matcher in
+    // extract-skills would match them inside common words, producing false-positive
+    // skills. Spell such skills out in the curated seed instead ("golang", "r programming").
+    if (/^[a-z]{1,2}$/.test(name)) {
+      continue;
+    }
     if (!byName.has(name)) {
       byName.set(name, cells[categoryIdx]?.trim() || "general");
     }
