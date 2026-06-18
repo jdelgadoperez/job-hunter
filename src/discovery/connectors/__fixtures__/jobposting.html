@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Careers at Acme</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Acme"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": []
+          },
+          {
+            "@type": "JobPosting",
+            "title": "Machine Learning Engineer",
+            "description": "Work on recommendation systems using Python and PyTorch.",
+            "url": "https://acme.com/careers/ml-engineer",
+            "datePosted": "2026-05-10",
+            "hiringOrganization": { "@type": "Organization", "name": "Acme" },
+            "jobLocation": {
+              "@type": "Place",
+              "address": { "@type": "PostalAddress", "addressLocality": "Remote" }
+            }
+          }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      { this is intentionally malformed json }
+    </script>
+  </head>
+  <body>
+    <h1>Machine Learning Engineer</h1>
+  </body>
+</html>
