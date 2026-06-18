@@ -6,7 +6,7 @@
 
 **Architecture:** A framework-free TypeScript library under `src/`. Every unit is a pure function or a thin class with one responsibility and an explicit interface, tested in isolation with Vitest against in-line inputs and small fixtures. Network I/O (scraping, liveness fetching) and the LLM scorer are deliberately excluded — this plan defines the *pure* detectors and contracts those later plans will feed. Storage is a synchronous `better-sqlite3` repository accepting an arbitrary DB path so tests can use an in-memory database.
 
-**Tech Stack:** TypeScript (strict, ESM), Vitest, better-sqlite3. Package manager: npm.
+**Tech Stack:** TypeScript (strict, ESM), Vitest, better-sqlite3. **SWC** (`@swc/core` + `@swc/cli`) for the fast `dist/` build; **tsc --noEmit** is the type-checker only (SWC does not type-check). **Biome** as the single linter + formatter (replaces ESLint + Prettier). Package manager: npm. This toolchain (Biome config + SWC config) carries forward unchanged into the Electron + React plans.
 
 ## Global Constraints
 
