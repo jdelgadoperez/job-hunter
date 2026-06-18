@@ -1,6 +1,6 @@
+import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import { describe, expect, it } from "vitest";
-import type { JobPosting, MatchResult, SkillProfile } from "../domain/types.js";
-import { Repository } from "./repository.js";
+import { Repository } from "./repository";
 
 function newRepo(): Repository {
   return new Repository(":memory:");

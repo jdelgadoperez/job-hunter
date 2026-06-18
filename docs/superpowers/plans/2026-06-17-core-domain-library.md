@@ -16,6 +16,7 @@
 - **No live network in this plan.** All behavior here is pure or local-file/local-DB only.
 - **Resume formats in this plan:** `.txt` and `.md` only. `.pdf`/`.docx` are added in Plan 2; until then `readResumeText` throws a typed `UnsupportedFormatError` for them.
 - **Skill values are normalized** (lower-cased, trimmed, alias-mapped) everywhere they cross a boundary, via `normalizeSkill`.
+- **Imports:** cross-module imports use the `@app/*` path alias (`@app/*` → `src/*`, set in `tsconfig.json` `paths` + a matching Vitest `resolve.alias`); same-directory imports stay relative (`./x`). No `.js` extensions in specifiers — `moduleResolution: "bundler"` + Vite/Vitest resolve TypeScript directly, consistent with the Vite-bundled stack decision.
 - **Tests must not hard-code magic numbers in `expect`.** Derive expected values from inputs or assert relationships/membership (project preference).
 - **Commits:** Conventional Commits. Never add a Claude co-author footer. Solo project — commit directly to `main`.
 
@@ -108,6 +109,8 @@ Expected: FAIL — `npm` error "Missing script: test" (no `package.json` yet).
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": { "@app/*": ["src/*"] },
     "lib": ["ES2022"],
     "strict": true,
     "noUncheckedIndexedAccess": true,

@@ -3,6 +3,10 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["src/*"]
+    },
     "lib": ["ES2022"],
     "strict": true,
     "noUncheckedIndexedAccess": true,

@@ -1,5 +1,5 @@
-import { extractSkills } from "../domain/extract-skills.js";
-import type { JobPosting, MatchResult, Scorer, SkillProfile } from "../domain/types.js";
+import { extractSkills } from "@app/domain/extract-skills";
+import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
 
 const SKILL_WEIGHT = 0.8;
 const TITLE_WEIGHT = 0.2;

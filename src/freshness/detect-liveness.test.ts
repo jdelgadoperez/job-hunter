@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type LivenessSignal, detectLiveness } from "./detect-liveness.js";
+import { type LivenessSignal, detectLiveness } from "./detect-liveness";
 
 function http(overrides: Partial<Extract<LivenessSignal, { kind: "http" }>>): LivenessSignal {
   return {

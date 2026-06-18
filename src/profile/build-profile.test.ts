@@ -1,7 +1,7 @@
+import { extractSkills } from "@app/domain/extract-skills";
+import { normalizeSkill } from "@app/domain/normalize";
 import { describe, expect, it } from "vitest";
-import { extractSkills } from "../domain/extract-skills.js";
-import { normalizeSkill } from "../domain/normalize.js";
-import { buildProfile } from "./build-profile.js";
+import { buildProfile } from "./build-profile";
 
 describe("buildProfile", () => {
   it("merges resume-extracted skills with manual skills, normalized and deduped", () => {

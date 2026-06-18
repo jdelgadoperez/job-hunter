@@ -1,5 +1,5 @@
-import { normalizeSkill } from "./normalize.js";
-import { DEFAULT_SKILL_DICTIONARY } from "./skill-dictionary.js";
+import { normalizeSkill } from "./normalize";
+import { DEFAULT_SKILL_DICTIONARY } from "./skill-dictionary";
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

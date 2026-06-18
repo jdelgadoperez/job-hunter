@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSkill } from "./normalize.js";
+import { normalizeSkill } from "./normalize";
 
 describe("normalizeSkill", () => {
   it("lower-cases, trims, and collapses whitespace", () => {

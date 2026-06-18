@@ -1,6 +1,6 @@
+import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import Database from "better-sqlite3";
-import type { JobPosting, MatchResult, SkillProfile } from "../domain/types.js";
-import { SCHEMA } from "./schema.js";
+import { SCHEMA } from "./schema";
 
 export class Repository {
   private readonly db: Database.Database;

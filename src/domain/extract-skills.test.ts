@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extractSkills } from "./extract-skills.js";
-import { normalizeSkill } from "./normalize.js";
+import { extractSkills } from "./extract-skills";
+import { normalizeSkill } from "./normalize";
 
 const DICT = ["TypeScript", "React", "Node.js", "AWS", "Go"];
 

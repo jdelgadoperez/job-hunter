@@ -1,6 +1,6 @@
-import { extractSkills } from "../domain/extract-skills.js";
-import { normalizeSkill } from "../domain/normalize.js";
-import type { SkillProfile } from "../domain/types.js";
+import { extractSkills } from "@app/domain/extract-skills";
+import { normalizeSkill } from "@app/domain/normalize";
+import type { SkillProfile } from "@app/domain/types";
 
 export type BuildProfileInput = {
   resumeText?: string;

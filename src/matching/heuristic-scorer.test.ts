@@ -1,6 +1,6 @@
+import type { JobPosting, SkillProfile } from "@app/domain/types";
 import { describe, expect, it } from "vitest";
-import type { JobPosting, SkillProfile } from "../domain/types.js";
-import { HeuristicScorer } from "./heuristic-scorer.js";
+import { HeuristicScorer } from "./heuristic-scorer";
 
 function posting(overrides: Partial<JobPosting>): JobPosting {
   return {
