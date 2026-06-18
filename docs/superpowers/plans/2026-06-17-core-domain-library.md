@@ -6,12 +6,13 @@
 
 **Architecture:** A framework-free TypeScript library under `src/`. Every unit is a pure function or a thin class with one responsibility and an explicit interface, tested in isolation with Vitest against in-line inputs and small fixtures. Network I/O (scraping, liveness fetching) and the LLM scorer are deliberately excluded — this plan defines the *pure* detectors and contracts those later plans will feed. Storage is a synchronous `better-sqlite3` repository accepting an arbitrary DB path so tests can use an in-memory database.
 
-**Tech Stack:** TypeScript (strict, ESM), Vitest, better-sqlite3. **SWC** (`@swc/core` + `@swc/cli`) for the fast `dist/` build; **tsc --noEmit** is the type-checker only (SWC does not type-check). **Biome** as the single linter + formatter (replaces ESLint + Prettier). Package manager: npm. This toolchain (Biome config + SWC config) carries forward unchanged into the Electron + React plans.
+**Tech Stack:** TypeScript (strict, ESM), Vitest (esbuild-powered test transform), better-sqlite3. **Biome** as the single linter + formatter (replaces ESLint + Prettier). Type-checking is `tsc --noEmit` only — **Plan 1 emits no JS**: the core library has no consumer yet and Vitest runs the TypeScript directly, so no transpile/build step is introduced here. When the Electron app lands (Plan 4), **electron-vite** (Vite/esbuild) handles all transpiling + bundling — one transpiler, no redundancy — and the renderer↔main boundary uses **tRPC over IPC** (`electron-trpc`) for typed procedures and streaming progress. The Biome config carries forward unchanged into the Electron + React plans. Package manager: npm.
 
 ## Global Constraints
 
 - **Language:** TypeScript, `strict: true`, ESM (`"type": "module"`). No `any`. No non-null `!` assertions. Avoid type assertions outside tests.
-- **Node:** managed by `fnm`; target Node 20 LTS. Use `node:`-prefixed core imports.
+- **Node:** target Node 22 (global `fetch` available for later plans). Use `node:`-prefixed core imports.
+- **Lint/format:** Biome is the single source of truth (`npm run lint` / `npm run format`). Code must pass `biome check` clean.
 - **No live network in this plan.** All behavior here is pure or local-file/local-DB only.
 - **Resume formats in this plan:** `.txt` and `.md` only. `.pdf`/`.docx` are added in Plan 2; until then `readResumeText` throws a typed `UnsupportedFormatError` for them.
 - **Skill values are normalized** (lower-cased, trimmed, alias-mapped) everywhere they cross a boundary, via `normalizeSkill`.
@@ -26,12 +27,13 @@
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `vitest.config.ts`
+- Create: `biome.json`
 - Create: `.gitignore`
 - Test: `src/sanity.test.ts`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: a working `npm test` (Vitest) and `npm run typecheck` (`tsc --noEmit`). All later tasks rely on these commands.
+- Produces: a working `npm test` (Vitest), `npm run typecheck` (`tsc --noEmit`), and `npm run lint` (`biome check`). All later tasks rely on these commands.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -64,17 +66,38 @@ Expected: FAIL — `npm` error "Missing script: test" (no `package.json` yet).
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write ."
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
     "@types/better-sqlite3": "^7.6.11",
-    "@types/node": "^20.14.0",
+    "@types/node": "^22.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0"
   }
+}
+```
+
+`biome.json`:
+```json
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "ignore": ["dist", "node_modules", "coverage"] },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "javascript": { "formatter": { "quoteStyle": "double" } }
 }
 ```
 
@@ -120,14 +143,14 @@ dist/
 
 - [ ] **Step 4: Install and run tests to verify they pass**
 
-Run: `npm install` then `npm test`
-Expected: `npm install` completes; `npm test` PASSES (1 test).
+Run: `npm install`, then `npm test`, then `npm run lint`
+Expected: `npm install` completes; `npm test` PASSES (1 test); `npm run lint` reports no errors.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add package.json package-lock.json tsconfig.json vitest.config.ts .gitignore src/sanity.test.ts
-git commit -m "chore: scaffold typescript library with vitest"
+git add package.json package-lock.json tsconfig.json vitest.config.ts biome.json .gitignore src/sanity.test.ts
+git commit -m "chore: scaffold typescript library with vitest and biome"
 ```
 
 ---
