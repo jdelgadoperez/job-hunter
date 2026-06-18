@@ -10,7 +10,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "smoke": "node --import tsx scripts/smoke-connectors.ts"
+    "smoke": "node --import tsx scripts/smoke-connectors.ts",
+    "build:skill-seed": "node --import tsx scripts/build-skill-seed.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
