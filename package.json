@@ -13,6 +13,8 @@
     "cli": "node --import tsx src/cli/main.ts",
     "smoke": "node --import tsx scripts/smoke-connectors.ts",
     "smoke:scorer": "node --import tsx scripts/smoke-scorer.ts",
+    "smoke:airtable": "node --import tsx scripts/smoke-airtable.ts",
+    "smoke:scan": "node --import tsx scripts/smoke-scan.ts",
     "build:skill-seed": "node --import tsx scripts/build-skill-seed.ts"
   },
   "devDependencies": {
