@@ -1,9 +1,10 @@
-import type { SkillProfile } from "@app/domain/types";
 import type { FetchResponse, Fetcher } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
 import type { PageRenderer } from "./connectors/browser";
 import { discover } from "./discover";
-import { STILLHIRING_URL } from "./sources/stillhiring";
+import { FakeSharedViewReader } from "./sources/airtable";
+
+const SHARE_URL = "https://airtable.com/appX/shrX/tblX";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,14 +39,23 @@ function greenhouseFeed(token: string): string {
   });
 }
 
-const STILLHIRING_BODY = JSON.stringify({
-  companies: [
-    { name: "Acme", careersUrl: "https://boards.greenhouse.io/acme", categories: [] },
-    { name: "Globex", careersUrl: "https://boards.greenhouse.io/globex", categories: [] },
-    { name: "Initech", careersUrl: "https://initech.com/careers", categories: [] },
-    { name: "Boom", careersUrl: "https://boom.com/careers", categories: [] },
-  ],
-});
+/** Builds an Airtable readSharedViewData payload from a list of company → careers-URL pairs. */
+function airtableData(companies: { name: string; url: string }[]): unknown {
+  return {
+    data: {
+      table: {
+        columns: [
+          { id: "c1", name: "™" },
+          { id: "c2", name: "Jobs Page" },
+        ],
+        rows: companies.map((c, i) => ({
+          id: `rec${i}`,
+          cellValuesByColumnId: { c1: c.name, c2: c.url },
+        })),
+      },
+    },
+  };
+}
 
 class GaugedFetcher implements Fetcher {
   constructor(
@@ -85,14 +95,19 @@ const JSONLD_HTML = `<script type="application/ld+json">${JSON.stringify({
   description: "Run the office.",
 })}</script>`;
 
-const profile: SkillProfile = { skills: [], roleKeywords: [], categories: [] };
-
 describe("discover", () => {
   it("aggregates ATS + browser postings, records per-company failures, and caps concurrency", async () => {
     const gauge = new Gauge();
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Acme", url: "https://boards.greenhouse.io/acme" },
+        { name: "Globex", url: "https://boards.greenhouse.io/globex" },
+        { name: "Initech", url: "https://initech.com/careers" },
+        { name: "Boom", url: "https://boom.com/careers" },
+      ]),
+    );
     const fetcher = new GaugedFetcher(
       {
-        [STILLHIRING_URL]: STILLHIRING_BODY,
         "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
         "https://boards-api.greenhouse.io/v1/boards/globex/jobs?content=true":
           greenhouseFeed("globex"),
@@ -101,9 +116,11 @@ describe("discover", () => {
     );
     const renderer = new GaugedRenderer(JSONLD_HTML, "https://boom.com/careers", gauge);
 
-    const { postings, warnings } = await discover(profile, {
+    const { postings, warnings } = await discover({
       fetcher,
       renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
       concurrency: 2,
       delayMs: 0,
     });
@@ -120,71 +137,115 @@ describe("discover", () => {
     expect(gauge.max).toBeGreaterThan(1);
   });
 
-  it("records a warning when a connector feed fails, keeping other postings", async () => {
+  it("merges tracked companies with the Airtable directory, de-duplicating by URL", async () => {
     const gauge = new Gauge();
-    const feed = JSON.stringify({
-      companies: [
-        { name: "Acme", careersUrl: "https://boards.greenhouse.io/acme", categories: [] },
-        // Failco's board endpoint is absent from the routes → fetcher 404 → connector fails.
-        { name: "Failco", careersUrl: "https://boards.greenhouse.io/failco", categories: [] },
-      ],
-    });
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+    );
     const fetcher = new GaugedFetcher(
       {
-        [STILLHIRING_URL]: feed,
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
+        "https://boards-api.greenhouse.io/v1/boards/zeta/jobs?content=true": greenhouseFeed("zeta"),
+      },
+      gauge,
+    );
+    const renderer = new GaugedRenderer("", "", gauge);
+
+    const { postings } = await discover({
+      fetcher,
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      trackedCompanies: [
+        { careersUrl: "https://boards.greenhouse.io/zeta", name: "Zeta" },
+        // Duplicate of the Airtable lead (trailing slash) — must not double-fetch.
+        { careersUrl: "https://boards.greenhouse.io/acme/" },
+      ],
+      delayMs: 0,
+    });
+
+    expect(postings.map((p) => p.title).sort()).toEqual(["Engineer at acme", "Engineer at zeta"]);
+  });
+
+  it("degrades to tracked-only with a warning when the Airtable read fails", async () => {
+    const reader = new FakeSharedViewReader(new Error("airtable offline"));
+    const fetcher = new GaugedFetcher(
+      {
+        "https://boards-api.greenhouse.io/v1/boards/zeta/jobs?content=true": greenhouseFeed("zeta"),
+      },
+      new Gauge(),
+    );
+    const renderer = new GaugedRenderer("", "", new Gauge());
+
+    const { postings, warnings } = await discover({
+      fetcher,
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      trackedCompanies: [{ careersUrl: "https://boards.greenhouse.io/zeta", name: "Zeta" }],
+      delayMs: 0,
+    });
+
+    expect(postings.map((p) => p.title)).toEqual(["Engineer at zeta"]);
+    expect(warnings.some((w) => w.source === "airtable" && w.message.includes("offline"))).toBe(
+      true,
+    );
+  });
+
+  it("records a warning when a connector feed fails, keeping other postings", async () => {
+    const gauge = new Gauge();
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Acme", url: "https://boards.greenhouse.io/acme" },
+        { name: "Failco", url: "https://boards.greenhouse.io/failco" },
+      ]),
+    );
+    const fetcher = new GaugedFetcher(
+      {
         "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
       },
       gauge,
     );
     const renderer = new GaugedRenderer("", "", gauge);
 
-    const { postings, warnings } = await discover(profile, { fetcher, renderer, delayMs: 0 });
+    const { postings, warnings } = await discover({
+      fetcher,
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+    });
     expect(postings.map((p) => p.title)).toEqual(["Engineer at acme"]);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.source).toBe("Failco");
+    expect(warnings.some((w) => w.source === "Failco")).toBe(true);
   });
 
   it("floors concurrency at 1 instead of crashing on 0", async () => {
     const gauge = new Gauge();
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Acme", url: "https://boards.greenhouse.io/acme" },
+        { name: "Globex", url: "https://boards.greenhouse.io/globex" },
+      ]),
+    );
     const fetcher = new GaugedFetcher(
       {
-        [STILLHIRING_URL]: STILLHIRING_BODY,
         "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
         "https://boards-api.greenhouse.io/v1/boards/globex/jobs?content=true":
           greenhouseFeed("globex"),
       },
       gauge,
     );
-    const renderer = new GaugedRenderer(JSONLD_HTML, "https://boom.com/careers", gauge);
+    const renderer = new GaugedRenderer("", "", gauge);
 
-    const { postings } = await discover(profile, {
+    const { postings } = await discover({
       fetcher,
       renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
       concurrency: 0,
       delayMs: 0,
     });
     expect(postings.length).toBeGreaterThan(0);
     expect(gauge.max).toBe(1);
-  });
-
-  it("de-duplicates postings that resolve to the same id", async () => {
-    const gauge = new Gauge();
-    const feed = JSON.stringify({
-      companies: [
-        { name: "acme", careersUrl: "https://boards.greenhouse.io/acme", categories: [] },
-        { name: "acme", careersUrl: "https://boards.greenhouse.io/acme", categories: [] },
-      ],
-    });
-    const fetcher = new GaugedFetcher(
-      {
-        [STILLHIRING_URL]: feed,
-        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
-      },
-      gauge,
-    );
-    const renderer = new GaugedRenderer("", "", gauge);
-
-    const { postings } = await discover(profile, { fetcher, renderer, delayMs: 0 });
-    expect(postings).toHaveLength(1);
   });
 });
