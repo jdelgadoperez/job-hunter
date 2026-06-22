@@ -74,6 +74,9 @@ async function main(): Promise<void> {
   // 2. Capture the real Airtable fixture so we're not running on the synthetic placeholder.
   run("npm run smoke:airtable", "Capturing the live Airtable shared-view fixture");
 
+  // 2b. Build the web dashboard so `job-hunter serve` has static assets to serve.
+  run("npm run build:web", "Building the web dashboard");
+
   // 3. Open the database and seed the skill dictionary.
   ensureDataDir();
   const repo = new Repository(resolveDbPath());
@@ -106,6 +109,8 @@ async function main(): Promise<void> {
       `  - Profile: ${result.profileSkills === null ? "not built yet" : `${result.profileSkills} skills`}`,
     );
     console.log("\nNext:");
+    console.log("  npm run serve            # open the web dashboard");
+    console.log("  — or use the CLI —");
     if (result.profileSkills === null) console.log("  npm run cli profile <your-resume-file>");
     console.log("  npm run cli scan");
     console.log("  npm run cli list --min-score 70");

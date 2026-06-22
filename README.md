@@ -69,26 +69,37 @@ npm run cli -- track list
 npm run cli -- track remove https://boards.greenhouse.io/acme
 ```
 
-### Web dashboard (preview)
+### Web dashboard
 
 `job-hunter serve` (or `npm run serve`) starts a local [Hono](https://hono.dev) server — by
-default on <http://localhost:4317> — that exposes your data over a small HTTP API and opens it in
-your browser:
+default on <http://localhost:4317> — and opens a React dashboard in your browser:
 
-- `GET /api/matches?minScore=` — ranked matches
-- `GET /api/companies` — tracked companies
-- `GET /api/profile` · `GET|PUT /api/settings` — your profile and settings (the API key is
-  write-only; reads only report whether one is set)
-- `POST /api/profile` — upload a resume (`.txt`/`.md`/`.pdf`/`.docx`) or post `{ "resumeText": … }`
-- `POST /api/scan` — run a scan, streaming progress over Server-Sent Events
+- **Overview** — upload your resume and run a scan with live progress (streamed over
+  Server-Sent Events)
+- **Matches** — ranked postings filtered by a minimum-score slider, with the LLM rationale and
+  matched/missing skills
+- **Companies** — the companies you track
+- **Settings** — Anthropic API key (write-only — never sent back to the browser), scorer model,
+  and Airtable share URL
 
-The React UI that consumes this API is **Plan 6** (see [Roadmap](#roadmap)); for now the server is
-the API layer.
+The dashboard is a static build (Vite + React + Tailwind + TanStack Query) that the server serves
+itself; it's produced by `npm run build:web` (which `npm run setup` runs for you). Everything it
+shows comes from the same local HTTP API:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/matches?minScore=` | ranked matches |
+| `GET /api/companies` | tracked companies |
+| `GET /api/profile` · `GET\|PUT /api/settings` | profile and settings (key is write-only) |
+| `POST /api/profile` | upload a resume (`.txt`/`.md`/`.pdf`/`.docx`) or post `{ "resumeText": … }` |
+| `POST /api/scan` | run a scan, streaming progress over SSE |
 
 A typical first run:
 
 ```bash
 ./install.sh                       # or install.ps1 on Windows
+npm run serve                      # upload your resume and scan from the dashboard
+# — or use the CLI —
 npm run cli -- scan
 npm run cli -- list --min-score 70
 ```
@@ -108,16 +119,22 @@ Override the location with the `JOB_HUNTER_HOME` environment variable.
 ## Roadmap
 
 - **Plan 5** ✅ — a local web server (Hono) exposing the data over an API (`job-hunter serve`).
-- **Plan 6** — a browser dashboard (React + Tailwind + ShadCN + TanStack) with one-click scanning,
-  onboarding, and match browsing, served as static assets by the Plan 5 server.
+- **Plan 6** ✅ — a browser dashboard (Vite + React + Tailwind + TanStack Query) with resume
+  upload, one-click scanning, and match browsing, served as static assets by the Plan 5 server.
+
+Possible next steps: richer match filtering (freshness, skills), inline company add/remove from the
+dashboard, and packaging `serve` as a one-command launcher.
 
 ## Development
 
 ```bash
 npm test            # run the test suite
-npm run typecheck   # TypeScript type-check
+npm run typecheck   # type-check the server + CLI
+npm run typecheck:web  # type-check the web dashboard
 npm run lint        # Biome lint + format check
 npm run lint:fix    # auto-fix
+npm run dev:web     # web dashboard with hot reload (proxies /api to a running `serve`)
+npm run build:web   # build the dashboard to web/dist
 ```
 
 Opt-in, network-bound checks (excluded from CI):

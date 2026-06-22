@@ -1,10 +1,43 @@
 import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildProfile } from "@app/profile/build-profile";
 import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
 import { Repository } from "@app/storage/repository";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
+import type { Hono } from "hono";
 import { createApp } from "./app";
 import { createScanRunner } from "./scan-runner";
+
+// The built dashboard lives at <repo>/web/dist relative to this file (src/server/serve.ts).
+const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web", "dist");
+
+/**
+ * Mount the built React app: static assets plus an SPA fallback to index.html. If the app hasn't
+ * been built yet, serve a one-line hint instead of 404ing the root. The API routes are already
+ * registered on `app`, so they win over these catch-alls.
+ */
+function mountDashboard(app: Hono): void {
+  const indexPath = join(DIST_DIR, "index.html");
+  if (!existsSync(indexPath)) {
+    app.get("/", (c) =>
+      c.html(
+        "<h1>job-hunter</h1><p>The dashboard isn't built yet. Run <code>npm run build:web</code>, then reload.</p>",
+      ),
+    );
+    return;
+  }
+  // serveStatic resolves `root` relative to cwd, so translate the absolute dist path.
+  const root = relative(process.cwd(), DIST_DIR) || ".";
+  app.use("/*", serveStatic({ root }));
+  const indexHtml = readFileSync(indexPath, "utf8");
+  app.get("/*", (c) => {
+    if (c.req.path.startsWith("/api/")) return c.json({ error: "not found" }, 404);
+    return c.html(indexHtml);
+  });
+}
 
 export type ServeOptions = {
   /** Port to listen on. Defaults to 4317. */
@@ -47,6 +80,8 @@ export function startServer(opts: ServeOptions = {}): void {
       });
     },
   });
+
+  mountDashboard(app);
 
   const port = opts.port ?? DEFAULT_PORT;
   serve({ fetch: app.fetch, port }, (info) => {
