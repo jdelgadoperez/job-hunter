@@ -17,6 +17,14 @@ export class Repository {
     return Number(info.lastInsertRowid);
   }
 
+  /** The most recently saved profile, or undefined if none has been built yet. */
+  getLatestProfile(): SkillProfile | undefined {
+    const row = this.db.prepare("SELECT data FROM profiles ORDER BY id DESC LIMIT 1").get() as
+      | { data: string }
+      | undefined;
+    return row ? (JSON.parse(row.data) as SkillProfile) : undefined;
+  }
+
   savePosting(posting: JobPosting): void {
     this.db
       .prepare(
@@ -63,6 +71,55 @@ export class Repository {
         missing: JSON.stringify(result.missingSkills),
         rationale: result.rationale ?? null,
       });
+  }
+
+  /** Scored postings (joined with their match result), highest score first. */
+  listScoredPostings(minScore = 0): { posting: JobPosting; result: MatchResult }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
+                p.posted_at, p.fetched_at,
+                m.score, m.matched_skills, m.missing_skills, m.rationale
+         FROM match_results m
+         JOIN postings p ON p.id = m.posting_id
+         WHERE m.score >= ?
+         ORDER BY m.score DESC, p.title`,
+      )
+      .all(minScore) as {
+      id: string;
+      company: string;
+      title: string;
+      url: string;
+      source: string;
+      description: string;
+      location: string | null;
+      posted_at: string | null;
+      fetched_at: string;
+      score: number;
+      matched_skills: string;
+      missing_skills: string;
+      rationale: string | null;
+    }[];
+
+    return rows.map((row) => ({
+      posting: {
+        id: row.id,
+        company: row.company,
+        title: row.title,
+        url: row.url,
+        source: row.source,
+        description: row.description,
+        ...(row.location ? { location: row.location } : {}),
+        ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
+        fetchedAt: new Date(row.fetched_at),
+      },
+      result: {
+        score: row.score,
+        matchedSkills: JSON.parse(row.matched_skills) as string[],
+        missingSkills: JSON.parse(row.missing_skills) as string[],
+        ...(row.rationale ? { rationale: row.rationale } : {}),
+      },
+    }));
   }
 
   setUserAction(postingId: string, action: "saved" | "dismissed"): void {

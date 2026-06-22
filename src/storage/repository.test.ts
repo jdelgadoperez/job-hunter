@@ -31,6 +31,25 @@ describe("Repository", () => {
     repo.close();
   });
 
+  it("returns the latest profile and scored postings ordered by score", () => {
+    const repo = newRepo();
+    expect(repo.getLatestProfile()).toBeUndefined();
+    repo.saveProfile(profile);
+    repo.saveProfile({ ...profile, skills: ["typescript", "go"] });
+    expect(repo.getLatestProfile()?.skills).toEqual(["typescript", "go"]);
+
+    repo.savePosting(posting);
+    repo.savePosting({ ...posting, id: "def", title: "Other" });
+    repo.saveMatchResult("abc", { score: 90, matchedSkills: ["typescript"], missingSkills: [] });
+    repo.saveMatchResult("def", { score: 40, matchedSkills: [], missingSkills: ["go"] });
+
+    const all = repo.listScoredPostings();
+    expect(all.map((s) => s.result.score)).toEqual([90, 40]);
+    expect(all[0]?.posting.fetchedAt).toBeInstanceOf(Date);
+    expect(repo.listScoredPostings(50).map((s) => s.posting.id)).toEqual(["abc"]);
+    repo.close();
+  });
+
   it("adds, lists, and removes tracked companies without duplicating", () => {
     const repo = newRepo();
     repo.addTrackedCompany("https://acme.com/careers", "Acme");
