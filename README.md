@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/header.jpg" alt="job-hunter" width="100%" height="120" style="object-fit:cover;border-radius:6px">
+</p>
+
 # job-hunter
 
 A local-first job-search engine. It discovers open roles from the
