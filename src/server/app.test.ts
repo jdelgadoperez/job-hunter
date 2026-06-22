@@ -178,6 +178,87 @@ describe("POST /api/profile", () => {
   });
 });
 
+describe("PUT /api/profile/skills", () => {
+  it("replaces profile skills (normalized + deduped), preserving other fields", async () => {
+    repo.saveProfile({ skills: ["old"], roleKeywords: ["engineer"], categories: ["eng"] });
+    const res = await makeApp().request("/api/profile/skills", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ skills: ["TypeScript", " react ", "TS", "react"] }),
+    });
+    expect(res.status).toBe(200);
+    const profile = await json<{ skills: string[]; roleKeywords: string[] }>(res);
+    // "TS" folds to "typescript" and dedupes; whitespace/casing normalized.
+    expect(profile.skills).toEqual(["typescript", "react"]);
+    expect(profile.roleKeywords).toEqual(["engineer"]);
+    expect(repo.getLatestProfile()?.skills).toEqual(["typescript", "react"]);
+  });
+
+  it("works with no prior profile", async () => {
+    const res = await makeApp().request("/api/profile/skills", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ skills: ["python"] }),
+    });
+    expect(res.status).toBe(200);
+    expect((await json<{ skills: string[] }>(res)).skills).toEqual(["python"]);
+  });
+
+  it("rejects a non-array body", async () => {
+    const res = await makeApp().request("/api/profile/skills", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ skills: "nope" }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("skill dictionary CRUD", () => {
+  it("lists, adds (201, normalized), and removes dictionary skills", async () => {
+    const app = makeApp();
+    expect(await json(await app.request("/api/skills"))).toEqual([]);
+
+    const add = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "  Rust  ", category: "engineering" }),
+    });
+    expect(add.status).toBe(201);
+    expect(await json<{ name: string; category: string }[]>(add)).toEqual([
+      { name: "rust", category: "engineering" },
+    ]);
+
+    const del = await app.request("/api/skills/rust", { method: "DELETE" });
+    expect(await json<{ removed: boolean }>(del)).toEqual({ removed: true });
+    expect(await json(await app.request("/api/skills"))).toEqual([]);
+  });
+
+  it("defaults the category to 'other' and rejects a missing name", async () => {
+    const app = makeApp();
+    await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "elixir" }),
+    });
+    expect(
+      await json<{ name: string; category: string }[]>(await app.request("/api/skills")),
+    ).toEqual([{ name: "elixir", category: "other" }]);
+
+    const bad = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ category: "engineering" }),
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("reports removed=false for an unknown skill", async () => {
+    const del = await makeApp().request("/api/skills/nonexistent", { method: "DELETE" });
+    expect(await json<{ removed: boolean }>(del)).toEqual({ removed: false });
+  });
+});
+
 describe("scan jobs", () => {
   type ScanStatus = { state: string; count: number | null; error: string | null };
 

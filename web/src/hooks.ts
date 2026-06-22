@@ -36,6 +36,35 @@ export function useUploadResume() {
   });
 }
 
+export function useUpdateProfileSkills() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (skills: string[]) => api.updateProfileSkills(skills),
+    onSuccess: (profile) => qc.setQueryData(["profile"], profile),
+  });
+}
+
+export function useSkills() {
+  return useQuery({ queryKey: ["skills"], queryFn: api.getSkills });
+}
+
+export function useAddSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, category }: { name: string; category?: string }) =>
+      api.addSkill(name, category),
+    onSuccess: (skills) => qc.setQueryData(["skills"], skills),
+  });
+}
+
+export function useRemoveSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.removeSkill(name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["skills"] }),
+  });
+}
+
 /** Poll the background scan status; refetch quickly while a scan is running, idle otherwise. */
 export function useScanStatus() {
   return useQuery({

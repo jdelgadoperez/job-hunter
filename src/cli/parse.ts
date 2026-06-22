@@ -1,5 +1,8 @@
 import { parseArgs } from "node:util";
 
+/** Default minimum match score for `list` when `--min-score` is omitted. */
+export const DEFAULT_MIN_SCORE = 50;
+
 export type Command =
   | { kind: "scan" }
   | { kind: "serve"; port?: number; open: boolean; refreshHours?: number }
@@ -57,8 +60,8 @@ export function parseCli(argv: string[]): Command {
         allowPositionals: true,
       });
       const raw = values["min-score"];
-      const minScore = raw === undefined ? 0 : Number(raw);
-      return { kind: "list", minScore: Number.isFinite(minScore) ? minScore : 0 };
+      const minScore = raw === undefined ? DEFAULT_MIN_SCORE : Number(raw);
+      return { kind: "list", minScore: Number.isFinite(minScore) ? minScore : DEFAULT_MIN_SCORE };
     }
 
     case "profile": {
@@ -100,7 +103,7 @@ export const USAGE = `job-hunter — local job-search engine
 Usage:
   job-hunter scan                      Discover, score, and store matches
   job-hunter serve [--port N] [--no-open] [--refresh-hours N]  Start the local web dashboard
-  job-hunter list [--min-score N]      Show stored matches
+  job-hunter list [--min-score N]      Show stored matches (default min score 50)
   job-hunter profile <resume-file>     Build your skill profile from a resume
   job-hunter track add <url> [--name]  Track a company by careers URL
   job-hunter track list                List tracked companies

@@ -24,6 +24,8 @@ export type ScoredPosting = { posting: JobPosting; result: MatchResult };
 
 export type TrackedCompany = { careersUrl: string; name?: string };
 
+export type Skill = { name: string; category: string };
+
 export type SkillProfile = {
   skills: string[];
   roleKeywords: string[];
@@ -88,6 +90,21 @@ export const api = {
     form.set("file", file);
     return request<SkillProfile>("/api/profile", { method: "POST", body: form });
   },
+  updateProfileSkills: (skills: string[]) =>
+    request<SkillProfile>("/api/profile/skills", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ skills }),
+    }),
+  getSkills: () => request<Skill[]>("/api/skills"),
+  addSkill: (name: string, category?: string) =>
+    request<Skill[]>("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, category }),
+    }),
+  removeSkill: (name: string) =>
+    request<{ removed: boolean }>(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" }),
   // Start a background scan (or no-op if one is already running). Both 202 (started) and 409
   // (already running) carry the current job status, so neither is an error here.
   startScan: async (): Promise<ScanJobStatus> => {

@@ -79,8 +79,10 @@ default on <http://localhost:4317> — and opens a React dashboard in your brows
   status (reading directory → per-company → scoring), so you can switch tabs or close the page and
   it keeps going. The server also **auto-refreshes** on a schedule (default every 6h; tune with
   `--refresh-hours N`, or `--refresh-hours 0` to disable).
-- **Matches** — ranked postings filtered by a minimum-score slider, with the LLM rationale and
-  matched/missing skills
+- **Matches** — ranked postings filtered by a minimum-score slider (default **50**), with the LLM
+  rationale and matched/missing skills
+- **Skills** — edit the skills on your profile (what postings are scored against) and manage the
+  skill **dictionary** the resume parser recognizes (a broad ~340-term default ships out of the box)
 - **Companies** — the companies you track
 - **Settings** — Anthropic API key (write-only — never sent back to the browser) and scorer model
   (the company directory is fixed, so it isn't configurable)
@@ -93,7 +95,9 @@ shows comes from the same local HTTP API:
 | --- | --- |
 | `GET /api/matches?minScore=` | ranked matches |
 | `GET /api/companies` | tracked companies |
-| `GET /api/profile` · `GET\|PUT /api/settings` | profile and settings (key is write-only) |
+| `GET /api/profile` · `PUT /api/profile/skills` | profile, and direct edits to its skill list |
+| `GET\|POST /api/skills` · `DELETE /api/skills/:name` | the skill dictionary |
+| `GET\|PUT /api/settings` | settings (the API key is write-only) |
 | `POST /api/profile` | upload a resume (`.txt`/`.md`/`.pdf`/`.docx`) or post `{ "resumeText": … }` |
 | `POST /api/scan` · `GET /api/scan/status` | start a background scan, then poll its live status |
 

@@ -3,8 +3,9 @@ import { Companies } from "./views/Companies";
 import { Matches } from "./views/Matches";
 import { Overview } from "./views/Overview";
 import { Settings } from "./views/Settings";
+import { Skills } from "./views/Skills";
 
-const TABS = ["Overview", "Matches", "Companies", "Settings"] as const;
+const TABS = ["Overview", "Matches", "Skills", "Companies", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 
 export function App() {
@@ -37,6 +38,7 @@ export function App() {
       <main className="mx-auto max-w-3xl px-4 py-6">
         {tab === "Overview" ? <Overview /> : null}
         {tab === "Matches" ? <Matches /> : null}
+        {tab === "Skills" ? <Skills /> : null}
         {tab === "Companies" ? <Companies /> : null}
         {tab === "Settings" ? <Settings /> : null}
       </main>
