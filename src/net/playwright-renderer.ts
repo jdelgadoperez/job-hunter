@@ -1,4 +1,5 @@
 import type { PageRenderer } from "@app/discovery/connectors/browser";
+import { withTimeout } from "@app/net/with-timeout";
 
 /**
  * Production `PageRenderer` backed by Playwright/Chromium. This is an integration-bound edge
@@ -10,13 +11,22 @@ export class PlaywrightRenderer implements PageRenderer {
 
   async render(url: string): Promise<string> {
     const { chromium } = await import("playwright");
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({ timeout: this.timeoutMs });
     try {
-      const page = await browser.newPage();
-      await page.goto(url, { waitUntil: "networkidle", timeout: this.timeoutMs });
-      return await page.content();
+      const work = this.load(browser, url);
+      work.catch(() => {});
+      return await withTimeout(work, this.timeoutMs, `Render ${url}`);
     } finally {
       await browser.close();
     }
+  }
+
+  private async load(
+    browser: Awaited<ReturnType<typeof import("playwright").chromium.launch>>,
+    url: string,
+  ): Promise<string> {
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: "networkidle", timeout: this.timeoutMs });
+    return await page.content();
   }
 }

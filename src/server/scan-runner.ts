@@ -1,6 +1,7 @@
 import { runScan } from "@app/cli/commands";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
+import { formatProgress } from "@app/domain/scan-progress";
 import type { Warning } from "@app/domain/types";
 import { resolveScorer } from "@app/matching/resolve-scorer";
 import { settingsWithEnvKey } from "@app/matching/resolve-settings";
@@ -33,7 +34,12 @@ export function createScanRunner(repo: Repository): ScanRunner {
         repo,
         profile,
         scorer,
-        onProgress,
+        // Update the job status snapshot AND echo each step to the server console, so progress is
+        // followable in the `serve`/`dev` terminal (not just the dashboard).
+        onProgress: (event) => {
+          onProgress(event);
+          console.log(`[scan] ${formatProgress(event)}`);
+        },
         discoverDeps: {
           fetcher: new HttpFetcher(),
           renderer: new PlaywrightRenderer(),
@@ -42,10 +48,12 @@ export function createScanRunner(repo: Repository): ScanRunner {
           trackedCompanies: repo.listTrackedCompanies(),
         },
       },
-      // The job manager already captures structured progress; logger lines are redundant there.
-      () => {},
+      // Discovery warnings still reach the console for visibility.
+      (message) => console.log(`[scan] ${message}`),
     );
 
+    for (const warning of warnings)
+      console.log(`[scan]   ! [${warning.source}] ${warning.message}`);
     return { count: result.count, warnings: [...warnings, ...result.warnings] };
   };
 }

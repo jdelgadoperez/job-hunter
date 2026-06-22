@@ -1,3 +1,4 @@
+import { withTimeout } from "@app/net/with-timeout";
 import type { SharedViewReader } from "./airtable";
 
 /**
@@ -11,19 +12,32 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
 
   async read(shareUrl: string): Promise<unknown> {
     const { chromium } = await import("playwright");
-    const browser = await chromium.launch();
+    // Cap browser startup too (a slow/missing/downloading Chromium otherwise hangs unbounded).
+    const browser = await chromium.launch({ timeout: this.timeoutMs });
     try {
-      const page = await browser.newPage();
-      // Arm the response wait before navigating so we don't miss the call.
-      const dataResponse = page.waitForResponse(
-        (response) => response.url().includes("readSharedViewData") && response.ok(),
-        { timeout: this.timeoutMs },
-      );
-      await page.goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs });
-      const response = await dataResponse;
-      return await response.json();
+      // Hard wall-clock cap on the whole capture: Playwright's per-step timeouts don't bound the
+      // total, so without this the scan can sit on "Reading the company directory…" indefinitely.
+      const capture = this.capture(browser, shareUrl);
+      // Swallow a late rejection if the deadline wins, so it isn't an unhandled rejection.
+      capture.catch(() => {});
+      return await withTimeout(capture, this.timeoutMs, "Airtable shared-view read");
     } finally {
       await browser.close();
     }
+  }
+
+  private async capture(
+    browser: Awaited<ReturnType<typeof import("playwright").chromium.launch>>,
+    shareUrl: string,
+  ): Promise<unknown> {
+    const page = await browser.newPage();
+    // Arm the response wait before navigating so we don't miss the call.
+    const dataResponse = page.waitForResponse(
+      (response) => response.url().includes("readSharedViewData") && response.ok(),
+      { timeout: this.timeoutMs },
+    );
+    await page.goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs });
+    const response = await dataResponse;
+    return await response.json();
   }
 }

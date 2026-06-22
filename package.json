@@ -9,6 +9,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "typecheck:web": "tsc -p web/tsconfig.json",
+    "dev": "node --import tsx scripts/dev.ts",
     "dev:web": "vite web",
     "build:web": "vite build web",
     "lint": "biome check .",
