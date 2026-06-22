@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 
 export type Command =
   | { kind: "scan" }
+  | { kind: "serve"; port?: number; open: boolean }
   | { kind: "track-add"; url: string; name?: string }
   | { kind: "track-list" }
   | { kind: "track-remove"; url: string }
@@ -19,6 +20,23 @@ export function parseCli(argv: string[]): Command {
   switch (command) {
     case "scan":
       return { kind: "scan" };
+
+    case "serve": {
+      const { values } = parseArgs({
+        args: rest,
+        options: { port: { type: "string" }, "no-open": { type: "boolean" } },
+        allowPositionals: true,
+      });
+      const rawPort = values.port;
+      if (rawPort !== undefined) {
+        const port = Number(rawPort);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          return { kind: "help", error: `invalid --port: ${rawPort}` };
+        }
+        return { kind: "serve", port, open: !values["no-open"] };
+      }
+      return { kind: "serve", open: !values["no-open"] };
+    }
 
     case "list": {
       const { values } = parseArgs({
@@ -69,6 +87,7 @@ export const USAGE = `job-hunter — local job-search engine
 
 Usage:
   job-hunter scan                      Discover, score, and store matches
+  job-hunter serve [--port N] [--no-open]  Start the local web dashboard
   job-hunter list [--min-score N]      Show stored matches
   job-hunter profile <resume-file>     Build your skill profile from a resume
   job-hunter track add <url> [--name]  Track a company by careers URL

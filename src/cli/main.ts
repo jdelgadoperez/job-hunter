@@ -4,11 +4,12 @@ import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import type { Warning } from "@app/domain/types";
 import { resolveScorer } from "@app/matching/resolve-scorer";
-import type { SettingsReader } from "@app/matching/resolve-settings";
+import { settingsWithEnvKey } from "@app/matching/resolve-settings";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import { readResumeText } from "@app/profile/read-resume";
 import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
+import { startServer } from "@app/server/serve";
 import { Repository } from "@app/storage/repository";
 import {
   type Logger,
@@ -20,20 +21,6 @@ import {
   trackRemove,
 } from "./commands";
 import { USAGE, parseCli } from "./parse";
-
-const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
-
-/** Overlay the ANTHROPIC_API_KEY env var onto stored settings as a fallback. */
-export function settingsWithEnvKey(repo: Repository): SettingsReader {
-  return {
-    getSetting: (key) => {
-      const stored = repo.getSetting(key);
-      if (stored !== undefined) return stored;
-      if (key === ANTHROPIC_KEY_SETTING) return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
-      return undefined;
-    },
-  };
-}
 
 export async function runScanCommand(repo: Repository, log: Logger): Promise<void> {
   const profile = repo.getLatestProfile();
@@ -84,6 +71,13 @@ export async function main(): Promise<void> {
     if (command.error) console.error(`Error: ${command.error}\n`);
     console.log(USAGE);
     process.exitCode = command.error ? 1 : 0;
+    return;
+  }
+
+  // `serve` is long-running and owns its repository for the server's lifetime, so it runs
+  // outside the open-use-close block the one-shot commands share.
+  if (command.kind === "serve") {
+    await startServer({ port: command.port, open: command.open });
     return;
   }
 
