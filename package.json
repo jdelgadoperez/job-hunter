@@ -10,6 +10,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
+    "setup": "node --import tsx scripts/setup.ts",
     "cli": "node --import tsx src/cli/main.ts",
     "smoke": "node --import tsx scripts/smoke-connectors.ts",
     "smoke:scorer": "node --import tsx scripts/smoke-scorer.ts",
