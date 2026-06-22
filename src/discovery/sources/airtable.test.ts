@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FakeSharedViewReader, airtableRowsToLeads } from "./airtable";
 import fixture from "./__fixtures__/airtable-shared-view.json";
+import { FakeSharedViewReader, airtableRowsToLeads } from "./airtable";
 
 describe("airtableRowsToLeads", () => {
   it("maps rows to leads, reading company from the primary column and url from Jobs Page", () => {
@@ -55,7 +55,10 @@ describe("airtableRowsToLeads", () => {
         },
       },
     };
-    const { leads } = airtableRowsToLeads(raw, { companyField: "Name", careersUrlField: "Careers" });
+    const { leads } = airtableRowsToLeads(raw, {
+      companyField: "Name",
+      careersUrlField: "Careers",
+    });
     expect(leads).toEqual([
       { company: "Initech", careersUrl: "https://initech.com/careers", categories: [] },
     ]);

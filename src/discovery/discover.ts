@@ -4,7 +4,7 @@ import pLimit from "p-limit";
 import { BrowserConnector, type PageRenderer } from "./connectors/browser";
 import type { ConnectorResult } from "./connectors/types";
 import { resolveAts } from "./resolve-ats";
-import { airtableRowsToLeads, type SharedViewReader } from "./sources/airtable";
+import { type SharedViewReader, airtableRowsToLeads } from "./sources/airtable";
 import type { CompanyLead } from "./sources/types";
 
 export type DiscoverDeps = {
@@ -55,7 +55,9 @@ function normalizeUrl(url: string): string {
  * de-duplicated by normalized careers URL. An unreachable Airtable degrades to tracked-only plus a
  * `Warning` — never throws.
  */
-async function collectLeads(deps: DiscoverDeps): Promise<{ leads: CompanyLead[]; warnings: Warning[] }> {
+async function collectLeads(
+  deps: DiscoverDeps,
+): Promise<{ leads: CompanyLead[]; warnings: Warning[] }> {
   const warnings: Warning[] = [];
 
   let airtableLeads: CompanyLead[] = [];
