@@ -26,10 +26,15 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
 
 function ProfileSkills() {
   const profile = useProfile();
+  const dict = useSkills();
   const update = useUpdateProfileSkills();
   const [draft, setDraft] = useState("");
 
   const skills = profile.data?.skills ?? [];
+
+  // Dictionary terms not already on the profile, offered as type-ahead suggestions.
+  const onProfile = new Set(skills);
+  const suggestions = (dict.data ?? []).map((s) => s.name).filter((name) => !onProfile.has(name));
 
   function add(e: FormEvent) {
     e.preventDefault();
@@ -43,8 +48,8 @@ function ProfileSkills() {
     <Card>
       <h2 className="font-semibold text-slate-800">Your skills</h2>
       <p className="mt-1 text-xs text-slate-500">
-        These are matched against every posting. Add ones the resume parser missed, or remove wrong
-        ones — changes apply on the next scan.
+        These are matched against every posting. Search the dictionary or type a brand-new skill —
+        changes apply on the next scan.
       </p>
 
       {profile.isPending ? (
@@ -70,9 +75,15 @@ function ProfileSkills() {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Add a skill (e.g. kubernetes)"
+              list="profile-skill-options"
+              placeholder="Search the dictionary or add a new skill…"
               className="input flex-1"
             />
+            <datalist id="profile-skill-options">
+              {suggestions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
             <Button type="submit" disabled={update.isPending || !draft.trim()}>
               Add
             </Button>
