@@ -12,10 +12,8 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { airtableRowsToLeads } from "../src/discovery/sources/airtable";
+import { airtableRowsToLeads, resolveShareUrl } from "../src/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "../src/discovery/sources/airtable-playwright";
-
-const DEFAULT_SHARE = "https://airtable.com/appPGrJqA2zH65k5I/shrI8dno1rMGKZM8y/tblKU0jQiyIX182uU";
 
 const FIXTURE_PATH = join(
   process.cwd(),
@@ -23,7 +21,7 @@ const FIXTURE_PATH = join(
 );
 
 async function main(): Promise<void> {
-  const shareUrl = process.env.AIRTABLE_SHARE_URL?.trim() || DEFAULT_SHARE;
+  const shareUrl = resolveShareUrl();
   console.log(`Reading Airtable shared view:\n  ${shareUrl}\n`);
 
   const reader = new PlaywrightSharedViewReader();

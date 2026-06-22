@@ -1,6 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import fixture from "./__fixtures__/airtable-shared-view.json";
-import { FakeSharedViewReader, airtableRowsToLeads } from "./airtable";
+import {
+  COMMUNITY_SHARE_URL,
+  FakeSharedViewReader,
+  airtableRowsToLeads,
+  resolveShareUrl,
+} from "./airtable";
+
+describe("resolveShareUrl", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("returns the fixed community table by default", () => {
+    vi.stubEnv("AIRTABLE_SHARE_URL", undefined);
+    expect(resolveShareUrl()).toBe(COMMUNITY_SHARE_URL);
+  });
+
+  it("honors the AIRTABLE_SHARE_URL dev override (trimmed)", () => {
+    vi.stubEnv("AIRTABLE_SHARE_URL", "  https://airtable.com/other  ");
+    expect(resolveShareUrl()).toBe("https://airtable.com/other");
+  });
+
+  it("falls back to the community table when the override is blank", () => {
+    vi.stubEnv("AIRTABLE_SHARE_URL", "   ");
+    expect(resolveShareUrl()).toBe(COMMUNITY_SHARE_URL);
+  });
+});
 
 describe("airtableRowsToLeads", () => {
   it("maps rows to leads, reading company from the primary column and url from Jobs Page", () => {

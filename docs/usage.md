@@ -17,10 +17,10 @@ This guide covers day-to-day use of the command-line tool. For install instructi
 Invoke with `npm run cli -- <command>`. (The `--` is how npm forwards flags to the tool.)
 
 ### `scan`
-Discovers companies (directory + tracked), fetches each one's open roles, scores them against your
-profile, and stores ranked matches. Prerequisites: a profile and a configured Airtable URL (both
-set up by `npm run setup`). Companies that fail to load become warnings; the scan still finishes
-and stores everything else.
+Discovers companies (the public directory + any you track), fetches each one's open roles, scores
+them against your profile, and stores ranked matches. The only prerequisite is a profile (`npm run
+setup` or `job-hunter profile <resume>`); the directory is a fixed community resource. Companies
+that fail to load become warnings; the scan still finishes and stores everything else.
 
 ```bash
 npm run cli -- scan
@@ -74,9 +74,12 @@ Settings live in your local database and can be set during `npm run setup`. The 
 | `anthropicApiKey` | Anthropic API key for LLM scoring | unset → heuristic scoring |
 | `scorerModel` | Model used for scoring | `claude-sonnet-4-6` |
 | `scorerProvider` | LLM provider | `anthropic` |
-| `airtableShareUrl` | The Airtable directory to read | stillhiring's published share |
 
 The `ANTHROPIC_API_KEY` environment variable is honored as a fallback if the setting isn't stored.
+
+The company directory is the community-maintained stillhiring.today table and isn't a setting. For
+development you can point at a different shared view with the `AIRTABLE_SHARE_URL` environment
+variable.
 
 ## Refreshing the company directory snapshot
 
@@ -102,7 +105,6 @@ Set `JOB_HUNTER_HOME` to relocate it. Delete the file to start fresh.
 ## Troubleshooting
 
 - **"No profile yet"** — run `npm run cli -- profile <resume>` (or re-run `npm run setup`).
-- **"No Airtable share URL set"** — re-run `npm run setup`, or set the `airtableShareUrl` setting.
 - **Chromium errors / a careers page won't load** — ensure the browser is installed:
   `npx playwright install chromium`. A single company failing is reported as a warning and doesn't
   stop the scan.

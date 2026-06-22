@@ -1,7 +1,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
 import type { JobPosting, SkillProfile, Warning } from "@app/domain/types";
 import { settingsWithEnvKey } from "@app/matching/resolve-settings";
 import { Repository } from "@app/storage/repository";
@@ -142,10 +141,9 @@ describe("main dispatch", () => {
 });
 
 describe("scan command", () => {
-  function seed(opts: { profile?: boolean; shareUrl?: boolean }): void {
+  function seedProfile(): void {
     const repo = openDb();
-    if (opts.profile) repo.saveProfile(profile);
-    if (opts.shareUrl) repo.setSetting(AIRTABLE_SHARE_SETTING, "https://airtable.com/shrX");
+    repo.saveProfile(profile);
     repo.close();
   }
 
@@ -155,15 +153,9 @@ describe("scan command", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("aborts with exit 1 when no Airtable share URL is set", async () => {
-    seed({ profile: true });
-    await runCli("scan");
-    expect(logged()).toContain("No Airtable share URL set");
-    expect(process.exitCode).toBe(1);
-  });
-
   it("discovers, scores, and stores postings, surfacing scorer warnings", async () => {
-    seed({ profile: true, shareUrl: true });
+    // No Airtable URL is configured: the directory is the fixed community table.
+    seedProfile();
     h.postings = [posting("1")];
 
     await runCli("scan");

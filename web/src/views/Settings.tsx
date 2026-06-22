@@ -9,14 +9,10 @@ export function Settings() {
 
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
-  const [airtableUrl, setAirtableUrl] = useState("");
 
   // Seed the editable fields from the server once loaded (the key is write-only, so it stays blank).
   useEffect(() => {
-    if (settings.data) {
-      setModel(settings.data.scorerModel ?? "");
-      setAirtableUrl(settings.data.airtableShareUrl ?? "");
-    }
+    if (settings.data) setModel(settings.data.scorerModel ?? "");
   }, [settings.data]);
 
   if (settings.isPending) return <Loading label="Loading settings…" />;
@@ -24,7 +20,7 @@ export function Settings() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const payload: SettingsUpdate = { scorerModel: model, airtableShareUrl: airtableUrl };
+    const payload: SettingsUpdate = { scorerModel: model };
     if (apiKey.trim()) payload.anthropicApiKey = apiKey.trim();
     update.mutate(payload, { onSuccess: () => setApiKey("") });
   }
@@ -57,15 +53,10 @@ export function Settings() {
             className="input"
           />
         </Field>
-        <Field label="Airtable share URL" hint="The stillhiring.today shared view.">
-          <input
-            type="url"
-            value={airtableUrl}
-            onChange={(e) => setAirtableUrl(e.target.value)}
-            placeholder="https://airtable.com/…"
-            className="input"
-          />
-        </Field>
+        <p className="text-xs text-slate-500">
+          The job directory is the community-maintained stillhiring.today table — no configuration
+          needed.
+        </p>
 
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={update.isPending}>
