@@ -27,8 +27,14 @@ jobs:
       - name: Lint (Biome)
         run: npm run lint
 
-      - name: Typecheck
+      - name: Typecheck (server + CLI)
         run: npm run typecheck
+
+      - name: Typecheck (web)
+        run: npm run typecheck:web
 
       - name: Test (with coverage gate)
         run: npm run test:coverage
+
+      - name: Build web dashboard
+        run: npm run build:web
