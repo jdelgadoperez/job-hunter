@@ -14,7 +14,7 @@ function plural(n: number, singular: string, pluralForm = `${singular}s`): strin
 export function formatProgress(event: ScanProgressEvent): string {
   switch (event.kind) {
     case "directory":
-      return "Reading company directory…";
+      return "Reading the company directory (this can take ~30s)…";
     case "leads":
       return `Found ${plural(event.total, "company", "companies")} to scan`;
     case "company":

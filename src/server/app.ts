@@ -49,6 +49,38 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.get("/api/companies", (c) => c.json(repo.listTrackedCompanies()));
 
+  // Track a company by its careers-page URL. Validated as an http(s) URL so a typo doesn't become
+  // a phantom lead. Upserts by URL; returns the updated list.
+  app.post("/api/companies", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      careersUrl?: unknown;
+      name?: unknown;
+    } | null;
+    if (!body || typeof body.careersUrl !== "string") {
+      return c.json({ error: 'expected { "careersUrl": string, "name"?: string }' }, 400);
+    }
+    const careersUrl = body.careersUrl.trim();
+    let parsed: URL;
+    try {
+      parsed = new URL(careersUrl);
+    } catch {
+      return c.json({ error: "careersUrl must be a valid URL" }, 400);
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return c.json({ error: "careersUrl must start with http:// or https://" }, 400);
+    }
+    const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined;
+    repo.addTrackedCompany(careersUrl, name);
+    return c.json(repo.listTrackedCompanies(), 201);
+  });
+
+  // Stop tracking a company. The URL goes in a query param since careers URLs contain slashes.
+  app.delete("/api/companies", (c) => {
+    const url = c.req.query("url");
+    if (!url) return c.json({ error: "missing url query param" }, 400);
+    return c.json({ removed: repo.removeTrackedCompany(url) });
+  });
+
   app.get("/api/profile", (c) => c.json(repo.getLatestProfile() ?? null));
 
   app.get("/api/settings", (c) => c.json(readSettings(repo)));

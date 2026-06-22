@@ -18,7 +18,12 @@ export type ScanJobStatus = {
   error: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  /** The most recent companies visited (newest last), for a rolling activity view. */
+  recent: string[];
 };
+
+/** How many recent company lines to retain for the rolling list. */
+const MAX_RECENT = 8;
 
 function idleStatus(): ScanJobStatus {
   return {
@@ -31,6 +36,7 @@ function idleStatus(): ScanJobStatus {
     error: null,
     startedAt: null,
     finishedAt: null,
+    recent: [],
   };
 }
 
@@ -44,7 +50,11 @@ export class ScanJobManager {
   private status: ScanJobStatus = idleStatus();
 
   getStatus(): ScanJobStatus {
-    return { ...this.status, warnings: [...this.status.warnings] };
+    return {
+      ...this.status,
+      warnings: [...this.status.warnings],
+      recent: [...this.status.recent],
+    };
   }
 
   isRunning(): boolean {
@@ -94,6 +104,8 @@ export class ScanJobManager {
     if (event.kind === "company") {
       this.status.current = event.index;
       this.status.total = event.total;
+      // Keep a rolling tail of the companies most recently visited.
+      this.status.recent = [...this.status.recent, formatProgress(event)].slice(-MAX_RECENT);
     }
   }
 }
