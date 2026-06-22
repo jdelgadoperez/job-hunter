@@ -1,0 +1,39 @@
+{
+  "_comment": "SYNTHETIC sample of an Airtable readSharedViewData response, modeled on the documented shape and stillhiring's columns. NOT a real capture — replace via `npm run smoke:airtable` before trusting in production.",
+  "data": {
+    "table": {
+      "id": "tblKU0jQiyIX182uU",
+      "columns": [
+        { "id": "fld001", "name": "™", "type": "text" },
+        { "id": "fld002", "name": "Jobs Page", "type": "button" },
+        { "id": "fld003", "name": "Employees", "type": "number" },
+        { "id": "fld004", "name": "HQ City", "type": "text" }
+      ],
+      "rows": [
+        {
+          "id": "rec1",
+          "cellValuesByColumnId": {
+            "fld001": "Acme",
+            "fld002": "https://boards.greenhouse.io/acme",
+            "fld003": 200,
+            "fld004": "Remote"
+          }
+        },
+        {
+          "id": "rec2",
+          "cellValuesByColumnId": {
+            "fld001": "Globex",
+            "fld002": { "label": "Apply", "url": "https://jobs.lever.co/globex" }
+          }
+        },
+        {
+          "id": "rec3",
+          "cellValuesByColumnId": {
+            "fld001": "NoUrlCo",
+            "fld003": 5
+          }
+        }
+      ]
+    }
+  }
+}
