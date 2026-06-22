@@ -46,7 +46,8 @@ npm run cli -- profile ./resume.pdf
 ```
 
 ### `track`
-Manage companies you want scanned in addition to the directory.
+Manage companies you want scanned in addition to the directory. (You can also add/remove these
+from the web dashboard's **Companies** tab.)
 
 ```bash
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"

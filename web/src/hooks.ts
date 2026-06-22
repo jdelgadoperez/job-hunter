@@ -12,6 +12,23 @@ export function useCompanies() {
   return useQuery({ queryKey: ["companies"], queryFn: api.getCompanies });
 }
 
+export function useAddCompany() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ careersUrl, name }: { careersUrl: string; name?: string }) =>
+      api.addCompany(careersUrl, name),
+    onSuccess: (companies) => qc.setQueryData(["companies"], companies),
+  });
+}
+
+export function useRemoveCompany() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (careersUrl: string) => api.removeCompany(careersUrl),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["companies"] }),
+  });
+}
+
 export function useProfile() {
   return useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
 }

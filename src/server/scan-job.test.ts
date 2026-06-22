@@ -83,6 +83,24 @@ describe("ScanJobManager", () => {
     // The last progress event before completion was the company visit.
     expect(status.current).toBe(4);
     expect(status.total).toBe(10);
+    expect(status.recent).toEqual(["[4/10] Acme"]);
+  });
+
+  it("keeps only the last few companies in the rolling list", async () => {
+    const jobs = new ScanJobManager();
+    const runner: ScanRunner = async (onProgress) => {
+      for (let i = 1; i <= 12; i += 1) {
+        onProgress({ kind: "company", name: `Co${i}`, index: i, total: 12 });
+      }
+      return { count: 0, warnings: [] };
+    };
+    jobs.start(runner);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const { recent } = jobs.getStatus();
+    expect(recent).toHaveLength(8);
+    expect(recent.at(-1)).toBe("[12/12] Co12");
+    expect(recent[0]).toBe("[5/12] Co5");
   });
 
   it("returns copies so callers can't mutate internal state", () => {

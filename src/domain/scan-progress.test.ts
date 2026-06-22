@@ -3,7 +3,7 @@ import { type ScanProgressEvent, formatProgress } from "./scan-progress";
 
 describe("formatProgress", () => {
   const cases: [ScanProgressEvent, string][] = [
-    [{ kind: "directory" }, "Reading company directory…"],
+    [{ kind: "directory" }, "Reading the company directory (this can take ~30s)…"],
     [{ kind: "leads", total: 1 }, "Found 1 company to scan"],
     [{ kind: "leads", total: 42 }, "Found 42 companies to scan"],
     [{ kind: "company", name: "Acme", index: 3, total: 10 }, "[3/10] Acme"],

@@ -76,14 +76,17 @@ npm run cli -- track remove https://boards.greenhouse.io/acme
 default on <http://localhost:4317> — and opens a React dashboard in your browser:
 
 - **Overview** — upload your resume and run a scan. Scans run as a **background job** with live
-  status (reading directory → per-company → scoring), so you can switch tabs or close the page and
-  it keeps going. The server also **auto-refreshes** on a schedule (default every 6h; tune with
-  `--refresh-hours N`, or `--refresh-hours 0` to disable).
+  status — an elapsed timer plus a rolling list of the companies being visited (reading directory →
+  per-company → scoring) — so you can switch tabs or close the page and it keeps going. The server
+  also **auto-refreshes** on a schedule (default every 6h; tune with `--refresh-hours N`, or
+  `--refresh-hours 0` to disable).
 - **Matches** — ranked postings filtered by a minimum-score slider (default **50**), with the LLM
   rationale and matched/missing skills
-- **Skills** — edit the skills on your profile (what postings are scored against) and manage the
-  skill **dictionary** the resume parser recognizes (a broad ~340-term default ships out of the box)
-- **Companies** — the companies you track
+- **Skills** — edit the skills on your profile (search the dictionary or add new ones) and manage
+  the skill **dictionary** the resume parser recognizes (a broad ~340-term default ships out of the
+  box)
+- **Companies** — add/remove the companies you track by careers-page URL (scanned alongside the
+  public directory)
 - **Settings** — Anthropic API key (write-only — never sent back to the browser) and scorer model
   (the company directory is fixed, so it isn't configurable)
 
@@ -94,7 +97,7 @@ shows comes from the same local HTTP API:
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/matches?minScore=` | ranked matches |
-| `GET /api/companies` | tracked companies |
+| `GET\|POST /api/companies` · `DELETE /api/companies?url=` | tracked companies (add/remove) |
 | `GET /api/profile` · `PUT /api/profile/skills` | profile, and direct edits to its skill list |
 | `GET\|POST /api/skills` · `DELETE /api/skills/:name` | the skill dictionary |
 | `GET\|PUT /api/settings` | settings (the API key is write-only) |

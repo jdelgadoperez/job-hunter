@@ -74,11 +74,50 @@ describe("GET /api/matches", () => {
   });
 });
 
-describe("GET /api/companies", () => {
+describe("companies", () => {
   it("lists tracked companies", async () => {
     repo.addTrackedCompany("https://acme.com/careers", "Acme");
     const res = await makeApp().request("/api/companies");
     expect(await json(res)).toEqual([{ careersUrl: "https://acme.com/careers", name: "Acme" }]);
+  });
+
+  it("adds a company (201) and returns the updated list", async () => {
+    const res = await makeApp().request("/api/companies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ careersUrl: "https://acme.com/careers", name: "Acme" }),
+    });
+    expect(res.status).toBe(201);
+    expect(await json(res)).toEqual([{ careersUrl: "https://acme.com/careers", name: "Acme" }]);
+    expect(repo.listTrackedCompanies()).toHaveLength(1);
+  });
+
+  it("rejects a non-URL or non-http(s) careersUrl", async () => {
+    const app = makeApp();
+    for (const careersUrl of ["not a url", "ftp://x.com"]) {
+      const res = await app.request("/api/companies", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ careersUrl }),
+      });
+      expect(res.status).toBe(400);
+    }
+    expect(repo.listTrackedCompanies()).toHaveLength(0);
+  });
+
+  it("removes a company by url query param", async () => {
+    repo.addTrackedCompany("https://acme.com/careers", "Acme");
+    const url = encodeURIComponent("https://acme.com/careers");
+    const res = await makeApp().request(`/api/companies?url=${url}`, { method: "DELETE" });
+    expect(await json<{ removed: boolean }>(res)).toEqual({ removed: true });
+    expect(repo.listTrackedCompanies()).toHaveLength(0);
+  });
+
+  it("400s a delete with no url, and reports removed=false for an unknown url", async () => {
+    const app = makeApp();
+    expect((await app.request("/api/companies", { method: "DELETE" })).status).toBe(400);
+    const res = await app.request("/api/companies?url=https://nope.com", { method: "DELETE" });
+    expect(await json<{ removed: boolean }>(res)).toEqual({ removed: false });
   });
 });
 

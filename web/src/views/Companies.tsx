@@ -1,16 +1,56 @@
-import { Card, Empty, ErrorNote, Loading } from "../components/ui";
-import { useCompanies } from "../hooks";
+import { type FormEvent, useState } from "react";
+import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
+import { useAddCompany, useCompanies, useRemoveCompany } from "../hooks";
 
 export function Companies() {
   const companies = useCompanies();
+  const addCompany = useAddCompany();
+  const removeCompany = useRemoveCompany();
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+
+  function add(e: FormEvent) {
+    e.preventDefault();
+    const careersUrl = url.trim();
+    if (!careersUrl) return;
+    addCompany.mutate(
+      { careersUrl, name: name.trim() || undefined },
+      {
+        onSuccess: () => {
+          setUrl("");
+          setName("");
+        },
+      },
+    );
+  }
 
   return (
     <section className="space-y-4">
-      <p className="text-sm text-slate-600">
-        Companies you track are scanned alongside the public directory. Add or remove them with the
-        CLI:{" "}
-        <code className="rounded bg-slate-100 px-1">job-hunter track add &lt;careers-url&gt;</code>.
-      </p>
+      <Card>
+        <h2 className="font-semibold text-slate-800">Track a company</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Add a company by its careers-page URL — it's scanned alongside the public directory.
+        </p>
+        <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://boards.greenhouse.io/acme"
+            className="input flex-1"
+          />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name (optional)"
+            className="input w-44"
+          />
+          <Button type="submit" disabled={addCompany.isPending || !url.trim()}>
+            Add
+          </Button>
+        </form>
+        {addCompany.isError ? <ErrorNote error={addCompany.error} /> : null}
+      </Card>
 
       {companies.isPending ? (
         <Loading label="Loading companies…" />
@@ -21,16 +61,25 @@ export function Companies() {
       ) : (
         <div className="space-y-2">
           {companies.data.map((c) => (
-            <Card key={c.careersUrl} className="flex items-center justify-between">
-              <span className="font-medium text-slate-800">{c.name ?? c.careersUrl}</span>
-              <a
-                href={c.careersUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-indigo-700 hover:underline"
+            <Card key={c.careersUrl} className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium text-slate-800">{c.name ?? c.careersUrl}</p>
+                <a
+                  href={c.careersUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-indigo-700 hover:underline"
+                >
+                  {c.careersUrl}
+                </a>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeCompany.mutate(c.careersUrl)}
+                className="shrink-0 text-sm text-slate-400 hover:text-red-600"
               >
-                {c.careersUrl}
-              </a>
+                Remove
+              </button>
             </Card>
           ))}
         </div>

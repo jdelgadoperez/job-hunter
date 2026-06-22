@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { type ChangeEvent, useEffect } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import { Button, Card, Loading } from "../components/ui";
 import { useProfile, useScanStatus, useStartScan, useUploadResume } from "../hooks";
 
@@ -19,6 +19,21 @@ export function Overview() {
   useEffect(() => {
     if (finishedAt) qc.invalidateQueries({ queryKey: ["matches"] });
   }, [finishedAt, qc]);
+
+  // Tick an elapsed counter while a scan runs, so the long opening step never looks frozen.
+  const startedAt = running ? status?.startedAt : null;
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startedAt) {
+      setElapsed(0);
+      return;
+    }
+    const start = new Date(startedAt).getTime();
+    const tick = () => setElapsed(Math.max(0, Math.round((Date.now() - start) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
 
   function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -69,7 +84,9 @@ export function Overview() {
 
         {running ? (
           <div className="mt-3">
-            <p className="text-sm text-slate-600">{status?.message ?? "Working…"}</p>
+            <p className="text-sm text-slate-600">
+              {status?.message ?? "Working…"} <span className="text-slate-400">· {elapsed}s</span>
+            </p>
             {status?.total ? (
               <div className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-100">
                 <div
@@ -77,6 +94,13 @@ export function Overview() {
                   style={{ width: `${Math.round((100 * (status.current ?? 0)) / status.total)}%` }}
                 />
               </div>
+            ) : null}
+            {status && status.recent.length > 0 ? (
+              <ul className="mt-2 max-h-32 overflow-auto rounded bg-slate-900 p-2 font-mono text-xs text-slate-100">
+                {status.recent.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             ) : null}
           </div>
         ) : null}

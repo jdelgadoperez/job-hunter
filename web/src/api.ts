@@ -58,6 +58,7 @@ export type ScanJobStatus = {
   error: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  recent: string[];
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -77,6 +78,16 @@ export const api = {
   getMatches: (minScore: number) =>
     request<ScoredPosting[]>(`/api/matches?minScore=${encodeURIComponent(minScore)}`),
   getCompanies: () => request<TrackedCompany[]>("/api/companies"),
+  addCompany: (careersUrl: string, name?: string) =>
+    request<TrackedCompany[]>("/api/companies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ careersUrl, name }),
+    }),
+  removeCompany: (careersUrl: string) =>
+    request<{ removed: boolean }>(`/api/companies?url=${encodeURIComponent(careersUrl)}`, {
+      method: "DELETE",
+    }),
   getProfile: () => request<SkillProfile | null>("/api/profile"),
   getSettings: () => request<SettingsView>("/api/settings"),
   putSettings: (update: SettingsUpdate) =>
