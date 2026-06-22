@@ -55,7 +55,7 @@ export interface SharedViewReader {
 /** Test double: returns a canned response, or throws to simulate a read failure. */
 export class FakeSharedViewReader implements SharedViewReader {
   constructor(private readonly response: unknown) {}
-  async read(): Promise<unknown> {
+  async read(_shareUrl: string): Promise<unknown> {
     if (this.response instanceof Error) throw this.response;
     return this.response;
   }
