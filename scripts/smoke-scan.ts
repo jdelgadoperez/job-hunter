@@ -1,18 +1,18 @@
 /**
  * Opt-in, manual smoke test for a full live `scan`. NOT part of `npm test`.
  *
- *   ANTHROPIC_API_KEY=sk-... AIRTABLE_SHARE_URL="https://airtable.com/..." \
- *     RESUME=/path/to/resume.pdf npm run smoke:scan
+ *   ANTHROPIC_API_KEY=sk-... RESUME=/path/to/resume.pdf npm run smoke:scan
  *
  * Runs the real engine end to end against a throwaway temp database: builds a profile from a
- * resume, discovers companies (live Playwright Airtable read + ATS connectors), scores with the
- * real LLM (or the heuristic fallback if no key), and prints the ranked matches. Touches the
- * network and a real browser, so it is excluded from CI. Requires `npx playwright install chromium`.
+ * resume, discovers companies (live Playwright Airtable read of the community directory + ATS
+ * connectors), scores with the real LLM (or the heuristic fallback if no key), and prints the
+ * ranked matches. Set AIRTABLE_SHARE_URL to override the directory. Touches the network and a
+ * real browser, so it is excluded from CI. Requires `npx playwright install chromium`.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AIRTABLE_SHARE_SETTING } from "../src/discovery/sources/airtable";
+import { resolveShareUrl } from "../src/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "../src/discovery/sources/airtable-playwright";
 import type { Warning } from "../src/domain/types";
 import { resolveScorer } from "../src/matching/resolve-scorer";
@@ -23,13 +23,13 @@ import { readResumeText } from "../src/profile/read-resume";
 import { Repository } from "../src/storage/repository";
 
 async function main(): Promise<void> {
-  const shareUrl = process.env.AIRTABLE_SHARE_URL?.trim();
   const resumePath = process.env.RESUME?.trim();
-  if (!shareUrl || !resumePath) {
-    console.error("Set AIRTABLE_SHARE_URL and RESUME to run the scan smoke test.");
+  if (!resumePath) {
+    console.error("Set RESUME to run the scan smoke test.");
     process.exitCode = 1;
     return;
   }
+  const shareUrl = resolveShareUrl();
 
   const dir = mkdtempSync(join(tmpdir(), "jh-scan-"));
   const repo = new Repository(join(dir, "jobhunter.db"));
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
     for (const w of [...discoverWarnings, ...warnings]) {
       console.log(`  ! [${w.source}] ${w.message}`);
     }
-    console.log(`\n(Used setting "${AIRTABLE_SHARE_SETTING}" semantics; temp DB at ${dir})`);
+    console.log(`\n(Directory: ${shareUrl}; temp DB at ${dir})`);
   } finally {
     repo.close();
     rmSync(dir, { recursive: true, force: true });

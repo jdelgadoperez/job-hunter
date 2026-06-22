@@ -19,8 +19,18 @@ import type { CompanyLead } from "./types";
  * than silently producing garbage.
  */
 
-/** `settings` key holding the Airtable shared-view URL. */
-export const AIRTABLE_SHARE_SETTING = "airtableShareUrl";
+/**
+ * The community-maintained stillhiring.today shared view. This is fixed — every install reads the
+ * same public directory — so it's a constant rather than user config. `AIRTABLE_SHARE_URL` can
+ * override it for development/testing, but normal use never needs to set anything.
+ */
+export const COMMUNITY_SHARE_URL =
+  "https://airtable.com/appPGrJqA2zH65k5I/shrI8dno1rMGKZM8y/tblKU0jQiyIX182uU";
+
+/** The shared-view URL to scan: the community table, or the `AIRTABLE_SHARE_URL` dev override. */
+export function resolveShareUrl(): string {
+  return process.env.AIRTABLE_SHARE_URL?.trim() || COMMUNITY_SHARE_URL;
+}
 
 /** Default column names in stillhiring's table (from the shared schema screenshot). */
 const DEFAULT_CAREERS_FIELD = "Jobs Page";

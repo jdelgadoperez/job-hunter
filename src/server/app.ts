@@ -1,4 +1,3 @@
-import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
 import { readResumeBuffer } from "@app/profile/read-resume";
 import { Hono } from "hono";
 import type { ServerDeps } from "./types";
@@ -7,13 +6,15 @@ const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
 const MODEL_SETTING = "scorerModel";
 const PROVIDER_SETTING = "scorerProvider";
 
+// The Airtable directory URL is a fixed community resource (see `resolveShareUrl`), not user
+// config, so it's intentionally absent from the settings API.
+
 /** Settings shape returned to clients — the API key is never echoed back, only its presence. */
 function readSettings(repo: ServerDeps["repo"]) {
   return {
     hasAnthropicKey: Boolean(repo.getSetting(ANTHROPIC_KEY_SETTING)?.trim()),
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
-    airtableShareUrl: repo.getSetting(AIRTABLE_SHARE_SETTING) ?? null,
   };
 }
 
@@ -23,7 +24,6 @@ const WRITABLE_SETTINGS: Record<string, string> = {
   anthropicApiKey: ANTHROPIC_KEY_SETTING,
   scorerModel: MODEL_SETTING,
   scorerProvider: PROVIDER_SETTING,
-  airtableShareUrl: AIRTABLE_SHARE_SETTING,
 };
 
 /**

@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
+import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
 import type { Warning } from "@app/domain/types";
@@ -30,12 +30,6 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
     process.exitCode = 1;
     return;
   }
-  const shareUrl = repo.getSetting(AIRTABLE_SHARE_SETTING);
-  if (!shareUrl) {
-    log(`No Airtable share URL set. Save it under the "${AIRTABLE_SHARE_SETTING}" setting first.`);
-    process.exitCode = 1;
-    return;
-  }
 
   const warnings: Warning[] = [];
   const dictionary = repo.getSkillDictionary();
@@ -56,7 +50,7 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
         fetcher: new HttpFetcher(),
         renderer: new PlaywrightRenderer(),
         sharedViewReader: new PlaywrightSharedViewReader(),
-        shareUrl,
+        shareUrl: resolveShareUrl(),
         trackedCompanies: repo.listTrackedCompanies(),
       },
     },

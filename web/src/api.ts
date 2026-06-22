@@ -35,14 +35,12 @@ export type SettingsView = {
   hasAnthropicKey: boolean;
   scorerModel: string | null;
   scorerProvider: string | null;
-  airtableShareUrl: string | null;
 };
 
 export type SettingsUpdate = Partial<{
   anthropicApiKey: string;
   scorerModel: string;
   scorerProvider: string;
-  airtableShareUrl: string;
 }>;
 
 export type ScanJobState = "idle" | "running" | "done" | "error";

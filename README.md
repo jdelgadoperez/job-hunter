@@ -46,11 +46,12 @@ That installs dependencies and runs guided setup. (If you prefer to do it by han
 ### What setup does
 
 `npm run setup`:
-1. installs Chromium (used to read the public Airtable directory and render careers pages),
-2. captures a fresh copy of the company directory,
+1. installs Chromium (used to read the public company directory and render careers pages),
+2. builds the web dashboard,
 3. seeds a skills dictionary into your local database,
-4. asks for your **Anthropic API key** (optional), the **Airtable directory URL** (a sensible
-   default is provided), and your **resume file** — then saves them so you're ready to scan.
+4. asks for your **Anthropic API key** (optional) and your **resume file** — then saves them so
+   you're ready to scan. (The job directory is the community-maintained stillhiring.today table, so
+   there's nothing to configure there.)
 
 Setup is safe to re-run, and it won't block: if you skip the API key you get free heuristic
 scoring, and you can build your profile later with `npm run cli profile <resume>`.
@@ -81,8 +82,8 @@ default on <http://localhost:4317> — and opens a React dashboard in your brows
 - **Matches** — ranked postings filtered by a minimum-score slider, with the LLM rationale and
   matched/missing skills
 - **Companies** — the companies you track
-- **Settings** — Anthropic API key (write-only — never sent back to the browser), scorer model,
-  and Airtable share URL
+- **Settings** — Anthropic API key (write-only — never sent back to the browser) and scorer model
+  (the company directory is fixed, so it isn't configurable)
 
 The dashboard is a static build (Vite + React + Tailwind + TanStack Query) that the server serves
 itself; it's produced by `npm run build:web` (which `npm run setup` runs for you). Everything it

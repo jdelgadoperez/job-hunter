@@ -1,5 +1,5 @@
 import { runScan } from "@app/cli/commands";
-import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
+import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import type { Warning } from "@app/domain/types";
 import { resolveScorer } from "@app/matching/resolve-scorer";
@@ -19,8 +19,6 @@ export function createScanRunner(repo: Repository): ScanRunner {
   return async (onProgress) => {
     const profile = repo.getLatestProfile();
     if (!profile) throw new Error("No profile yet. Upload a resume first.");
-    const shareUrl = repo.getSetting(AIRTABLE_SHARE_SETTING);
-    if (!shareUrl) throw new Error("No Airtable share URL set. Save it in settings first.");
 
     const warnings: Warning[] = [];
     const dictionary = repo.getSkillDictionary();
@@ -40,7 +38,7 @@ export function createScanRunner(repo: Repository): ScanRunner {
           fetcher: new HttpFetcher(),
           renderer: new PlaywrightRenderer(),
           sharedViewReader: new PlaywrightSharedViewReader(),
-          shareUrl,
+          shareUrl: resolveShareUrl(),
           trackedCompanies: repo.listTrackedCompanies(),
         },
       },

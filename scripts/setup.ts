@@ -5,14 +5,14 @@
  *
  * Does the post-install legwork so a non-engineer can get to a working `scan`:
  *   1. installs Chromium for Playwright,
- *   2. captures the REAL Airtable shared-view fixture (so tests/scan use live shape),
+ *   2. builds the web dashboard,
  *   3. seeds the skill dictionary into the local SQLite database,
- *   4. (interactive) collects the Anthropic API key, Airtable share URL, and a resume,
- *      persisting them so `scan` works immediately.
+ *   4. (interactive) collects the Anthropic API key and a resume, persisting them so `scan` works
+ *      immediately. (The company directory is a fixed community resource — no prompt.)
  *
  * Cross-platform (macOS Intel/ARM, Windows 11+). Non-interactive when stdin is not a TTY or
- * `--yes` is passed: it uses env vars (ANTHROPIC_API_KEY, AIRTABLE_SHARE_URL, RESUME) and defaults,
- * and never blocks. Network/browser steps degrade to warnings — setup never hard-fails the config.
+ * `--yes` is passed: it uses env vars (ANTHROPIC_API_KEY, RESUME) and defaults, and never blocks.
+ * Network/browser steps degrade to warnings — setup never hard-fails the config.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -21,7 +21,7 @@ import { createInterface } from "node:readline/promises";
 import skillSeed from "../src/domain/data/skill-seed.json";
 import { readResumeText } from "../src/profile/read-resume";
 import { ensureDataDir, resolveDbPath } from "../src/runtime/paths";
-import { DEFAULT_SHARE_URL, applyConfig, seedSkillDictionary } from "../src/runtime/setup-config";
+import { applyConfig, seedSkillDictionary } from "../src/runtime/setup-config";
 import { Repository } from "../src/storage/repository";
 
 const args = new Set(process.argv.slice(2));
@@ -81,15 +81,11 @@ async function main(): Promise<void> {
     const seeded = seedSkillDictionary(repo, skillSeed.skills);
     console.log(`\n✓ Seeded ${seeded} skills into ${resolveDbPath()}`);
 
-    // 4. Guided config.
+    // 4. Guided config. (The company directory is a fixed community resource — no prompt needed.)
     console.log("\nLet's configure your search (press Enter to accept defaults / skip):");
     const apiKey = await ask(
       "  Anthropic API key (blank = free heuristic scoring): ",
       process.env.ANTHROPIC_API_KEY?.trim() ?? "",
-    );
-    const shareUrl = await ask(
-      `  Airtable share URL [${DEFAULT_SHARE_URL}]: `,
-      process.env.AIRTABLE_SHARE_URL?.trim() || DEFAULT_SHARE_URL,
     );
     const resumePath = await ask(
       "  Path to your resume (pdf/docx/md/txt, blank to skip): ",
@@ -97,11 +93,10 @@ async function main(): Promise<void> {
     );
     const resumeText = await readResumeSafely(resumePath);
 
-    const result = applyConfig(repo, { apiKey, shareUrl, resumeText });
+    const result = applyConfig(repo, { apiKey, resumeText });
 
     console.log("\n✓ Setup complete:");
     console.log(`  - API key: ${result.savedApiKey ? "saved" : "not set (heuristic scoring)"}`);
-    console.log(`  - Airtable share: ${result.shareUrl}`);
     console.log(
       `  - Profile: ${result.profileSkills === null ? "not built yet" : `${result.profileSkills} skills`}`,
     );

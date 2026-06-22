@@ -97,13 +97,11 @@ describe("GET /api/profile", () => {
 describe("settings", () => {
   it("masks the API key on read and reports its presence", async () => {
     repo.setSetting("anthropicApiKey", "sk-secret");
-    repo.setSetting("airtableShareUrl", "https://airtable.com/shrX");
     const body = await json(await makeApp().request("/api/settings"));
     expect(body).toEqual({
       hasAnthropicKey: true,
       scorerModel: null,
       scorerProvider: null,
-      airtableShareUrl: "https://airtable.com/shrX",
     });
     expect(JSON.stringify(body)).not.toContain("sk-secret");
   });
