@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import type { Warning } from "@app/domain/types";
@@ -22,7 +24,7 @@ import { USAGE, parseCli } from "./parse";
 const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
 
 /** Overlay the ANTHROPIC_API_KEY env var onto stored settings as a fallback. */
-function settingsWithEnvKey(repo: Repository): SettingsReader {
+export function settingsWithEnvKey(repo: Repository): SettingsReader {
   return {
     getSetting: (key) => {
       const stored = repo.getSetting(key);
@@ -33,7 +35,7 @@ function settingsWithEnvKey(repo: Repository): SettingsReader {
   };
 }
 
-async function runScanCommand(repo: Repository, log: Logger): Promise<void> {
+export async function runScanCommand(repo: Repository, log: Logger): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
     log("No profile yet. Run `job-hunter profile <resume-file>` first.");
@@ -74,7 +76,7 @@ async function runScanCommand(repo: Repository, log: Logger): Promise<void> {
   for (const warning of warnings) log(`  ! [${warning.source}] ${warning.message}`);
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const command = parseCli(process.argv.slice(2));
   const log: Logger = (message) => console.log(message);
 
@@ -113,7 +115,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+// Run only when executed as the CLI entrypoint, not when imported by tests.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

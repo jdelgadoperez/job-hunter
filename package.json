@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -22,6 +23,7 @@
     "@biomejs/biome": "^1.9.4",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "playwright": "^1.61.0",
     "tsx": "^4.22.4",
     "typescript": "^5.5.0",
