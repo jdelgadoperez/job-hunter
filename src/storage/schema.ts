@@ -41,4 +41,10 @@ CREATE TABLE IF NOT EXISTS skills (
   category TEXT,
   source TEXT
 );
+
+CREATE TABLE IF NOT EXISTS tracked_companies (
+  careers_url TEXT PRIMARY KEY,
+  name TEXT,
+  added_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;

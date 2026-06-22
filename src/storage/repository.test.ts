@@ -31,6 +31,25 @@ describe("Repository", () => {
     repo.close();
   });
 
+  it("adds, lists, and removes tracked companies without duplicating", () => {
+    const repo = newRepo();
+    repo.addTrackedCompany("https://acme.com/careers", "Acme");
+    repo.addTrackedCompany("https://globex.com/jobs");
+    // Re-adding the same URL updates the name rather than duplicating.
+    repo.addTrackedCompany("https://acme.com/careers", "Acme Inc");
+
+    const tracked = repo.listTrackedCompanies();
+    expect(tracked).toEqual([
+      { careersUrl: "https://acme.com/careers", name: "Acme Inc" },
+      { careersUrl: "https://globex.com/jobs" },
+    ]);
+
+    expect(repo.removeTrackedCompany("https://acme.com/careers")).toBe(true);
+    expect(repo.removeTrackedCompany("https://acme.com/careers")).toBe(false);
+    expect(repo.listTrackedCompanies()).toEqual([{ careersUrl: "https://globex.com/jobs" }]);
+    repo.close();
+  });
+
   it("returns undefined for a missing setting", () => {
     const repo = newRepo();
     expect(repo.getSetting("missing")).toBeUndefined();

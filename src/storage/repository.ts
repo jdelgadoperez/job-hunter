@@ -97,6 +97,34 @@ export class Repository {
     return rows.map((row) => row.name);
   }
 
+  /** Upsert a user-tracked company by careers URL; re-adding updates the name. */
+  addTrackedCompany(careersUrl: string, name?: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO tracked_companies (careers_url, name) VALUES (?, ?)
+         ON CONFLICT(careers_url) DO UPDATE SET name = excluded.name`,
+      )
+      .run(careersUrl, name ?? null);
+  }
+
+  listTrackedCompanies(): { careersUrl: string; name?: string }[] {
+    const rows = this.db
+      .prepare("SELECT careers_url, name FROM tracked_companies ORDER BY added_at, careers_url")
+      .all() as { careers_url: string; name: string | null }[];
+    return rows.map((row) => ({
+      careersUrl: row.careers_url,
+      ...(row.name ? { name: row.name } : {}),
+    }));
+  }
+
+  /** Remove a tracked company; returns whether a row was deleted. */
+  removeTrackedCompany(careersUrl: string): boolean {
+    const info = this.db
+      .prepare("DELETE FROM tracked_companies WHERE careers_url = ?")
+      .run(careersUrl);
+    return info.changes > 0;
+  }
+
   getSetting(key: string): string | undefined {
     const row = this.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
       | { value: string }
