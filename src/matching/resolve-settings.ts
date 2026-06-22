@@ -12,6 +12,23 @@ export interface SettingsReader {
 
 export const PROVIDER_SETTING = "scorerProvider";
 export const MODEL_SETTING = "scorerModel";
+const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
+
+/**
+ * Wrap a `SettingsReader` so a missing Anthropic API key falls back to the `ANTHROPIC_API_KEY`
+ * env var. Stored settings always win; the env var is only consulted when the key is unset.
+ * Shared by the CLI and the web server so both resolve the key identically.
+ */
+export function settingsWithEnvKey(base: SettingsReader): SettingsReader {
+  return {
+    getSetting: (key) => {
+      const stored = base.getSetting(key);
+      if (stored !== undefined) return stored;
+      if (key === ANTHROPIC_KEY_SETTING) return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
+      return undefined;
+    },
+  };
+}
 
 /**
  * Resolve the active provider config from settings, falling back to the default provider

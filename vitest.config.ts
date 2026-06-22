@@ -17,6 +17,10 @@ export default defineConfig({
         // scripts, like `HttpFetcher`. Instrumenting them would skew the gate.
         "src/net/playwright-renderer.ts",
         "src/discovery/sources/airtable-playwright.ts",
+        // Server listener + real scan pipeline: bind a port / launch a browser / hit the
+        // network, so smoke-only. The unit-tested logic lives in `server/app.ts`.
+        "src/server/serve.ts",
+        "src/server/scan-runner.ts",
       ],
       reporter: ["text", "html"],
       // Floor for the gate, a few points below current coverage so honest churn

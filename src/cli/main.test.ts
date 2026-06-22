@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
 import type { JobPosting, SkillProfile, Warning } from "@app/domain/types";
+import { settingsWithEnvKey } from "@app/matching/resolve-settings";
 import { Repository } from "@app/storage/repository";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +13,7 @@ const h = vi.hoisted(() => ({
   postings: [] as JobPosting[],
   warnings: [] as Warning[],
   resumeText: "Experienced with TypeScript and React.",
+  startServer: vi.fn(),
 }));
 
 // Point the CLI at a per-test temp database instead of the real data dir.
@@ -30,7 +32,12 @@ vi.mock("@app/profile/read-resume", () => ({
   readResumeText: async () => h.resumeText,
 }));
 
-import { main, settingsWithEnvKey } from "./main";
+// Don't boot a real HTTP listener when dispatching the `serve` command.
+vi.mock("@app/server/serve", () => ({
+  startServer: (opts: unknown) => h.startServer(opts),
+}));
+
+import { main } from "./main";
 
 const profile: SkillProfile = {
   skills: ["typescript", "react"],
@@ -68,6 +75,7 @@ beforeEach(() => {
   h.dbPath = join(tmp, "test.db");
   h.postings = [];
   h.warnings = [];
+  h.startServer.mockReset();
   process.exitCode = 0;
   vi.stubEnv("ANTHROPIC_API_KEY", undefined);
   logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -125,6 +133,11 @@ describe("main dispatch", () => {
   it("reports an empty list before any scan", async () => {
     await runCli("list");
     expect(logged()).toContain("No matches yet");
+  });
+
+  it("starts the web server for the serve command", async () => {
+    await runCli("serve", "--port", "8080", "--no-open");
+    expect(h.startServer).toHaveBeenCalledWith({ port: 8080, open: false });
   });
 });
 

@@ -9,8 +9,9 @@ A local-first job-search engine. It discovers open roles from the
 track, scores each posting against your resume (using Claude, with a free offline fallback), and
 saves ranked matches to a local database — all on your own machine.
 
-Today it runs as a command-line tool (`job-hunter scan`). A browser-based dashboard is on the
-roadmap (see [Roadmap](#roadmap)).
+Today it runs as a command-line tool (`job-hunter scan`) and a local web server (`job-hunter
+serve`) that exposes the same data over an HTTP API. A full browser dashboard is on the roadmap
+(see [Roadmap](#roadmap)).
 
 > **Privacy:** everything runs locally. Your resume and matches live in a SQLite file on your
 > machine; nothing is uploaded anywhere except the job postings you scan and (if you enable LLM
@@ -60,12 +61,29 @@ Run commands with `npm run cli -- <command>` (the `--` passes flags through):
 
 ```bash
 npm run cli -- scan                       # discover, score, and store matches
+npm run cli -- serve                       # start the local web dashboard (--port N, --no-open)
 npm run cli -- list --min-score 70        # show matches scoring 70+
 npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
 npm run cli -- track list
 npm run cli -- track remove https://boards.greenhouse.io/acme
 ```
+
+### Web dashboard (preview)
+
+`job-hunter serve` (or `npm run serve`) starts a local [Hono](https://hono.dev) server — by
+default on <http://localhost:4317> — that exposes your data over a small HTTP API and opens it in
+your browser:
+
+- `GET /api/matches?minScore=` — ranked matches
+- `GET /api/companies` — tracked companies
+- `GET /api/profile` · `GET|PUT /api/settings` — your profile and settings (the API key is
+  write-only; reads only report whether one is set)
+- `POST /api/profile` — upload a resume (`.txt`/`.md`/`.pdf`/`.docx`) or post `{ "resumeText": … }`
+- `POST /api/scan` — run a scan, streaming progress over Server-Sent Events
+
+The React UI that consumes this API is **Plan 6** (see [Roadmap](#roadmap)); for now the server is
+the API layer.
 
 A typical first run:
 
@@ -89,9 +107,9 @@ Override the location with the `JOB_HUNTER_HOME` environment variable.
 
 ## Roadmap
 
-- **Plan 5** — a local web server (Hono) exposing the data over an API.
+- **Plan 5** ✅ — a local web server (Hono) exposing the data over an API (`job-hunter serve`).
 - **Plan 6** — a browser dashboard (React + Tailwind + ShadCN + TanStack) with one-click scanning,
-  onboarding, and match browsing.
+  onboarding, and match browsing, served as static assets by the Plan 5 server.
 
 ## Development
 

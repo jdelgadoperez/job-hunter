@@ -13,6 +13,25 @@ describe("parseCli", () => {
     expect(parseCli(["list", "--min-score", "abc"])).toEqual({ kind: "list", minScore: 0 });
   });
 
+  it("parses serve with defaults, --port, and --no-open", () => {
+    expect(parseCli(["serve"])).toEqual({ kind: "serve", open: true });
+    expect(parseCli(["serve", "--port", "8080"])).toEqual({
+      kind: "serve",
+      port: 8080,
+      open: true,
+    });
+    expect(parseCli(["serve", "--no-open"])).toEqual({ kind: "serve", open: false });
+    // Out-of-range / non-integer ports are rejected.
+    expect(parseCli(["serve", "--port", "abc"])).toMatchObject({
+      kind: "help",
+      error: expect.any(String),
+    });
+    expect(parseCli(["serve", "--port", "70000"])).toMatchObject({
+      kind: "help",
+      error: expect.any(String),
+    });
+  });
+
   it("parses profile with a path, else help", () => {
     expect(parseCli(["profile", "/tmp/cv.pdf"])).toEqual({
       kind: "profile",

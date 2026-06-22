@@ -13,6 +13,7 @@
     "format": "biome format --write .",
     "setup": "node --import tsx scripts/setup.ts",
     "cli": "node --import tsx src/cli/main.ts",
+    "serve": "node --import tsx src/cli/main.ts serve",
     "smoke": "node --import tsx scripts/smoke-connectors.ts",
     "smoke:scorer": "node --import tsx scripts/smoke-scorer.ts",
     "smoke:airtable": "node --import tsx scripts/smoke-airtable.ts",
@@ -31,7 +32,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
+    "@hono/node-server": "^2.0.6",
     "better-sqlite3": "^11.3.0",
+    "hono": "^4.12.26",
     "mammoth": "^1.12.0",
     "p-limit": "^7.3.0",
     "pdfjs-dist": "^6.0.227",
