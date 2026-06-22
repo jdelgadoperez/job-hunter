@@ -41,7 +41,8 @@ function MatchCard({ posting, result }: ScoredPosting) {
 }
 
 export function Matches() {
-  const [minScore, setMinScore] = useState(0);
+  // Default to a 50 floor so the list leads with genuinely relevant matches.
+  const [minScore, setMinScore] = useState(50);
   const matches = useMatches(minScore);
 
   return (

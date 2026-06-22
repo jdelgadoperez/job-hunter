@@ -154,6 +154,30 @@ export class Repository {
     return rows.map((row) => row.name);
   }
 
+  /** Full dictionary entries (name + category), name-sorted, for the management UI. */
+  listSkills(): { name: string; category: string }[] {
+    const rows = this.db.prepare("SELECT name, category FROM skills ORDER BY name").all() as {
+      name: string;
+      category: string | null;
+    }[];
+    return rows.map((row) => ({ name: row.name, category: row.category ?? "other" }));
+  }
+
+  /** Upsert a single dictionary skill (tagged as user-added); updates the category on conflict. */
+  addSkill(name: string, category: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO skills (name, category, source) VALUES (?, ?, 'user')
+         ON CONFLICT(name) DO UPDATE SET category = excluded.category`,
+      )
+      .run(name, category);
+  }
+
+  /** Remove a dictionary skill by name; returns whether a row was deleted. */
+  removeSkill(name: string): boolean {
+    return this.db.prepare("DELETE FROM skills WHERE name = ?").run(name).changes > 0;
+  }
+
   /** Upsert a user-tracked company by careers URL; re-adding updates the name. */
   addTrackedCompany(careersUrl: string, name?: string): void {
     this.db

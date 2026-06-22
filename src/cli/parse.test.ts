@@ -6,11 +6,13 @@ describe("parseCli", () => {
     expect(parseCli(["scan"])).toEqual({ kind: "scan" });
   });
 
-  it("parses list with and without --min-score", () => {
-    expect(parseCli(["list"])).toEqual({ kind: "list", minScore: 0 });
+  it("parses list with and without --min-score (defaulting to 50)", () => {
+    expect(parseCli(["list"])).toEqual({ kind: "list", minScore: 50 });
     expect(parseCli(["list", "--min-score", "70"])).toEqual({ kind: "list", minScore: 70 });
-    // Non-numeric falls back to 0 rather than NaN.
-    expect(parseCli(["list", "--min-score", "abc"])).toEqual({ kind: "list", minScore: 0 });
+    // An explicit 0 is honored (show everything).
+    expect(parseCli(["list", "--min-score", "0"])).toEqual({ kind: "list", minScore: 0 });
+    // Non-numeric falls back to the default rather than NaN.
+    expect(parseCli(["list", "--min-score", "abc"])).toEqual({ kind: "list", minScore: 50 });
   });
 
   it("parses serve with defaults, --port, --no-open, and --refresh-hours", () => {

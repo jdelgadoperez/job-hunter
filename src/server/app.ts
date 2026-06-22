@@ -1,3 +1,5 @@
+import { normalizeSkill } from "@app/domain/normalize";
+import type { SkillProfile } from "@app/domain/types";
 import { readResumeBuffer } from "@app/profile/read-resume";
 import { Hono } from "hono";
 import type { ServerDeps } from "./types";
@@ -97,6 +99,49 @@ export function createApp(deps: ServerDeps): Hono {
     const profile = buildProfileFromText(resumeText);
     repo.saveProfile(profile);
     return c.json(profile);
+  });
+
+  // Replace the profile's skill list directly (manual edits from the UI), preserving the rest of
+  // the profile. Skills are normalized + de-duplicated so they match the scorer's expectations.
+  app.put("/api/profile/skills", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { skills?: unknown } | null;
+    if (!body || !Array.isArray(body.skills) || !body.skills.every((s) => typeof s === "string")) {
+      return c.json({ error: 'expected { "skills": string[] }' }, 400);
+    }
+    const skills = [...new Set((body.skills as string[]).map(normalizeSkill).filter(Boolean))];
+    const current = repo.getLatestProfile();
+    const profile: SkillProfile = {
+      roleKeywords: current?.roleKeywords ?? [],
+      categories: current?.categories ?? [],
+      ...current,
+      skills,
+    };
+    repo.saveProfile(profile);
+    return c.json(profile);
+  });
+
+  // The skill dictionary the resume parser recognizes (seeded taxonomy + user additions).
+  app.get("/api/skills", (c) => c.json(repo.listSkills()));
+
+  app.post("/api/skills", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      name?: unknown;
+      category?: unknown;
+    } | null;
+    if (!body || typeof body.name !== "string") {
+      return c.json({ error: 'expected { "name": string, "category"?: string }' }, 400);
+    }
+    const name = normalizeSkill(body.name);
+    if (!name) return c.json({ error: "skill name is empty" }, 400);
+    const category =
+      typeof body.category === "string" && body.category.trim() ? body.category.trim() : "other";
+    repo.addSkill(name, category);
+    return c.json(repo.listSkills(), 201);
+  });
+
+  app.delete("/api/skills/:name", (c) => {
+    const removed = repo.removeSkill(normalizeSkill(c.req.param("name")));
+    return c.json({ removed });
   });
 
   // Start a background scan (single-flight). 202 when started, 409 if one is already running.

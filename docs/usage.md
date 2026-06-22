@@ -5,7 +5,10 @@ This guide covers day-to-day use of the command-line tool. For install instructi
 
 ## Concepts
 
-- **Profile** — your skills, extracted from your resume. Scoring compares postings to this.
+- **Profile** — your skills, extracted from your resume. Scoring compares postings to this. Edit
+  them anytime in the web dashboard's **Skills** tab (add ones the parser missed, remove wrong ones).
+- **Skill dictionary** — the vocabulary the resume parser recognizes. A broad default (~340 terms
+  across job families) ships out of the box; add your own in the **Skills** tab.
 - **Directory** — the public [stillhiring.today](https://stillhiring.today) Airtable of companies.
   job-hunter reads it through a real browser (Playwright), exactly as the website does.
 - **Tracked companies** — companies you add yourself by careers-page URL, scanned alongside the
@@ -27,10 +30,11 @@ npm run cli -- scan
 ```
 
 ### `list`
-Shows stored matches, highest score first.
+Shows stored matches, highest score first. Defaults to a minimum score of **50**.
 
 ```bash
-npm run cli -- list                  # all matches
+npm run cli -- list                  # matches scoring 50+
+npm run cli -- list --min-score 0    # everything
 npm run cli -- list --min-score 70   # only strong matches
 ```
 
