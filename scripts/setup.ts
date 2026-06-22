@@ -71,10 +71,7 @@ async function main(): Promise<void> {
   // 1. Playwright browser (needed for the Airtable read + careers-page rendering).
   run("npx playwright install chromium", "Installing Chromium for Playwright");
 
-  // 2. Capture the real Airtable fixture so we're not running on the synthetic placeholder.
-  run("npm run smoke:airtable", "Capturing the live Airtable shared-view fixture");
-
-  // 2b. Build the web dashboard so `job-hunter serve` has static assets to serve.
+  // 2. Build the web dashboard so `job-hunter serve` has static assets to serve.
   run("npm run build:web", "Building the web dashboard");
 
   // 3. Open the database and seed the skill dictionary.

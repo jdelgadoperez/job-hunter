@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 
 export type Command =
   | { kind: "scan" }
-  | { kind: "serve"; port?: number; open: boolean }
+  | { kind: "serve"; port?: number; open: boolean; refreshHours?: number }
   | { kind: "track-add"; url: string; name?: string }
   | { kind: "track-list" }
   | { kind: "track-remove"; url: string }
@@ -24,18 +24,30 @@ export function parseCli(argv: string[]): Command {
     case "serve": {
       const { values } = parseArgs({
         args: rest,
-        options: { port: { type: "string" }, "no-open": { type: "boolean" } },
+        options: {
+          port: { type: "string" },
+          "no-open": { type: "boolean" },
+          "refresh-hours": { type: "string" },
+        },
         allowPositionals: true,
       });
-      const rawPort = values.port;
-      if (rawPort !== undefined) {
-        const port = Number(rawPort);
+      const cmd: Extract<Command, { kind: "serve" }> = { kind: "serve", open: !values["no-open"] };
+
+      if (values.port !== undefined) {
+        const port = Number(values.port);
         if (!Number.isInteger(port) || port < 1 || port > 65535) {
-          return { kind: "help", error: `invalid --port: ${rawPort}` };
+          return { kind: "help", error: `invalid --port: ${values.port}` };
         }
-        return { kind: "serve", port, open: !values["no-open"] };
+        cmd.port = port;
       }
-      return { kind: "serve", open: !values["no-open"] };
+      if (values["refresh-hours"] !== undefined) {
+        const refreshHours = Number(values["refresh-hours"]);
+        if (!Number.isFinite(refreshHours) || refreshHours < 0) {
+          return { kind: "help", error: `invalid --refresh-hours: ${values["refresh-hours"]}` };
+        }
+        cmd.refreshHours = refreshHours;
+      }
+      return cmd;
     }
 
     case "list": {
@@ -87,7 +99,7 @@ export const USAGE = `job-hunter — local job-search engine
 
 Usage:
   job-hunter scan                      Discover, score, and store matches
-  job-hunter serve [--port N] [--no-open]  Start the local web dashboard
+  job-hunter serve [--port N] [--no-open] [--refresh-hours N]  Start the local web dashboard
   job-hunter list [--min-score N]      Show stored matches
   job-hunter profile <resume-file>     Build your skill profile from a resume
   job-hunter track add <url> [--name]  Track a company by careers URL

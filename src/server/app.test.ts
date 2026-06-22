@@ -2,7 +2,8 @@ import { buildProfile } from "@app/profile/build-profile";
 import { Repository } from "@app/storage/repository";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
-import type { ScanProgress, ScanRunner, ServerDeps } from "./types";
+import { ScanJobManager } from "./scan-job";
+import type { ServerDeps } from "./types";
 
 /** `Response.json()` is typed `unknown`; this narrows it at the call site without `any`. */
 async function json<T>(res: Response): Promise<T> {
@@ -14,6 +15,7 @@ let repo: Repository;
 function makeApp(overrides: Partial<ServerDeps> = {}) {
   const deps: ServerDeps = {
     repo,
+    jobs: new ScanJobManager(),
     runScan: async () => ({ count: 0, warnings: [] }),
     buildProfileFromText: (text) => buildProfile({ resumeText: text }),
     ...overrides,
@@ -178,38 +180,66 @@ describe("POST /api/profile", () => {
   });
 });
 
-describe("POST /api/scan (SSE)", () => {
-  async function readStream(res: Response): Promise<string> {
-    return await res.text();
+describe("scan jobs", () => {
+  type ScanStatus = { state: string; count: number | null; error: string | null };
+
+  async function pollUntilSettled(app: ReturnType<typeof makeApp>): Promise<ScanStatus> {
+    for (let i = 0; i < 50; i += 1) {
+      const status = await json<ScanStatus>(await app.request("/api/scan/status"));
+      if (status.state !== "running") return status;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    throw new Error("scan did not settle");
   }
 
-  it("streams progress events from the scan runner", async () => {
-    const runScan: ScanRunner = async (onProgress) => {
-      const events: ScanProgress[] = [
-        { phase: "start" },
-        { phase: "log", message: "Scanned 1 posting(s)." },
-        { phase: "done", count: 1, warnings: [] },
-      ];
-      for (const e of events) onProgress(e);
-      return { count: 1, warnings: [] };
-    };
-    const res = await makeApp({ runScan }).request("/api/scan", { method: "POST" });
-    expect(res.headers.get("content-type")).toContain("text/event-stream");
-
-    const text = await readStream(res);
-    expect(text).toContain("event: start");
-    expect(text).toContain("event: log");
-    expect(text).toContain("event: done");
-    expect(text).toContain('"count":1');
+  it("reports an idle status before any scan", async () => {
+    const status = await json<ScanStatus>(await makeApp().request("/api/scan/status"));
+    expect(status.state).toBe("idle");
   });
 
-  it("emits an error event when the scan runner throws", async () => {
-    const runScan: ScanRunner = async () => {
+  it("starts a background scan (202) and reaches done with the count", async () => {
+    const jobs = new ScanJobManager();
+    const runScan = vi.fn(async () => ({ count: 3, warnings: [] }));
+    const app = makeApp({ jobs, runScan });
+
+    const res = await app.request("/api/scan", { method: "POST" });
+    expect(res.status).toBe(202);
+
+    const status = await pollUntilSettled(app);
+    expect(status.state).toBe("done");
+    expect(status.count).toBe(3);
+    expect(runScan).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a second concurrent scan with 409 (single-flight)", async () => {
+    const jobs = new ScanJobManager();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const runScan = vi.fn(async () => {
+      await gate;
+      return { count: 0, warnings: [] };
+    });
+    const app = makeApp({ jobs, runScan });
+
+    expect((await app.request("/api/scan", { method: "POST" })).status).toBe(202);
+    expect((await app.request("/api/scan", { method: "POST" })).status).toBe(409);
+
+    release();
+    expect((await pollUntilSettled(app)).state).toBe("done");
+    expect(runScan).toHaveBeenCalledOnce();
+  });
+
+  it("records the error when the scan runner throws", async () => {
+    const runScan = vi.fn(async () => {
       throw new Error("no profile yet");
-    };
-    const res = await makeApp({ runScan }).request("/api/scan", { method: "POST" });
-    const text = await readStream(res);
-    expect(text).toContain("event: error");
-    expect(text).toContain("no profile yet");
+    });
+    const app = makeApp({ runScan });
+    await app.request("/api/scan", { method: "POST" });
+
+    const status = await pollUntilSettled(app);
+    expect(status.state).toBe("error");
+    expect(status.error).toContain("no profile yet");
   });
 });

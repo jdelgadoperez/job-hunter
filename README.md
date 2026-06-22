@@ -60,8 +60,8 @@ scoring, and you can build your profile later with `npm run cli profile <resume>
 Run commands with `npm run cli -- <command>` (the `--` passes flags through):
 
 ```bash
-npm run cli -- scan                       # discover, score, and store matches
-npm run cli -- serve                       # start the local web dashboard (--port N, --no-open)
+npm run cli -- scan                       # discover, score, and store matches (live status)
+npm run cli -- serve                       # start the web dashboard (--port N, --no-open, --refresh-hours N)
 npm run cli -- list --min-score 70        # show matches scoring 70+
 npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
@@ -74,8 +74,10 @@ npm run cli -- track remove https://boards.greenhouse.io/acme
 `job-hunter serve` (or `npm run serve`) starts a local [Hono](https://hono.dev) server — by
 default on <http://localhost:4317> — and opens a React dashboard in your browser:
 
-- **Overview** — upload your resume and run a scan with live progress (streamed over
-  Server-Sent Events)
+- **Overview** — upload your resume and run a scan. Scans run as a **background job** with live
+  status (reading directory → per-company → scoring), so you can switch tabs or close the page and
+  it keeps going. The server also **auto-refreshes** on a schedule (default every 6h; tune with
+  `--refresh-hours N`, or `--refresh-hours 0` to disable).
 - **Matches** — ranked postings filtered by a minimum-score slider, with the LLM rationale and
   matched/missing skills
 - **Companies** — the companies you track
@@ -92,7 +94,7 @@ shows comes from the same local HTTP API:
 | `GET /api/companies` | tracked companies |
 | `GET /api/profile` · `GET\|PUT /api/settings` | profile and settings (key is write-only) |
 | `POST /api/profile` | upload a resume (`.txt`/`.md`/`.pdf`/`.docx`) or post `{ "resumeText": … }` |
-| `POST /api/scan` | run a scan, streaming progress over SSE |
+| `POST /api/scan` · `GET /api/scan/status` | start a background scan, then poll its live status |
 
 A typical first run:
 

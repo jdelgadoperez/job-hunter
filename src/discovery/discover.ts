@@ -1,3 +1,4 @@
+import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Warning } from "@app/domain/types";
 import type { Fetcher } from "@app/net/fetcher";
 import pLimit from "p-limit";
@@ -16,6 +17,8 @@ export type DiscoverDeps = {
   shareUrl: string;
   /** User-tracked companies, merged with the Airtable directory. */
   trackedCompanies?: { careersUrl: string; name?: string }[];
+  /** Optional live progress callback (directory read, per-company visits). */
+  onProgress?: (event: ScanProgressEvent) => void;
   concurrency?: number;
   delayMs?: number;
 };
@@ -101,10 +104,14 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
   const concurrency = Math.max(1, deps.concurrency ?? DEFAULT_CONCURRENCY);
   const delayMs = deps.delayMs ?? DEFAULT_DELAY_MS;
 
+  deps.onProgress?.({ kind: "directory" });
   const { leads, warnings } = await collectLeads(deps);
+  deps.onProgress?.({ kind: "leads", total: leads.length });
+
   const browser = new BrowserConnector();
   const byId = new Map<string, JobPosting>();
   const limit = pLimit(concurrency);
+  let started = 0;
 
   // Space request *starts* by delayMs without holding a concurrency slot during the
   // wait, so the cap bounds in-flight requests rather than serializing the dead time.
@@ -131,6 +138,13 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     leads.map(async (lead) => {
       await waitTurn();
       return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+        started += 1;
+        deps.onProgress?.({
+          kind: "company",
+          name: lead.company,
+          index: started,
+          total: leads.length,
+        });
         try {
           return { lead, result: await fetchLead(lead) };
         } catch (error) {

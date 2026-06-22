@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
+import { formatProgress } from "@app/domain/scan-progress";
 import type { Warning } from "@app/domain/types";
 import { resolveScorer } from "@app/matching/resolve-scorer";
 import { settingsWithEnvKey } from "@app/matching/resolve-settings";
@@ -44,11 +45,13 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
     onWarning: (warning) => warnings.push(warning),
   });
 
-  await runScan(
+  const result = await runScan(
     {
       repo,
       profile,
       scorer,
+      // Live status so a scan is never silent: directory read, per-company, scoring.
+      onProgress: (event) => log(formatProgress(event)),
       discoverDeps: {
         fetcher: new HttpFetcher(),
         renderer: new PlaywrightRenderer(),
@@ -57,10 +60,13 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
         trackedCompanies: repo.listTrackedCompanies(),
       },
     },
-    log,
+    // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.
+    () => {},
   );
-  // Scorer fell-back warnings (e.g. no API key) surface after the scan summary.
-  for (const warning of warnings) log(`  ! [${warning.source}] ${warning.message}`);
+  // Surface discovery warnings plus scorer fall-back warnings (e.g. no API key) after the summary.
+  for (const warning of [...result.warnings, ...warnings]) {
+    log(`  ! [${warning.source}] ${warning.message}`);
+  }
 }
 
 export async function main(): Promise<void> {
@@ -77,7 +83,11 @@ export async function main(): Promise<void> {
   // `serve` is long-running and owns its repository for the server's lifetime, so it runs
   // outside the open-use-close block the one-shot commands share.
   if (command.kind === "serve") {
-    await startServer({ port: command.port, open: command.open });
+    await startServer({
+      port: command.port,
+      open: command.open,
+      refreshHours: command.refreshHours,
+    });
     return;
   }
 

@@ -1,3 +1,4 @@
+import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { FetchResponse, Fetcher } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
 import type { PageRenderer } from "./connectors/browser";
@@ -217,6 +218,40 @@ describe("discover", () => {
     });
     expect(postings.map((p) => p.title)).toEqual(["Engineer at acme"]);
     expect(warnings.some((w) => w.source === "Failco")).toBe(true);
+  });
+
+  it("emits progress events: directory read, lead count, and one per company", async () => {
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Acme", url: "https://boards.greenhouse.io/acme" },
+        { name: "Globex", url: "https://boards.greenhouse.io/globex" },
+      ]),
+    );
+    const fetcher = new GaugedFetcher(
+      {
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
+        "https://boards-api.greenhouse.io/v1/boards/globex/jobs?content=true":
+          greenhouseFeed("globex"),
+      },
+      new Gauge(),
+    );
+
+    const events: ScanProgressEvent[] = [];
+    await discover({
+      fetcher,
+      renderer: new GaugedRenderer("", "", new Gauge()),
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      onProgress: (e) => events.push(e),
+    });
+
+    expect(events[0]).toEqual({ kind: "directory" });
+    expect(events.find((e) => e.kind === "leads")).toEqual({ kind: "leads", total: 2 });
+    const companyEvents = events.filter((e) => e.kind === "company");
+    expect(companyEvents).toHaveLength(2);
+    // Each company event carries a 1-based index and the correct total.
+    expect(companyEvents.map((e) => (e.kind === "company" ? e.index : 0)).sort()).toEqual([1, 2]);
   });
 
   it("floors concurrency at 1 instead of crashing on 0", async () => {

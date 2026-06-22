@@ -135,9 +135,9 @@ describe("main dispatch", () => {
     expect(logged()).toContain("No matches yet");
   });
 
-  it("starts the web server for the serve command", async () => {
-    await runCli("serve", "--port", "8080", "--no-open");
-    expect(h.startServer).toHaveBeenCalledWith({ port: 8080, open: false });
+  it("starts the web server for the serve command, passing through options", async () => {
+    await runCli("serve", "--port", "8080", "--no-open", "--refresh-hours", "12");
+    expect(h.startServer).toHaveBeenCalledWith({ port: 8080, open: false, refreshHours: 12 });
   });
 });
 

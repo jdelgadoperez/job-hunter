@@ -45,12 +45,20 @@ export type SettingsUpdate = Partial<{
   airtableShareUrl: string;
 }>;
 
-/** A scan progress event as emitted over SSE by `POST /api/scan`. */
-export type ScanEvent =
-  | { phase: "start" }
-  | { phase: "log"; message: string }
-  | { phase: "done"; count: number; warnings: { source: string; message: string }[] }
-  | { phase: "error"; message: string };
+export type ScanJobState = "idle" | "running" | "done" | "error";
+
+/** Snapshot of the background scan, mirroring the server's `ScanJobStatus`. */
+export type ScanJobStatus = {
+  state: ScanJobState;
+  message: string | null;
+  current: number | null;
+  total: number | null;
+  count: number | null;
+  warnings: { source: string; message: string }[];
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -82,39 +90,14 @@ export const api = {
     form.set("file", file);
     return request<SkillProfile>("/api/profile", { method: "POST", body: form });
   },
-};
-
-/**
- * Run a scan and invoke `onEvent` for each SSE progress event. Uses `fetch` (not `EventSource`,
- * which is GET-only) and parses the `event:`/`data:` stream by hand. Resolves when the stream ends.
- */
-export async function runScan(onEvent: (event: ScanEvent) => void): Promise<void> {
-  const res = await fetch("/api/scan", { method: "POST" });
-  if (!res.body) throw new Error("scan stream unavailable");
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  const flush = (chunk: string) => {
-    // One SSE message per blank-line-delimited block; we only need its `data:` payload.
-    for (const line of chunk.split("\n")) {
-      if (line.startsWith("data:")) {
-        try {
-          onEvent(JSON.parse(line.slice(5).trim()) as ScanEvent);
-        } catch {
-          // Ignore keep-alives / non-JSON lines.
-        }
-      }
+  // Start a background scan (or no-op if one is already running). Both 202 (started) and 409
+  // (already running) carry the current job status, so neither is an error here.
+  startScan: async (): Promise<ScanJobStatus> => {
+    const res = await fetch("/api/scan", { method: "POST" });
+    if (res.status === 202 || res.status === 409 || res.ok) {
+      return (await res.json()) as ScanJobStatus;
     }
-  };
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
-    for (const block of blocks) flush(block);
-  }
-  if (buffer.trim()) flush(buffer);
-}
+    throw new Error(`${res.status} ${res.statusText}`);
+  },
+  getScanStatus: () => request<ScanJobStatus>("/api/scan/status"),
+};
