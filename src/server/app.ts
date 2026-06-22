@@ -1,8 +1,7 @@
 import { AIRTABLE_SHARE_SETTING } from "@app/discovery/sources/airtable";
 import { readResumeBuffer } from "@app/profile/read-resume";
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
-import type { ScanProgress, ServerDeps } from "./types";
+import type { ServerDeps } from "./types";
 
 const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
 const MODEL_SETTING = "scorerModel";
@@ -34,7 +33,7 @@ const WRITABLE_SETTINGS: Record<string, string> = {
  * network. The production listener and the real scan pipeline live in `serve.ts` (smoke-only).
  */
 export function createApp(deps: ServerDeps): Hono {
-  const { repo, runScan, buildProfileFromText } = deps;
+  const { repo, jobs, runScan, buildProfileFromText } = deps;
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ ok: true }));
@@ -100,24 +99,14 @@ export function createApp(deps: ServerDeps): Hono {
     return c.json(profile);
   });
 
-  app.post("/api/scan", (c) =>
-    streamSSE(c, async (stream) => {
-      // Serialize writes: progress callbacks are synchronous, but `writeSSE` is async, so we
-      // chain them to preserve order and flush the tail before the stream closes.
-      let writes = Promise.resolve();
-      const send = (event: ScanProgress) => {
-        writes = writes.then(() =>
-          stream.writeSSE({ event: event.phase, data: JSON.stringify(event) }),
-        );
-      };
-      try {
-        await runScan(send);
-      } catch (error) {
-        send({ phase: "error", message: error instanceof Error ? error.message : String(error) });
-      }
-      await writes;
-    }),
-  );
+  // Start a background scan (single-flight). 202 when started, 409 if one is already running.
+  // Either way the body is the current job status, so the client can begin polling immediately.
+  app.post("/api/scan", (c) => {
+    const started = jobs.start(runScan);
+    return c.json(jobs.getStatus(), started ? 202 : 409);
+  });
+
+  app.get("/api/scan/status", (c) => c.json(jobs.getStatus()));
 
   return app;
 }

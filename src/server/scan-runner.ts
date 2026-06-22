@@ -12,13 +12,11 @@ import type { ScanRunner } from "./types";
 /**
  * Production `ScanRunner` for the web server: the real discovery + scoring pipeline (browser +
  * live network), so it's integration-bound and smoke-only, like the Playwright wrappers it uses.
- * Mirrors the CLI's `scan` wiring. Missing preconditions throw, which the SSE route surfaces as an
- * `error` event; per-line progress is forwarded from the engine's logger as `log` events.
+ * Mirrors the CLI's `scan` wiring. Missing preconditions throw, which the job manager records as
+ * the job's error; structured progress (directory read, per-company, scoring) is forwarded through.
  */
 export function createScanRunner(repo: Repository): ScanRunner {
   return async (onProgress) => {
-    onProgress({ phase: "start" });
-
     const profile = repo.getLatestProfile();
     if (!profile) throw new Error("No profile yet. Upload a resume first.");
     const shareUrl = repo.getSetting(AIRTABLE_SHARE_SETTING);
@@ -37,6 +35,7 @@ export function createScanRunner(repo: Repository): ScanRunner {
         repo,
         profile,
         scorer,
+        onProgress,
         discoverDeps: {
           fetcher: new HttpFetcher(),
           renderer: new PlaywrightRenderer(),
@@ -45,11 +44,10 @@ export function createScanRunner(repo: Repository): ScanRunner {
           trackedCompanies: repo.listTrackedCompanies(),
         },
       },
-      (message) => onProgress({ phase: "log", message }),
+      // The job manager already captures structured progress; logger lines are redundant there.
+      () => {},
     );
 
-    const allWarnings = [...warnings, ...result.warnings];
-    onProgress({ phase: "done", count: result.count, warnings: allWarnings });
-    return { count: result.count, warnings: allWarnings };
+    return { count: result.count, warnings: [...warnings, ...result.warnings] };
   };
 }

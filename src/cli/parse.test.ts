@@ -13,7 +13,7 @@ describe("parseCli", () => {
     expect(parseCli(["list", "--min-score", "abc"])).toEqual({ kind: "list", minScore: 0 });
   });
 
-  it("parses serve with defaults, --port, and --no-open", () => {
+  it("parses serve with defaults, --port, --no-open, and --refresh-hours", () => {
     expect(parseCli(["serve"])).toEqual({ kind: "serve", open: true });
     expect(parseCli(["serve", "--port", "8080"])).toEqual({
       kind: "serve",
@@ -21,12 +21,27 @@ describe("parseCli", () => {
       open: true,
     });
     expect(parseCli(["serve", "--no-open"])).toEqual({ kind: "serve", open: false });
-    // Out-of-range / non-integer ports are rejected.
+    expect(parseCli(["serve", "--refresh-hours", "12"])).toEqual({
+      kind: "serve",
+      open: true,
+      refreshHours: 12,
+    });
+    // 0 is valid (disables the scheduler).
+    expect(parseCli(["serve", "--refresh-hours", "0"])).toEqual({
+      kind: "serve",
+      open: true,
+      refreshHours: 0,
+    });
+    // Out-of-range / non-numeric values are rejected.
     expect(parseCli(["serve", "--port", "abc"])).toMatchObject({
       kind: "help",
       error: expect.any(String),
     });
     expect(parseCli(["serve", "--port", "70000"])).toMatchObject({
+      kind: "help",
+      error: expect.any(String),
+    });
+    expect(parseCli(["serve", "--refresh-hours", "nope"])).toMatchObject({
       kind: "help",
       error: expect.any(String),
     });

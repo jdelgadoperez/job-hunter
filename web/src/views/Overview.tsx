@@ -1,41 +1,28 @@
-import { type ChangeEvent, useState } from "react";
-import { type ScanEvent, runScan } from "../api";
+import { useQueryClient } from "@tanstack/react-query";
+import { type ChangeEvent, useEffect } from "react";
 import { Button, Card, Loading } from "../components/ui";
-import { useProfile, useUploadResume } from "../hooks";
-
-type ScanState = { running: boolean; lines: string[]; error?: string; done?: number };
+import { useProfile, useScanStatus, useStartScan, useUploadResume } from "../hooks";
 
 export function Overview() {
   const profile = useProfile();
   const upload = useUploadResume();
-  const [scan, setScan] = useState<ScanState>({ running: false, lines: [] });
+  const scan = useScanStatus();
+  const startScan = useStartScan();
+  const qc = useQueryClient();
+
+  const status = scan.data;
+  const running = status?.state === "running";
+
+  // A scan that finishes in the background (e.g. the scheduled refresh) should refresh matches too.
+  // Keying on finishedAt re-runs this for each completed scan, not just the first.
+  const finishedAt = status?.state === "done" ? status.finishedAt : null;
+  useEffect(() => {
+    if (finishedAt) qc.invalidateQueries({ queryKey: ["matches"] });
+  }, [finishedAt, qc]);
 
   function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) upload.mutate(file);
-  }
-
-  async function startScan() {
-    setScan({ running: true, lines: [] });
-    const lines: string[] = [];
-    const onEvent = (event: ScanEvent) => {
-      if (event.phase === "log") lines.push(event.message);
-      if (event.phase === "start") lines.push("Starting scan…");
-      setScan((s) => ({ ...s, lines: [...lines] }));
-      if (event.phase === "done") setScan({ running: false, lines: [...lines], done: event.count });
-      if (event.phase === "error")
-        setScan({ running: false, lines: [...lines], error: event.message });
-    };
-    try {
-      await runScan(onEvent);
-      setScan((s) => (s.running ? { ...s, running: false } : s));
-    } catch (err) {
-      setScan((s) => ({
-        ...s,
-        running: false,
-        error: err instanceof Error ? err.message : String(err),
-      }));
-    }
   }
 
   if (profile.isPending) return <Loading label="Loading…" />;
@@ -75,21 +62,39 @@ export function Overview() {
       <Card>
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-slate-800">2 · Scan for jobs</h2>
-          <Button onClick={startScan} disabled={scan.running}>
-            {scan.running ? "Scanning…" : "Scan now"}
+          <Button onClick={() => startScan.mutate()} disabled={running || startScan.isPending}>
+            {running ? "Scanning…" : "Scan now"}
           </Button>
         </div>
-        {scan.done !== undefined ? (
+
+        {running ? (
+          <div className="mt-3">
+            <p className="text-sm text-slate-600">{status?.message ?? "Working…"}</p>
+            {status?.total ? (
+              <div className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-100">
+                <div
+                  className="h-full bg-indigo-500 transition-all"
+                  style={{ width: `${Math.round((100 * (status.current ?? 0)) / status.total)}%` }}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {status?.state === "done" ? (
           <p className="mt-2 text-sm text-emerald-700">
-            Done — scored {scan.done} posting(s). See the Matches tab.
+            {status.message} — see the Matches tab.
+            {status.warnings.length > 0 ? ` (${status.warnings.length} warning(s))` : ""}
           </p>
         ) : null}
-        {scan.error ? <p className="mt-2 text-sm text-red-700">{scan.error}</p> : null}
-        {scan.lines.length > 0 ? (
-          <pre className="mt-2 max-h-48 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
-            {scan.lines.join("\n")}
-          </pre>
+
+        {status?.state === "error" ? (
+          <p className="mt-2 text-sm text-red-700">{status.error}</p>
         ) : null}
+
+        <p className="mt-2 text-xs text-slate-400">
+          Scans run in the background — you can switch tabs or close this page; it keeps going.
+        </p>
       </Card>
     </section>
   );

@@ -9,7 +9,9 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Hono } from "hono";
 import { createApp } from "./app";
+import { ScanJobManager } from "./scan-job";
 import { createScanRunner } from "./scan-runner";
+import type { ScanRunner } from "./types";
 
 // The built dashboard lives at <repo>/web/dist relative to this file (src/server/serve.ts).
 const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web", "dist");
@@ -44,9 +46,12 @@ export type ServeOptions = {
   port?: number;
   /** Open the dashboard in the default browser on launch. Defaults to true. */
   open?: boolean;
+  /** Auto-refresh interval in hours. 0 disables the scheduler. Defaults to 6. */
+  refreshHours?: number;
 };
 
 const DEFAULT_PORT = 4317;
+const DEFAULT_REFRESH_HOURS = 6;
 
 /** Best-effort, cross-platform "open this URL in the default browser". Never throws. */
 function openBrowser(url: string): void {
@@ -68,10 +73,13 @@ function openBrowser(url: string): void {
 export function startServer(opts: ServeOptions = {}): void {
   ensureDataDir();
   const repo = new Repository(resolveDbPath());
+  const jobs = new ScanJobManager();
+  const runScan = createScanRunner(repo);
 
   const app = createApp({
     repo,
-    runScan: createScanRunner(repo),
+    jobs,
+    runScan,
     buildProfileFromText: (resumeText) => {
       const dictionary = repo.getSkillDictionary();
       return buildProfile({
@@ -82,6 +90,7 @@ export function startServer(opts: ServeOptions = {}): void {
   });
 
   mountDashboard(app);
+  scheduleRefresh(jobs, runScan, opts.refreshHours ?? DEFAULT_REFRESH_HOURS);
 
   const port = opts.port ?? DEFAULT_PORT;
   serve({ fetch: app.fetch, port }, (info) => {
@@ -90,4 +99,20 @@ export function startServer(opts: ServeOptions = {}): void {
     console.log("Press Ctrl+C to stop.");
     if (opts.open !== false) openBrowser(url);
   });
+}
+
+/**
+ * Periodically kick off a background scan so matches stay warm without a manual trigger. The job
+ * manager is single-flight, so a tick that lands while a scan is running is a no-op. A
+ * non-positive interval disables the scheduler entirely.
+ */
+function scheduleRefresh(jobs: ScanJobManager, runScan: ScanRunner, hours: number): void {
+  if (!Number.isFinite(hours) || hours <= 0) return;
+  const intervalMs = hours * 60 * 60 * 1000;
+  const timer = setInterval(() => {
+    if (!jobs.isRunning()) jobs.start(runScan);
+  }, intervalMs);
+  // Don't let the scheduler alone keep the process alive (the listener already does).
+  timer.unref();
+  console.log(`Auto-refresh every ${hours}h (use --refresh-hours 0 to disable).`);
 }

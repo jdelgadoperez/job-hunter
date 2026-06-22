@@ -1,4 +1,5 @@
 import { type DiscoverDeps, discover } from "@app/discovery/discover";
+import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { buildProfile } from "@app/profile/build-profile";
 import type { Repository } from "@app/storage/repository";
@@ -57,17 +58,22 @@ export type ScanDeps = {
   profile: SkillProfile;
   scorer: Scorer;
   discoverDeps: DiscoverDeps;
+  /** Optional structured progress (directory read, per-company, scoring, summary). */
+  onProgress?: (event: ScanProgressEvent) => void;
 };
 
 export async function runScan(
   deps: ScanDeps,
   log: Logger,
 ): Promise<{ count: number; warnings: Warning[] }> {
-  const { postings, warnings } = await discover(deps.discoverDeps);
+  const { onProgress } = deps;
+  const { postings, warnings } = await discover({ ...deps.discoverDeps, onProgress });
+  onProgress?.({ kind: "scoring", total: postings.length });
   for (const posting of postings) {
     deps.repo.savePosting(posting);
     deps.repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
   }
+  onProgress?.({ kind: "summary", count: postings.length });
   log(`Scanned and scored ${postings.length} posting(s).`);
   for (const warning of warnings) {
     log(`  ! [${warning.source}] ${warning.message}`);

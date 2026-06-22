@@ -35,3 +35,24 @@ export function useUploadResume() {
     onSuccess: (data) => qc.setQueryData(["profile"], data),
   });
 }
+
+/** Poll the background scan status; refetch quickly while a scan is running, idle otherwise. */
+export function useScanStatus() {
+  return useQuery({
+    queryKey: ["scan-status"],
+    queryFn: api.getScanStatus,
+    refetchInterval: (query) => (query.state.data?.state === "running" ? 1000 : false),
+  });
+}
+
+export function useStartScan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.startScan,
+    onSuccess: (status) => {
+      qc.setQueryData(["scan-status"], status);
+      // A finished scan means new matches — refresh them.
+      if (status.state === "done") qc.invalidateQueries({ queryKey: ["matches"] });
+    },
+  });
+}
