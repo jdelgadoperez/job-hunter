@@ -4,7 +4,7 @@
  *   npm run setup
  *
  * Does the post-install legwork so a non-engineer can get to a working `scan`:
- *   1. installs Chromium for Playwright,
+ *   1. installs Chromium for Playwright and warms it up (first launch is done here, not mid-scan),
  *   2. builds the web dashboard,
  *   3. seeds the skill dictionary into the local SQLite database,
  *   4. (interactive) collects the Anthropic API key and a resume, persisting them so `scan` works
@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import skillSeed from "../src/domain/data/skill-seed.json";
+import { withTimeout } from "../src/net/with-timeout";
 import { readResumeText } from "../src/profile/read-resume";
 import { ensureDataDir, resolveDbPath } from "../src/runtime/paths";
 import { applyConfig, seedSkillDictionary } from "../src/runtime/setup-config";
@@ -36,6 +37,25 @@ function run(command: string, label: string): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * Launch and close Chromium once so the first-run setup happens now, not during the first scan,
+ * and so a missing browser or missing system libraries fails here with clear guidance. Bounded so
+ * a stuck launch can't hang setup; never throws.
+ */
+async function warmUpBrowser(): Promise<void> {
+  console.log("\n▶ Warming up the browser (first launch can take a moment)");
+  try {
+    const { chromium } = await import("playwright");
+    const browser = await withTimeout(chromium.launch(), 60_000, "browser launch");
+    await browser.close();
+    console.log("  ✓ Chromium launches OK");
+  } catch (error) {
+    console.warn(`  ⚠ Chromium did not launch: ${error instanceof Error ? error.message : error}`);
+    console.warn("    Scans need a browser. Re-run: npx playwright install chromium");
+    console.warn("    On Linux you may also need: npx playwright install-deps chromium");
+  }
 }
 
 async function ask(question: string, fallback = ""): Promise<string> {
@@ -70,6 +90,11 @@ async function main(): Promise<void> {
 
   // 1. Playwright browser (needed for the Airtable read + careers-page rendering).
   run("npx playwright install chromium", "Installing Chromium for Playwright");
+
+  // 1b. Warm up the browser now: the first launch does one-time setup, so doing it here moves that
+  // cost out of the user's first scan — and surfaces a broken/missing browser with clear advice
+  // instead of a scan that stalls on "Reading the company directory…".
+  await warmUpBrowser();
 
   // 2. Build the web dashboard so `job-hunter serve` has static assets to serve.
   run("npm run build:web", "Building the web dashboard");
