@@ -52,16 +52,14 @@ export function Overview() {
   return (
     <section className="space-y-4">
       <Card>
-        <h2 className="font-semibold text-slate-800">1 · Your profile</h2>
+        <h2 className="font-semibold text-fg">1 · Your profile</h2>
         {skills.length > 0 ? (
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-muted">
             {skills.length} skill(s) extracted: {skills.slice(0, 12).join(", ")}
             {skills.length > 12 ? "…" : ""}
           </p>
         ) : (
-          <p className="mt-1 text-sm text-slate-600">
-            No profile yet — upload a resume to build one.
-          </p>
+          <p className="mt-1 text-sm text-muted">No profile yet — upload a resume to build one.</p>
         )}
         <label className="mt-3 inline-block">
           <span className="sr-only">Upload resume</span>
@@ -73,15 +71,13 @@ export function Overview() {
             className="text-sm"
           />
         </label>
-        {upload.isPending ? <span className="ml-2 text-sm text-slate-500">Parsing…</span> : null}
-        {upload.isError ? (
-          <p className="mt-2 text-sm text-red-700">{String(upload.error)}</p>
-        ) : null}
+        {upload.isPending ? <span className="ml-2 text-sm text-faint">Parsing…</span> : null}
+        {upload.isError ? <p className="mt-2 text-sm text-danger">{String(upload.error)}</p> : null}
       </Card>
 
       <Card>
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-800">2 · Scan for jobs</h2>
+          <h2 className="font-semibold text-fg">2 · Scan for jobs</h2>
           <Button onClick={() => startScan.mutate()} disabled={running || startScan.isPending}>
             {running ? "Scanning…" : "Scan now"}
           </Button>
@@ -89,17 +85,14 @@ export function Overview() {
 
         {running ? (
           <div className="mt-3" aria-live="polite">
-            <p className="text-sm text-slate-600">
-              {status?.message ?? "Working…"} <span className="text-slate-500">· {elapsed}s</span>
+            <p className="text-sm text-muted">
+              {status?.message ?? "Working…"} <span className="text-faint">· {elapsed}s</span>
             </p>
             {status?.total ? (
               // Decorative bar; the live text above conveys progress to assistive tech.
-              <div
-                aria-hidden="true"
-                className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-100"
-              >
+              <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded bg-subtle">
                 <div
-                  className="h-full bg-indigo-500 transition-all"
+                  className="h-full bg-primary transition-all"
                   style={{ width: `${Math.round((100 * (status.current ?? 0)) / status.total)}%` }}
                 />
               </div>
@@ -115,31 +108,31 @@ export function Overview() {
         ) : null}
 
         {status?.state === "done" ? (
-          <p className="mt-2 text-sm text-emerald-700">
+          <p className="mt-2 text-sm text-success">
             {status.message} — see the Matches tab.
             {status.warnings.length > 0 ? ` (${status.warnings.length} warning(s))` : ""}
           </p>
         ) : null}
 
         {status?.state === "error" ? (
-          <p className="mt-2 text-sm text-red-700">{status.error}</p>
+          <p className="mt-2 text-sm text-danger">{status.error}</p>
         ) : null}
 
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-faint">
           Scans run in the background — you can switch tabs or close this page; it keeps going.
         </p>
       </Card>
 
       {latestScan.data ? (
         <Card>
-          <h2 className="font-semibold text-slate-800">Last scan</h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <h2 className="font-semibold text-fg">Last scan</h2>
+          <p className="mt-1 text-sm text-muted">
             {latestScan.data.companiesSeen ?? 0} companies · {latestScan.data.postingsSeen ?? 0}{" "}
             postings scored
           </p>
           {latestScan.data.newCompanies.length === 0 &&
           latestScan.data.removedCompanies.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500">No directory changes since the last scan.</p>
+            <p className="mt-1 text-sm text-faint">No directory changes since the last scan.</p>
           ) : (
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <CompanyDelta
@@ -170,7 +163,7 @@ function CompanyDelta({
   companies: CompanyRef[];
 }) {
   const sign = tone === "emerald" ? "+" : "−";
-  const color = tone === "emerald" ? "text-emerald-700" : "text-amber-700";
+  const color = tone === "emerald" ? "text-success" : "text-warning";
   const shown = companies.slice(0, 8);
   return (
     <div>
@@ -179,16 +172,16 @@ function CompanyDelta({
         {label}
       </p>
       {companies.length === 0 ? (
-        <p className="text-xs text-slate-500">—</p>
+        <p className="text-xs text-faint">—</p>
       ) : (
-        <ul className="mt-1 text-xs text-slate-600">
+        <ul className="mt-1 text-xs text-muted">
           {shown.map((c) => (
             <li key={c.careersUrl} className="truncate">
               {c.name ?? c.careersUrl}
             </li>
           ))}
           {companies.length > shown.length ? (
-            <li className="text-slate-500">…and {companies.length - shown.length} more</li>
+            <li className="text-faint">…and {companies.length - shown.length} more</li>
           ) : null}
         </ul>
       )}

@@ -15,34 +15,32 @@ function MatchCard({ posting, result, action, expired }: ScoredPosting) {
             href={posting.url}
             target="_blank"
             rel="noreferrer"
-            className="font-medium text-indigo-700 hover:underline"
+            className="font-medium text-link hover:underline"
           >
             {posting.title}
           </a>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-faint">
             {posting.company}
             {posting.location ? ` · ${posting.location}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {expired ? (
-            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600">
-              expired
-            </span>
+            <span className="rounded-full bg-subtle px-2 py-0.5 text-xs text-muted">expired</span>
           ) : null}
           <ScorePill score={result.score} />
         </div>
       </div>
-      {result.rationale ? <p className="mt-2 text-sm text-slate-700">{result.rationale}</p> : null}
+      {result.rationale ? <p className="mt-2 text-sm text-fg">{result.rationale}</p> : null}
       {result.matchedSkills.length > 0 ? (
-        <p className="mt-2 text-xs text-slate-500">
-          <span className="font-semibold text-emerald-700">Matched:</span>{" "}
+        <p className="mt-2 text-xs text-faint">
+          <span className="font-semibold text-success">Matched:</span>{" "}
           {result.matchedSkills.join(", ")}
         </p>
       ) : null}
       {result.missingSkills.length > 0 ? (
-        <p className="mt-1 text-xs text-slate-500">
-          <span className="font-semibold text-amber-700">Missing:</span>{" "}
+        <p className="mt-1 text-xs text-faint">
+          <span className="font-semibold text-warning">Missing:</span>{" "}
           {result.missingSkills.join(", ")}
         </p>
       ) : null}
@@ -51,7 +49,7 @@ function MatchCard({ posting, result, action, expired }: ScoredPosting) {
         <Button
           variant="ghost"
           onClick={() => setAction.mutate({ id: posting.id, action: saved ? null : "saved" })}
-          className={saved ? "text-emerald-700" : ""}
+          className={saved ? "text-success" : ""}
         >
           {saved ? "★ Saved" : "☆ Save"}
         </Button>
@@ -85,7 +83,7 @@ export function Matches() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <label htmlFor="minScore" className="text-sm text-slate-600">
+        <label htmlFor="minScore" className="text-sm text-muted">
           Minimum score: <span className="font-semibold">{minScore}</span>
         </label>
         <input
@@ -98,7 +96,7 @@ export function Matches() {
           onChange={(e) => setMinScore(Number(e.target.value))}
           className="w-48"
         />
-        <label className="flex items-center gap-1 text-sm text-slate-600">
+        <label className="flex items-center gap-1 text-sm text-muted">
           <input
             type="checkbox"
             checked={includeExpired}
@@ -106,7 +104,7 @@ export function Matches() {
           />
           Show expired
         </label>
-        <label className="flex items-center gap-1 text-sm text-slate-600">
+        <label className="flex items-center gap-1 text-sm text-muted">
           <input
             type="checkbox"
             checked={includeDismissed}

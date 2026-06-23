@@ -53,7 +53,7 @@ export function Settings() {
             className="input"
           />
         </Field>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-faint">
           The job directory is the community-maintained stillhiring.today table — no configuration
           needed.
         </p>
@@ -62,9 +62,9 @@ export function Settings() {
           <Button type="submit" disabled={update.isPending}>
             {update.isPending ? "Saving…" : "Save settings"}
           </Button>
-          {update.isSuccess ? <span className="text-sm text-emerald-700">Saved.</span> : null}
+          {update.isSuccess ? <span className="text-sm text-success">Saved.</span> : null}
           {update.isError ? (
-            <span className="text-sm text-red-700">{String(update.error)}</span>
+            <span className="text-sm text-danger">{String(update.error)}</span>
           ) : null}
         </div>
       </form>
@@ -84,9 +84,9 @@ function Field({
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the control is passed as children and wrapped here
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-sm font-medium text-fg">{label}</span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-slate-500">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-xs text-faint">{hint}</span> : null}
     </label>
   );
 }

@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { COMMAND_NAMES, renderHelp } from "./help";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
 export const DEFAULT_MIN_SCORE = 50;
@@ -11,7 +12,8 @@ export type Command =
   | { kind: "track-remove"; url: string }
   | { kind: "profile"; resumePath: string }
   | { kind: "list"; minScore: number }
-  | { kind: "help"; error?: string };
+  | { kind: "version" }
+  | { kind: "help"; error?: string; topic?: string };
 
 /**
  * Pure argv → `Command` parser (no I/O), so dispatch logic is unit-tested without spawning a
@@ -19,6 +21,16 @@ export type Command =
  */
 export function parseCli(argv: string[]): Command {
   const [command, ...rest] = argv;
+
+  // Help/version win wherever they appear, so `job-hunter scan --help` shows scan's help rather
+  // than running a scan — the behavior people expect from any CLI. The topic is the first
+  // recognized command word, so both `track --help` and `help track` reach track's page.
+  if (argv.some((a) => a === "-h" || a === "--help" || a === "help")) {
+    const topic = argv.find((a) => COMMAND_NAMES.has(a));
+    return topic ? { kind: "help", topic } : { kind: "help" };
+  }
+  if (argv.some((a) => a === "-v" || a === "--version" || a === "version"))
+    return { kind: "version" };
 
   switch (command) {
     case "scan":
@@ -98,13 +110,5 @@ export function parseCli(argv: string[]): Command {
   }
 }
 
-export const USAGE = `job-hunter — local job-search engine
-
-Usage:
-  job-hunter scan                      Discover, score, and store matches
-  job-hunter serve [--port N] [--no-open] [--refresh-hours N]  Start the local web dashboard
-  job-hunter list [--min-score N]      Show stored matches (default min score 50)
-  job-hunter profile <resume-file>     Build your skill profile from a resume
-  job-hunter track add <url> [--name]  Track a company by careers URL
-  job-hunter track list                List tracked companies
-  job-hunter track remove <url>        Stop tracking a company`;
+/** The global usage overview, kept as a named export for back-compat; see `renderHelp` for topics. */
+export const USAGE = renderHelp();

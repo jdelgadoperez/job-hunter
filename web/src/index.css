@@ -1,7 +1,70 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: toggling `.dark` on <html> swaps the token values below. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Semantic color palette. Components use these tokens (bg-surface, text-fg, …) rather than raw
+ * slate/indigo, so light/dark is a single set of variable overrides — no per-element dark: classes.
+ *
+ *   Light                              Dark
+ *   canvas   #f8fafc page background    #0f172a
+ *   surface  #ffffff cards/header       #1e293b
+ *   subtle   #f1f5f9 chips/tracks       #334155
+ *   border   #e2e8f0                    #334155
+ *   fg       #0f172a primary text       #f1f5f9
+ *   muted    #475569 secondary text     #cbd5e1
+ *   faint    #64748b tertiary text      #94a3b8
+ *   primary  #4f46e5 indigo             #6366f1
+ *   success  #047857 emerald            #34d399
+ *   warning  #b45309 amber              #fbbf24
+ *   danger   #dc2626 red                #f87171
+ *   link     #4338ca                    #a5b4fc
+ */
+@theme {
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-subtle: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-fg: #0f172a;
+  --color-muted: #475569;
+  --color-faint: #64748b;
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-on-primary: #ffffff;
+  --color-success: #047857;
+  --color-warning: #b45309;
+  --color-danger: #dc2626;
+  --color-link: #4338ca;
+  --color-ring: #6366f1;
+}
+
+.dark {
+  --color-canvas: #0f172a;
+  --color-surface: #1e293b;
+  --color-subtle: #334155;
+  --color-border: #334155;
+  --color-fg: #f1f5f9;
+  --color-muted: #cbd5e1;
+  --color-faint: #94a3b8;
+  --color-primary: #6366f1;
+  --color-primary-hover: #818cf8;
+  --color-on-primary: #ffffff;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-link: #a5b4fc;
+  --color-ring: #818cf8;
+}
+
+@layer base {
+  body {
+    @apply bg-canvas text-fg;
+  }
+}
+
 @layer components {
   .input {
-    @apply mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40;
+    @apply mt-1 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40;
   }
 }

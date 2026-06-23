@@ -27,8 +27,8 @@ export function Companies() {
   return (
     <section className="space-y-4">
       <Card>
-        <h2 className="font-semibold text-slate-800">Track a company</h2>
-        <p className="mt-1 text-xs text-slate-500">
+        <h2 className="font-semibold text-fg">Track a company</h2>
+        <p className="mt-1 text-xs text-faint">
           Add a company by its careers-page URL — it's scanned alongside the public directory.
         </p>
         <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
@@ -63,12 +63,12 @@ export function Companies() {
           {companies.data.map((c) => (
             <Card key={c.careersUrl} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-medium text-slate-800">{c.name ?? c.careersUrl}</p>
+                <p className="truncate font-medium text-fg">{c.name ?? c.careersUrl}</p>
                 <a
                   href={c.careersUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm text-indigo-700 hover:underline"
+                  className="text-sm text-link hover:underline"
                 >
                   {c.careersUrl}
                 </a>
@@ -76,7 +76,7 @@ export function Companies() {
               <button
                 type="button"
                 onClick={() => removeCompany.mutate(c.careersUrl)}
-                className="shrink-0 rounded text-sm text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className="shrink-0 rounded text-sm text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Remove
               </button>
