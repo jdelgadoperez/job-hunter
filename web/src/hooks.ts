@@ -95,6 +95,10 @@ export function useLatestScan() {
   return useQuery({ queryKey: ["latest-scan"], queryFn: api.getLatestScan });
 }
 
+export function useVersion() {
+  return useQuery({ queryKey: ["version"], queryFn: api.getVersion, staleTime: 60 * 60 * 1000 });
+}
+
 export function useStartScan() {
   const qc = useQueryClient();
   return useMutation({

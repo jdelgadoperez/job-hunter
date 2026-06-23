@@ -1,5 +1,6 @@
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { SkillProfile, Warning } from "@app/domain/types";
+import type { UpdateStatus } from "@app/runtime/version";
 import type { Repository } from "@app/storage/repository";
 import type { ScanJobManager } from "./scan-job";
 
@@ -22,4 +23,6 @@ export type ServerDeps = {
   runScan: ScanRunner;
   /** Build a profile from raw resume text (wraps the domain builder + skill dictionary). */
   buildProfileFromText: (resumeText: string) => SkillProfile;
+  /** Installed version + whether a newer one is available (best-effort, cached). */
+  getUpdateStatus: () => Promise<UpdateStatus>;
 };

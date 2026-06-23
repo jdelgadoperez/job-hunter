@@ -87,6 +87,25 @@ On Linux, if Chromium fails to launch you may also need its system libraries:
 npx playwright install-deps chromium
 ```
 
+## Updating
+
+To pull the latest version later, run the updater from the repo folder:
+
+**macOS / Linux**
+```bash
+./update.sh
+```
+
+**Windows 11+ (PowerShell)**
+```powershell
+./update.ps1
+```
+
+It runs `git pull`, refreshes dependencies, and re-runs setup non-interactively (rebuilds the
+dashboard, refreshes the browser and skill dictionary). Your saved settings, profile, tracked
+companies, and matches are preserved, and the database migrates automatically on next start. The
+dashboard also shows an **"update available"** banner when newer commits exist upstream.
+
 ## After installing
 
 ```bash

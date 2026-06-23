@@ -18,6 +18,7 @@ function makeApp(overrides: Partial<ServerDeps> = {}) {
     jobs: new ScanJobManager(),
     runScan: async () => ({ count: 0, warnings: [] }),
     buildProfileFromText: (text) => buildProfile({ resumeText: text }),
+    getUpdateStatus: async () => ({ version: "0.1.0", behind: 0, updateAvailable: false }),
     ...overrides,
   };
   return createApp(deps);
@@ -36,6 +37,19 @@ describe("GET /api/health", () => {
     const res = await makeApp().request("/api/health");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
+  });
+});
+
+describe("GET /api/version", () => {
+  it("returns the injected version + update status", async () => {
+    const app = makeApp({
+      getUpdateStatus: async () => ({ version: "9.9.9", behind: 4, updateAvailable: true }),
+    });
+    expect(await json(await app.request("/api/version"))).toEqual({
+      version: "9.9.9",
+      behind: 4,
+      updateAvailable: true,
+    });
   });
 });
 

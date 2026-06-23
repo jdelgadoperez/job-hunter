@@ -45,8 +45,12 @@ dashboard, seeds the skill dictionary, and asks for your **Anthropic API key** (
 **resume** so you're ready to scan. It's safe to re-run, never blocks, and degrades to free
 heuristic scoring if you skip the key.
 
+**Updating:** run `./update.sh` (or `./update.ps1`) to pull the latest version — it preserves your
+data and migrates the database automatically, and the dashboard shows an "update available" banner
+when you're behind.
+
 👉 **See [INSTALL.md](INSTALL.md)** for the full breakdown — every step the installer performs,
-non-interactive/env-var usage, the manual (do-it-by-hand) path, and troubleshooting.
+updating, non-interactive/env-var usage, the manual (do-it-by-hand) path, and troubleshooting.
 
 ## Usage
 

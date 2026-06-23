@@ -140,4 +140,6 @@ export const api = {
   },
   getScanStatus: () => request<ScanJobStatus>("/api/scan/status"),
   getLatestScan: () => request<ScanRecord | null>("/api/scans/latest"),
+  getVersion: () =>
+    request<{ version: string; behind: number | null; updateAvailable: boolean }>("/api/version"),
 };
