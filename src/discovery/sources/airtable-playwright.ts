@@ -75,6 +75,27 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
     await context.addInitScript(() => {
       Object.defineProperty(navigator, "webdriver", { get: () => undefined });
     });
+
+    // Airtable's default `shouldUseNestedResponseFormat: true` makes readSharedViewData return a
+    // MessagePack body. Flip it to false so we get the legacy JSON our schema parses — rewriting the
+    // request param rather than taking on a MessagePack decoder.
+    await context.route(/readSharedViewData/, async (route) => {
+      try {
+        const url = new URL(route.request().url());
+        const raw = url.searchParams.get("stringifiedObjectParams");
+        if (raw) {
+          const params = JSON.parse(raw) as Record<string, unknown>;
+          params.shouldUseNestedResponseFormat = false;
+          url.searchParams.set("stringifiedObjectParams", JSON.stringify(params));
+          await route.continue({ url: url.toString() });
+          return;
+        }
+      } catch {
+        // fall through to an unmodified continue
+      }
+      await route.continue();
+    });
+
     step("opening page");
     const page = await context.newPage();
 
