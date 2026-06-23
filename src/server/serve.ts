@@ -4,6 +4,8 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildProfile } from "@app/profile/build-profile";
 import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
+import { getUpdateStatus } from "@app/runtime/update-check";
+import type { UpdateStatus } from "@app/runtime/version";
 import { Repository } from "@app/storage/repository";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -52,6 +54,16 @@ export type ServeOptions = {
 
 const DEFAULT_PORT = 4317;
 const DEFAULT_REFRESH_HOURS = 6;
+const UPDATE_CHECK_TTL_MS = 60 * 60 * 1000;
+
+// The update check shells out to git + network, so cache it for an hour rather than per request.
+let updateCache: { at: number; value: UpdateStatus } | null = null;
+async function cachedUpdateStatus(): Promise<UpdateStatus> {
+  if (updateCache && Date.now() - updateCache.at < UPDATE_CHECK_TTL_MS) return updateCache.value;
+  const value = await getUpdateStatus();
+  updateCache = { at: Date.now(), value };
+  return value;
+}
 
 /** Best-effort, cross-platform "open this URL in the default browser". Never throws. */
 function openBrowser(url: string): void {
@@ -87,6 +99,7 @@ export function startServer(opts: ServeOptions = {}): void {
         dictionary: dictionary.length > 0 ? dictionary : undefined,
       });
     },
+    getUpdateStatus: cachedUpdateStatus,
   });
 
   mountDashboard(app);

@@ -35,10 +35,13 @@ const WRITABLE_SETTINGS: Record<string, string> = {
  * network. The production listener and the real scan pipeline live in `serve.ts` (smoke-only).
  */
 export function createApp(deps: ServerDeps): Hono {
-  const { repo, jobs, runScan, buildProfileFromText } = deps;
+  const { repo, jobs, runScan, buildProfileFromText, getUpdateStatus } = deps;
   const app = new Hono();
 
   app.get("/api/health", (c) => c.json({ ok: true }));
+
+  // Installed version + whether the remote has newer commits (drives the "update available" nudge).
+  app.get("/api/version", async (c) => c.json(await getUpdateStatus()));
 
   app.get("/api/matches", (c) => {
     const raw = c.req.query("minScore");
