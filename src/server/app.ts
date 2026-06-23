@@ -30,6 +30,18 @@ const WRITABLE_SETTINGS: Record<string, string> = {
   scorerProvider: PROVIDER_SETTING,
 };
 
+// The server binds to loopback and has no authentication, so it trusts that every request
+// originates from this machine. A `Host` header naming anything other than loopback means the
+// request was routed here under a different name — the signature of a DNS-rebinding attack, where
+// a page the user visits points its own domain at 127.0.0.1 to reach this local API. Reject those.
+// Requests with no `Host` header (e.g. curl/HTTP-1.0) are allowed; only browsers send one.
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+export function isLoopbackHost(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return true;
+  return LOOPBACK_HOSTS.has(hostHeader.replace(/:\d+$/, "").toLowerCase());
+}
+
 /**
  * Build the local web app: a read API over the `Repository`, a streaming `POST /api/scan`, and
  * settings/resume writes. All dependencies are injected (`ServerDeps`) so every route handler is
@@ -39,6 +51,12 @@ const WRITABLE_SETTINGS: Record<string, string> = {
 export function createApp(deps: ServerDeps): Hono {
   const { repo, jobs, runScan, buildProfileFromText, getUpdateStatus } = deps;
   const app = new Hono();
+
+  // Defense-in-depth against DNS rebinding: only serve requests addressed to a loopback host.
+  app.use("*", async (c, next) => {
+    if (!isLoopbackHost(c.req.header("host"))) return c.json({ error: "forbidden host" }, 403);
+    await next();
+  });
 
   app.get("/api/health", (c) => c.json({ ok: true }));
 

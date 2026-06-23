@@ -1,7 +1,7 @@
 import { buildProfile } from "@app/profile/build-profile";
 import { Repository } from "@app/storage/repository";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createApp } from "./app";
+import { createApp, isLoopbackHost } from "./app";
 import { ScanJobManager } from "./scan-job";
 import type { ServerDeps } from "./types";
 
@@ -37,6 +37,41 @@ describe("GET /api/health", () => {
     const res = await makeApp().request("/api/health");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
+  });
+});
+
+describe("isLoopbackHost (DNS-rebinding guard)", () => {
+  it("accepts loopback hosts, with or without a port", () => {
+    for (const host of [
+      "localhost",
+      "localhost:4317",
+      "127.0.0.1",
+      "127.0.0.1:4317",
+      "[::1]:4317",
+    ]) {
+      expect(isLoopbackHost(host)).toBe(true);
+    }
+    // A missing Host header (e.g. curl/HTTP-1.0) is allowed — only browsers send one.
+    expect(isLoopbackHost(undefined)).toBe(true);
+  });
+
+  it("rejects non-loopback hosts (the DNS-rebinding signature)", () => {
+    for (const host of ["evil.example.com", "192.168.1.5:4317", "0.0.0.0:4317", "10.0.0.1"]) {
+      expect(isLoopbackHost(host)).toBe(false);
+    }
+  });
+});
+
+describe("host allowlist middleware", () => {
+  it("rejects a non-loopback Host header with 403", async () => {
+    // app.request strips a `host` init header, so drive the matching Request through app.fetch.
+    const req = new Request("http://evil.example.com/api/health");
+    Object.defineProperty(req, "headers", {
+      value: new Headers({ host: "evil.example.com" }),
+    });
+    const res = await makeApp().fetch(req);
+    expect(res.status).toBe(403);
+    expect(await json<{ error: string }>(res)).toEqual({ error: "forbidden host" });
   });
 });
 

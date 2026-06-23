@@ -53,6 +53,7 @@ export type ServeOptions = {
 };
 
 const DEFAULT_PORT = 4317;
+const LOOPBACK_HOST = "127.0.0.1";
 const DEFAULT_REFRESH_HOURS = 6;
 const UPDATE_CHECK_TTL_MS = 60 * 60 * 1000;
 
@@ -106,7 +107,9 @@ export function startServer(opts: ServeOptions = {}): void {
   scheduleRefresh(jobs, runScan, opts.refreshHours ?? DEFAULT_REFRESH_HOURS);
 
   const port = opts.port ?? DEFAULT_PORT;
-  serve({ fetch: app.fetch, port }, (info) => {
+  // Bind to loopback only: this is an unauthenticated local-first dashboard, so it must not be
+  // reachable from other machines on the network. (Omitting the host binds all interfaces.)
+  serve({ fetch: app.fetch, port, hostname: LOOPBACK_HOST }, (info) => {
     const url = `http://localhost:${info.port}`;
     console.log(`job-hunter dashboard running at ${url}`);
     console.log("Press Ctrl+C to stop.");
