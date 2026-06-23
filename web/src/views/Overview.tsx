@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useEffect, useState } from "react";
+import type { CompanyRef } from "../api";
 import { Button, Card, Loading } from "../components/ui";
 import { useLatestScan, useProfile, useScanStatus, useStartScan, useUploadResume } from "../hooks";
 
@@ -132,19 +133,61 @@ export function Overview() {
             {latestScan.data.companiesSeen ?? 0} companies · {latestScan.data.postingsSeen ?? 0}{" "}
             postings scored
           </p>
-          {latestScan.data.newCompanies.length > 0 ||
-          latestScan.data.removedCompanies.length > 0 ? (
-            <p className="mt-1 text-sm">
-              <span className="text-emerald-700">+{latestScan.data.newCompanies.length} new</span> ·{" "}
-              <span className="text-amber-700">
-                −{latestScan.data.removedCompanies.length} no longer listed
-              </span>
-            </p>
-          ) : (
+          {latestScan.data.newCompanies.length === 0 &&
+          latestScan.data.removedCompanies.length === 0 ? (
             <p className="mt-1 text-sm text-slate-500">No directory changes since the last scan.</p>
+          ) : (
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <CompanyDelta
+                tone="emerald"
+                label={`${latestScan.data.newCompanies.length} new`}
+                companies={latestScan.data.newCompanies}
+              />
+              <CompanyDelta
+                tone="amber"
+                label={`${latestScan.data.removedCompanies.length} no longer listed`}
+                companies={latestScan.data.removedCompanies}
+              />
+            </div>
           )}
         </Card>
       ) : null}
     </section>
+  );
+}
+
+function CompanyDelta({
+  tone,
+  label,
+  companies,
+}: {
+  tone: "emerald" | "amber";
+  label: string;
+  companies: CompanyRef[];
+}) {
+  const sign = tone === "emerald" ? "+" : "−";
+  const color = tone === "emerald" ? "text-emerald-700" : "text-amber-700";
+  const shown = companies.slice(0, 8);
+  return (
+    <div>
+      <p className={`text-sm font-medium ${color}`}>
+        {sign}
+        {label}
+      </p>
+      {companies.length === 0 ? (
+        <p className="text-xs text-slate-400">—</p>
+      ) : (
+        <ul className="mt-1 text-xs text-slate-600">
+          {shown.map((c) => (
+            <li key={c.careersUrl} className="truncate">
+              {c.name ?? c.careersUrl}
+            </li>
+          ))}
+          {companies.length > shown.length ? (
+            <li className="text-slate-400">…and {companies.length - shown.length} more</li>
+          ) : null}
+        </ul>
+      )}
+    </div>
   );
 }

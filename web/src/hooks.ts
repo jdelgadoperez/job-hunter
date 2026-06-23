@@ -1,10 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type SettingsUpdate, api } from "./api";
+import { type MatchFilters, type SettingsUpdate, type UserAction, api } from "./api";
 
-export function useMatches(minScore: number) {
+export function useMatches(minScore: number, filters: MatchFilters = {}) {
   return useQuery({
-    queryKey: ["matches", minScore],
-    queryFn: () => api.getMatches(minScore),
+    queryKey: [
+      "matches",
+      minScore,
+      filters.includeExpired ?? false,
+      filters.includeDismissed ?? false,
+    ],
+    queryFn: () => api.getMatches(minScore, filters),
+  });
+}
+
+export function useMatchAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; action: UserAction | null }) => {
+      if (vars.action) await api.setMatchAction(vars.id, vars.action);
+      else await api.clearMatchAction(vars.id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["matches"] }),
   });
 }
 
