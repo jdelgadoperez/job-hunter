@@ -9,9 +9,9 @@ A local-first job-search engine. It discovers open roles from the
 track, scores each posting against your resume (using Claude, with a free offline fallback), and
 saves ranked matches to a local database — all on your own machine.
 
-Today it runs as a command-line tool (`job-hunter scan`) and a local web server (`job-hunter
-serve`) that exposes the same data over an HTTP API. A full browser dashboard is on the roadmap
-(see [Roadmap](#roadmap)).
+It runs as both a command-line tool (`job-hunter scan`) and a local web dashboard (`job-hunter
+serve`) — a React app with light and dark themes, served over a small local HTTP API. Both work
+against the same local database.
 
 > **Privacy:** everything runs locally. Your resume and matches live in a SQLite file on your
 > machine; nothing is uploaded anywhere except the job postings you scan and (if you enable LLM
@@ -21,7 +21,7 @@ serve`) that exposes the same data over an HTTP API. A full browser dashboard is
 
 ## Requirements
 
-- **Node.js 20 or newer** ([nodejs.org](https://nodejs.org)) — the only thing you must install first.
+- **Node.js 22 or newer** ([nodejs.org](https://nodejs.org)) — the only thing you must install first.
 - macOS (Intel or Apple Silicon) or Windows 11+. (Linux works too.)
 - *Optional:* an [Anthropic API key](https://console.anthropic.com) for high-quality LLM scoring.
   Without one, job-hunter still works using a free, offline keyword-based scorer.
@@ -64,12 +64,15 @@ npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
 npm run cli -- track list
 npm run cli -- track remove https://boards.greenhouse.io/acme
+npm run cli -- --help                      # full command reference (also `<command> --help`)
+npm run cli -- --version
 ```
 
 ### Web dashboard
 
 `job-hunter serve` (or `npm run serve`) starts a local [Hono](https://hono.dev) server — by
-default on <http://localhost:4317> — and opens a React dashboard in your browser:
+default on <http://localhost:4317>, bound to loopback so it isn't reachable from other machines —
+and opens a React dashboard in your browser:
 
 - **Overview** — upload your resume and run a scan. Scans run as a **background job** with live
   status — an elapsed timer plus a rolling list of the companies being visited (reading directory →
@@ -125,14 +128,16 @@ A single SQLite database under your home directory:
 
 Override the location with the `JOB_HUNTER_HOME` environment variable.
 
-## Roadmap
+## Status & roadmap
 
-- **Plan 5** ✅ — a local web server (Hono) exposing the data over an API (`job-hunter serve`).
-- **Plan 6** ✅ — a browser dashboard (Vite + React + Tailwind + TanStack Query) with resume
-  upload, one-click scanning, and match browsing, served as static assets by the Plan 5 server.
+**Shipped:** the CLI (`scan`, `list`, `profile`, `track`, with colored output and per-command
+help) and the web dashboard (resume upload, one-click background scans, ranked match browsing with
+save/dismiss, in-app skill/dictionary and company editing, and light/dark themes) — plus
+incremental scans with directory diffing and posting expiry, per-posting liveness re-checks, and
+smooth in-place updates.
 
-Possible next steps: richer match filtering (freshness, skills), inline company add/remove from the
-dashboard, and packaging `serve` as a one-command launcher.
+**Possible next steps:** richer match filtering (freshness, skills), tighter SSRF hardening of the
+discovery fetch, concurrent posting scoring, and packaging `serve` as a one-command launcher.
 
 ## Development
 

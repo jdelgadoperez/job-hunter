@@ -58,6 +58,26 @@ npm run cli -- track remove https://boards.greenhouse.io/acme
 Greenhouse, Lever, and Ashby careers URLs are read through their public APIs; any other careers
 page is rendered in a browser and parsed for embedded job-posting data.
 
+### `serve`
+Starts the local web dashboard (a React app served over a small HTTP API) — by default on
+<http://localhost:4317>, bound to loopback so it isn't reachable from other machines. Scans run as
+a background job there, and the server can auto-refresh on a schedule.
+
+```bash
+npm run cli -- serve                       # then open the printed URL
+npm run cli -- serve --port 8080 --no-open # custom port, don't open a browser
+npm run cli -- serve --refresh-hours 0     # disable the background auto-refresh
+```
+
+### Help & version
+Every command has its own help page; `--help`/`-h` and `--version`/`-v` work anywhere.
+
+```bash
+npm run cli -- --help            # overview of all commands
+npm run cli -- track --help      # help for a specific command
+npm run cli -- --version
+```
+
 ## How scoring works
 
 Each posting gets a 0–100 score, the skills it shares with your profile, the skills it wants that

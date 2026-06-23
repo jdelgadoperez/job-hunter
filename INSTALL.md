@@ -6,7 +6,7 @@ steps are listed at the end if you'd rather do it by hand.
 
 ## Prerequisites
 
-- **Node.js 20 or newer** ([nodejs.org](https://nodejs.org)) — the only thing you must install first.
+- **Node.js 22 or newer** ([nodejs.org](https://nodejs.org)) — the only thing you must install first.
 - macOS (Intel or Apple Silicon), Windows 11+, or Linux.
 - *Optional:* an [Anthropic API key](https://console.anthropic.com) for high-quality LLM scoring.
   Without one, job-hunter uses a free, offline keyword scorer.
