@@ -62,44 +62,54 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
     step("opening page");
     const page = await context.newPage();
 
-    // Record (and trace) Airtable API responses so a failure can explain itself.
+    // Airtable returns readSharedViewData (200) and then immediately redirects the tab to a sign-in
+    // wall, which tears the page down. If we await the Response and read its body a beat later,
+    // `response.json()` hangs because the page is gone. So read the body *in the response handler*,
+    // the instant it arrives — and resolve on the first one we successfully parse (Airtable may
+    // emit the call more than once).
     const seen: string[] = [];
+    let resolveData: (value: unknown) => void = () => {};
+    const dataBody = new Promise<unknown>((resolve) => {
+      resolveData = resolve;
+    });
     page.on("response", (response) => {
       const url = response.url();
-      if (isApiResponse(url)) {
-        seen.push(`${response.status()} ${url.slice(0, 140)}`);
-        step(`api response ${response.status()} ${url.slice(0, 100)}`);
+      if (!isApiResponse(url)) return;
+      seen.push(`${response.status()} ${url.slice(0, 140)}`);
+      step(`api response ${response.status()} ${url.slice(0, 100)}`);
+      if (url.includes("readSharedViewData") && response.ok()) {
+        response.json().then(
+          (json) => {
+            step("captured shared-view data body");
+            resolveData(json);
+          },
+          (error) =>
+            step(`could not read data body: ${error instanceof Error ? error.message : error}`),
+        );
       }
     });
 
-    // Arm the data wait BEFORE navigating, and DON'T await the navigation: in headless, `goto`
-    // can hang past its own timeout on a challenge/redirect, which would starve this wait.
-    const dataResponse = page.waitForResponse(
-      (response) => response.url().includes("readSharedViewData") && response.ok(),
-      { timeout: this.timeoutMs },
-    );
+    // Don't await the navigation: in headless it redirects to /login, and `goto` can hang past its
+    // own timeout. We only need the captured data body.
     step(`navigating to ${shareUrl}`);
     page
-      .goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs })
+      .goto(shareUrl, { waitUntil: "commit", timeout: this.timeoutMs })
       .then(() => step("navigation committed"))
       .catch((error) =>
         step(`navigation error: ${error instanceof Error ? error.message : error}`),
       );
 
     try {
-      step("waiting for readSharedViewData…");
-      const response = await dataResponse;
-      step("got data response; parsing JSON");
-      return await response.json();
+      step("waiting for shared-view data…");
+      return await withTimeout(dataBody, this.timeoutMs, "readSharedViewData capture");
     } catch (error) {
-      // Best-effort: capture what headless actually rendered, to tell a bot wall from a renamed
-      // data call. Wrapped because the page may be in a bad state.
+      // Best-effort: capture what headless rendered (likely the sign-in wall) for diagnosis.
       try {
         const png = join(process.cwd(), "airtable-debug.png");
         const html = join(process.cwd(), "airtable-debug.html");
         await page.screenshot({ path: png });
         writeFileSync(html, await page.content());
-        step(`wrote debug artifacts: ${png} and ${html} — please share the screenshot`);
+        step(`wrote debug artifacts: ${png} and ${html}`);
       } catch (dumpError) {
         step(
           `could not write debug artifacts: ${dumpError instanceof Error ? dumpError.message : dumpError}`,
@@ -107,7 +117,7 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
       }
       const detail =
         seen.length > 0
-          ? `the data call did not return OK within ${this.timeoutMs}ms (Airtable responses seen: ${seen.join(" | ")})`
+          ? `the data body never parsed within ${this.timeoutMs}ms (Airtable responses seen: ${seen.join(" | ")})`
           : `no readSharedViewData request was made within ${this.timeoutMs}ms (final URL: ${page.url()}) — Airtable is likely serving a blocked/headless page, or the request was renamed`;
       throw new Error(`Airtable directory capture failed: ${detail}`, { cause: error });
     }
