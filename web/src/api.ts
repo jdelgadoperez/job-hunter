@@ -20,7 +20,16 @@ export type MatchResult = {
   rationale?: string;
 };
 
-export type ScoredPosting = { posting: JobPosting; result: MatchResult };
+export type UserAction = "saved" | "dismissed";
+
+export type ScoredPosting = {
+  posting: JobPosting;
+  result: MatchResult;
+  action: UserAction | null;
+  expired: boolean;
+};
+
+export type MatchFilters = { includeExpired?: boolean; includeDismissed?: boolean };
 
 export type TrackedCompany = { careersUrl: string; name?: string };
 
@@ -88,8 +97,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  getMatches: (minScore: number) =>
-    request<ScoredPosting[]>(`/api/matches?minScore=${encodeURIComponent(minScore)}`),
+  getMatches: (minScore: number, filters: MatchFilters = {}) => {
+    const params = new URLSearchParams({ minScore: String(minScore) });
+    if (filters.includeExpired) params.set("includeExpired", "true");
+    if (filters.includeDismissed) params.set("includeDismissed", "true");
+    return request<ScoredPosting[]>(`/api/matches?${params}`);
+  },
+  setMatchAction: (id: string, action: UserAction) =>
+    request<{ ok: true }>(`/api/matches/${encodeURIComponent(id)}/action`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    }),
+  clearMatchAction: (id: string) =>
+    request<{ removed: boolean }>(`/api/matches/${encodeURIComponent(id)}/action`, {
+      method: "DELETE",
+    }),
   getCompanies: () => request<TrackedCompany[]>("/api/companies"),
   addCompany: (careersUrl: string, name?: string) =>
     request<TrackedCompany[]>("/api/companies", {

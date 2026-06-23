@@ -193,3 +193,44 @@ describe("incremental scans — posting expiry", () => {
     repo.close();
   });
 });
+
+describe("match actions — save / dismiss", () => {
+  function seed(repo: Repository, id: string): void {
+    repo.savePosting(postingWith(id));
+    repo.saveMatchResult(id, { score: 80, matchedSkills: [], missingSkills: [] });
+  }
+
+  it("defaults action to null and reflects a saved action", () => {
+    const repo = newRepo();
+    seed(repo, "p1");
+    expect(repo.listScoredPostings(0)[0]?.action).toBeNull();
+
+    repo.setUserAction("p1", "saved");
+    const row = repo.listScoredPostings(0)[0];
+    expect(row?.action).toBe("saved");
+    expect(row?.expired).toBe(false);
+    repo.close();
+  });
+
+  it("hides dismissed matches unless includeDismissed is set", () => {
+    const repo = newRepo();
+    seed(repo, "p1");
+    repo.setUserAction("p1", "dismissed");
+
+    expect(repo.listScoredPostings(0)).toHaveLength(0);
+    const withDismissed = repo.listScoredPostings(0, { includeDismissed: true });
+    expect(withDismissed).toHaveLength(1);
+    expect(withDismissed[0]?.action).toBe("dismissed");
+    repo.close();
+  });
+
+  it("clears an action, restoring the match to the default list", () => {
+    const repo = newRepo();
+    seed(repo, "p1");
+    repo.setUserAction("p1", "dismissed");
+    expect(repo.clearUserAction("p1")).toBe(true);
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+    expect(repo.clearUserAction("p1")).toBe(false);
+    repo.close();
+  });
+});

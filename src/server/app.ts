@@ -47,7 +47,26 @@ export function createApp(deps: ServerDeps): Hono {
     const raw = c.req.query("minScore");
     const parsed = raw === undefined ? 0 : Number(raw);
     const minScore = Number.isFinite(parsed) ? parsed : 0;
-    return c.json(repo.listScoredPostings(minScore));
+    return c.json(
+      repo.listScoredPostings(minScore, {
+        includeExpired: c.req.query("includeExpired") === "true",
+        includeDismissed: c.req.query("includeDismissed") === "true",
+      }),
+    );
+  });
+
+  // Save or dismiss a match; DELETE clears the action. The id is the posting id.
+  app.put("/api/matches/:id/action", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { action?: unknown } | null;
+    if (body?.action !== "saved" && body?.action !== "dismissed") {
+      return c.json({ error: 'expected { "action": "saved" | "dismissed" }' }, 400);
+    }
+    repo.setUserAction(c.req.param("id"), body.action);
+    return c.json({ ok: true });
+  });
+
+  app.delete("/api/matches/:id/action", (c) => {
+    return c.json({ removed: repo.clearUserAction(c.req.param("id")) });
   });
 
   app.get("/api/companies", (c) => c.json(repo.listTrackedCompanies()));

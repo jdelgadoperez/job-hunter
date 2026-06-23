@@ -5,6 +5,20 @@ import { SCHEMA } from "./schema";
 /** A company referenced by its careers-page URL (the directory snapshot + diff unit). */
 export type CompanyRef = { careersUrl: string; name?: string };
 
+/** A user's disposition toward a match. */
+export type UserAction = "saved" | "dismissed";
+
+/** A scored posting plus the user's action and whether it's expired (gone from its board). */
+export type ScoredPosting = {
+  posting: JobPosting;
+  result: MatchResult;
+  action: UserAction | null;
+  expired: boolean;
+};
+
+/** Filters for `listScoredPostings`. By default expired and dismissed postings are hidden. */
+export type ListMatchesOptions = { includeExpired?: boolean; includeDismissed?: boolean };
+
 /** A completed scan's outcome: counts plus the directory delta vs. the previous snapshot. */
 export type ScanRecord = {
   id: number;
@@ -119,21 +133,23 @@ export class Repository {
   }
 
   /**
-   * Scored postings (joined with their match result), highest score first. Postings expired by a
-   * later scan are excluded unless `includeExpired` is set.
+   * Scored postings (joined with their match result + any saved/dismissed action), highest score
+   * first. Postings expired by a later scan are excluded unless `includeExpired`; dismissed ones are
+   * excluded unless `includeDismissed`.
    */
-  listScoredPostings(
-    minScore = 0,
-    opts: { includeExpired?: boolean } = {},
-  ): { posting: JobPosting; result: MatchResult }[] {
+  listScoredPostings(minScore = 0, opts: ListMatchesOptions = {}): ScoredPosting[] {
     const rows = this.db
       .prepare(
         `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
-                p.posted_at, p.fetched_at,
-                m.score, m.matched_skills, m.missing_skills, m.rationale
+                p.posted_at, p.fetched_at, p.expired_at,
+                m.score, m.matched_skills, m.missing_skills, m.rationale,
+                ua.action
          FROM match_results m
          JOIN postings p ON p.id = m.posting_id
-         WHERE m.score >= ?${opts.includeExpired ? "" : " AND p.expired_at IS NULL"}
+         LEFT JOIN user_actions ua ON ua.posting_id = p.id
+         WHERE m.score >= ?${opts.includeExpired ? "" : " AND p.expired_at IS NULL"}${
+           opts.includeDismissed ? "" : " AND (ua.action IS NULL OR ua.action != 'dismissed')"
+         }
          ORDER BY m.score DESC, p.title`,
       )
       .all(minScore) as {
@@ -146,10 +162,12 @@ export class Repository {
       location: string | null;
       posted_at: string | null;
       fetched_at: string;
+      expired_at: string | null;
       score: number;
       matched_skills: string;
       missing_skills: string;
       rationale: string | null;
+      action: UserAction | null;
     }[];
 
     return rows.map((row) => ({
@@ -170,10 +188,13 @@ export class Repository {
         missingSkills: JSON.parse(row.missing_skills) as string[],
         ...(row.rationale ? { rationale: row.rationale } : {}),
       },
+      action: row.action,
+      expired: row.expired_at !== null,
     }));
   }
 
-  setUserAction(postingId: string, action: "saved" | "dismissed"): void {
+  /** Record a saved/dismissed action for a posting (one per posting; re-setting replaces it). */
+  setUserAction(postingId: string, action: UserAction): void {
     this.db
       .prepare(
         `INSERT INTO user_actions (posting_id, action)
@@ -181,6 +202,13 @@ export class Repository {
          ON CONFLICT(posting_id) DO UPDATE SET action = excluded.action, updated_at = datetime('now')`,
       )
       .run(postingId, action);
+  }
+
+  /** Clear any saved/dismissed action for a posting; returns whether one was removed. */
+  clearUserAction(postingId: string): boolean {
+    return (
+      this.db.prepare("DELETE FROM user_actions WHERE posting_id = ?").run(postingId).changes > 0
+    );
   }
 
   /** Idempotent upsert of the seeded skill dictionary; re-seeding never duplicates. */

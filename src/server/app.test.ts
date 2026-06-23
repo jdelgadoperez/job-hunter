@@ -86,6 +86,39 @@ describe("GET /api/matches", () => {
     const res = await makeApp().request("/api/matches?minScore=oops");
     expect(await json(res)).toHaveLength(1);
   });
+
+  it("saves/dismisses a match and honors the include filters", async () => {
+    seedMatch("a", 90);
+    const app = makeApp();
+
+    // Dismiss it → drops from the default list, returns with includeDismissed.
+    const put = await app.request("/api/matches/a/action", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "dismissed" }),
+    });
+    expect(put.status).toBe(200);
+    expect(await json(await app.request("/api/matches"))).toHaveLength(0);
+
+    const withDismissed = await json<{ action: string | null }[]>(
+      await app.request("/api/matches?includeDismissed=true"),
+    );
+    expect(withDismissed[0]?.action).toBe("dismissed");
+
+    // Clear it → back in the default list.
+    const del = await app.request("/api/matches/a/action", { method: "DELETE" });
+    expect(await json<{ removed: boolean }>(del)).toEqual({ removed: true });
+    expect(await json(await app.request("/api/matches"))).toHaveLength(1);
+  });
+
+  it("rejects an invalid action", async () => {
+    const res = await makeApp().request("/api/matches/a/action", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "bogus" }),
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("companies", () => {
