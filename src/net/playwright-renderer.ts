@@ -1,4 +1,5 @@
 import type { PageRenderer } from "@app/discovery/connectors/browser";
+import { assertAllowedUrl } from "@app/net/ssrf-guard";
 import { withTimeout } from "@app/net/with-timeout";
 
 /**
@@ -10,6 +11,9 @@ export class PlaywrightRenderer implements PageRenderer {
   constructor(private readonly timeoutMs = 30_000) {}
 
   async render(url: string): Promise<string> {
+    // Refuse internal targets before spinning up a browser. (Redirects encountered mid-render are a
+    // residual gap — Playwright follows them internally — but a directly internal URL is blocked.)
+    await assertAllowedUrl(url);
     const { chromium } = await import("playwright");
     const browser = await chromium.launch({ timeout: this.timeoutMs });
     try {
