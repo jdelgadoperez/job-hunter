@@ -1,6 +1,6 @@
 import type { PageRenderer } from "@app/discovery/connectors/browser";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
-import type { SkillProfile } from "@app/domain/types";
+import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import type { FetchResponse, Fetcher } from "@app/net/fetcher";
 import { Repository } from "@app/storage/repository";
@@ -129,6 +129,59 @@ describe("runScan + listMatches", () => {
     listMatches(repo, 0, listOut.log);
     expect(listOut.lines[0]).toContain("Senior TypeScript Engineer");
     expect(listOut.lines[0]).toContain("boards.greenhouse.io/acme");
+    repo.close();
+  });
+
+  it("scores every posting concurrently, within a bounded cap", async () => {
+    const repo = newRepo();
+    // A scorer that records how many calls are in flight at once.
+    class ProbeScorer implements Scorer {
+      inFlight = 0;
+      maxInFlight = 0;
+      scored: string[] = [];
+      async score(_profile: SkillProfile, posting: JobPosting): Promise<MatchResult> {
+        this.inFlight += 1;
+        this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
+        await new Promise((r) => setTimeout(r, 2));
+        this.inFlight -= 1;
+        this.scored.push(posting.id);
+        return { score: 60, matchedSkills: [], missingSkills: [] };
+      }
+    }
+    const scorer = new ProbeScorer();
+    const jobs = Array.from({ length: 8 }, (_, i) => ({
+      title: `Engineer ${i}`,
+      absolute_url: `https://boards.greenhouse.io/acme/jobs/${i}`,
+      content: "TypeScript and React.",
+    }));
+
+    const result = await runScan(
+      {
+        repo,
+        profile,
+        scorer,
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": JSON.stringify({
+              jobs,
+            }),
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+        },
+      },
+      capture().log,
+    );
+
+    expect(result.count).toBe(8);
+    expect(scorer.scored).toHaveLength(8); // every posting scored
+    expect(repo.listScoredPostings(0)).toHaveLength(8); // and stored
+    expect(scorer.maxInFlight).toBeGreaterThan(1); // actually concurrent
+    expect(scorer.maxInFlight).toBeLessThanOrEqual(4); // but capped
     repo.close();
   });
 

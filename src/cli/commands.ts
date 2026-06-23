@@ -103,10 +103,18 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
   );
 
   onProgress?.({ kind: "scoring", total: postings.length });
-  for (const posting of postings) {
-    repo.savePosting(posting, scanId);
-    repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
-  }
+  for (const posting of postings) repo.savePosting(posting, scanId);
+  // Score concurrently (bounded): each `score` is a network-bound LLM call, so a small cap turns a
+  // serial wait into parallel throughput without hammering the provider. SQLite writes are
+  // synchronous, so the `saveMatchResult` calls can't interleave mid-statement.
+  const scoreLimit = pLimit(SCORE_CONCURRENCY);
+  await Promise.all(
+    postings.map((posting) =>
+      scoreLimit(async () => {
+        repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
+      }),
+    ),
+  );
 
   // Precise liveness re-check: postings we didn't see this scan get their source re-fetched and are
   // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
@@ -138,6 +146,7 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
   return { count: postings.length, warnings, ...diff, expired };
 }
 
+const SCORE_CONCURRENCY = 4;
 const RECHECK_CONCURRENCY = 4;
 
 /**
