@@ -80,4 +80,21 @@ describe("parseCli", () => {
     expect(parseCli([])).toEqual({ kind: "help" });
     expect(parseCli(["frobnicate"])).toMatchObject({ kind: "help", error: expect.any(String) });
   });
+
+  it("treats help/version flags as commands wherever they appear", () => {
+    expect(parseCli(["--help"])).toEqual({ kind: "help" });
+    expect(parseCli(["-h"])).toEqual({ kind: "help" });
+    expect(parseCli(["help"])).toEqual({ kind: "help" });
+    expect(parseCli(["--version"])).toEqual({ kind: "version" });
+    expect(parseCli(["-v"])).toEqual({ kind: "version" });
+    expect(parseCli(["version"])).toEqual({ kind: "version" });
+  });
+
+  it("scopes --help to a command topic (so `scan --help` documents scan)", () => {
+    expect(parseCli(["scan", "--help"])).toEqual({ kind: "help", topic: "scan" });
+    expect(parseCli(["track", "-h"])).toEqual({ kind: "help", topic: "track" });
+    // `help <topic>` works too, and an unknown topic falls back to the global overview.
+    expect(parseCli(["help", "list"])).toEqual({ kind: "help", topic: "list" });
+    expect(parseCli(["help", "bogus"])).toEqual({ kind: "help" });
+  });
 });

@@ -10,6 +10,7 @@ import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import { readResumeText } from "@app/profile/read-resume";
 import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
+import { getVersion } from "@app/runtime/version";
 import { startServer } from "@app/server/serve";
 import { Repository } from "@app/storage/repository";
 import {
@@ -21,12 +22,14 @@ import {
   trackList,
   trackRemove,
 } from "./commands";
-import { USAGE, parseCli } from "./parse";
+import { renderHelp } from "./help";
+import { parseCli } from "./parse";
+import { style } from "./style";
 
 export async function runScanCommand(repo: Repository, log: Logger): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
-    log("No profile yet. Run `job-hunter profile <resume-file>` first.");
+    log(style.warn("No profile yet. Run `job-hunter profile <resume-file>` first."));
     process.exitCode = 1;
     return;
   }
@@ -45,7 +48,8 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
       profile,
       scorer,
       // Live status so a scan is never silent: directory read, per-company, scoring.
-      onProgress: (event) => log(formatProgress(event)),
+      // Dimmed as secondary chatter — the final summary stands out in full color.
+      onProgress: (event) => log(style.dim(formatProgress(event))),
       discoverDeps: {
         fetcher: new HttpFetcher(),
         renderer: new PlaywrightRenderer(),
@@ -59,7 +63,7 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
   );
   // Surface discovery warnings plus scorer fall-back warnings (e.g. no API key) after the summary.
   for (const warning of [...result.warnings, ...warnings]) {
-    log(`  ! [${warning.source}] ${warning.message}`);
+    log(style.warn(`  ! [${warning.source}] ${warning.message}`));
   }
 }
 
@@ -68,9 +72,14 @@ export async function main(): Promise<void> {
   const log: Logger = (message) => console.log(message);
 
   if (command.kind === "help") {
-    if (command.error) console.error(`Error: ${command.error}\n`);
-    console.log(USAGE);
+    if (command.error) console.error(style.error(`Error: ${command.error}\n`));
+    console.log(renderHelp(command.topic));
     process.exitCode = command.error ? 1 : 0;
+    return;
+  }
+
+  if (command.kind === "version") {
+    console.log(`job-hunter ${getVersion()}`);
     return;
   }
 
@@ -116,7 +125,7 @@ export async function main(): Promise<void> {
 // Run only when executed as the CLI entrypoint, not when imported by tests.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(error);
+    console.error(style.error(String(error)));
     process.exitCode = 1;
   });
 }

@@ -1,4 +1,5 @@
 import { runScan } from "@app/cli/commands";
+import { style } from "@app/cli/style";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
@@ -38,7 +39,7 @@ export function createScanRunner(repo: Repository): ScanRunner {
         // followable in the `serve`/`dev` terminal (not just the dashboard).
         onProgress: (event) => {
           onProgress(event);
-          console.log(`[scan] ${formatProgress(event)}`);
+          console.log(`${style.dim("[scan]")} ${formatProgress(event)}`);
         },
         discoverDeps: {
           fetcher: new HttpFetcher(),
@@ -49,11 +50,13 @@ export function createScanRunner(repo: Repository): ScanRunner {
         },
       },
       // Discovery warnings still reach the console for visibility.
-      (message) => console.log(`[scan] ${message}`),
+      (message) => console.log(`${style.dim("[scan]")} ${message}`),
     );
 
     for (const warning of warnings)
-      console.log(`[scan]   ! [${warning.source}] ${warning.message}`);
+      console.log(
+        `${style.dim("[scan]")} ${style.warn(`  ! [${warning.source}] ${warning.message}`)}`,
+      );
     return { count: result.count, warnings: [...warnings, ...result.warnings] };
   };
 }

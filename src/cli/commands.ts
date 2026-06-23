@@ -7,6 +7,7 @@ import type { Fetcher } from "@app/net/fetcher";
 import { buildProfile } from "@app/profile/build-profile";
 import type { CompanyRef, Repository } from "@app/storage/repository";
 import pLimit from "p-limit";
+import { scoreBadge, style } from "./style";
 
 export type Logger = (message: string) => void;
 
@@ -17,22 +18,27 @@ export function trackAdd(
   log: Logger,
 ): void {
   repo.addTrackedCompany(url, name);
-  log(`Tracking ${name ? `${name} (${url})` : url}`);
+  log(style.success(`Tracking ${name ? `${name} (${url})` : url}`));
 }
 
 export function trackList(repo: Repository, log: Logger): void {
   const companies = repo.listTrackedCompanies();
   if (companies.length === 0) {
-    log("No tracked companies. Add one with `job-hunter track add <careers-url>`.");
+    log(style.dim("No tracked companies. Add one with `job-hunter track add <careers-url>`."));
     return;
   }
   for (const company of companies) {
-    log(company.name ? `- ${company.name} — ${company.careersUrl}` : `- ${company.careersUrl}`);
+    const url = style.url(company.careersUrl);
+    log(company.name ? `- ${style.bold(company.name)} — ${url}` : `- ${url}`);
   }
 }
 
 export function trackRemove(repo: Repository, url: string, log: Logger): void {
-  log(repo.removeTrackedCompany(url) ? `Removed ${url}` : `Not tracked: ${url}`);
+  log(
+    repo.removeTrackedCompany(url)
+      ? style.success(`Removed ${url}`)
+      : style.warn(`Not tracked: ${url}`),
+  );
 }
 
 export type ProfileDeps = {
@@ -53,7 +59,9 @@ export async function runProfile(
     dictionary: dictionary.length > 0 ? dictionary : undefined,
   });
   deps.repo.saveProfile(profile);
-  log(`Saved profile: ${profile.skills.length} skill(s) extracted from ${resumePath}.`);
+  log(
+    style.success(`Saved profile: ${profile.skills.length} skill(s) extracted from ${resumePath}.`),
+  );
   return profile;
 }
 
@@ -118,14 +126,14 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
   });
 
   onProgress?.({ kind: "summary", count: postings.length });
-  log(`Scanned and scored ${postings.length} posting(s).`);
+  log(style.success(`Scanned and scored ${postings.length} posting(s).`));
   if (diff.newCompanies.length || diff.removedCompanies.length || expired) {
     log(
-      `  Directory: +${diff.newCompanies.length} new, -${diff.removedCompanies.length} gone; expired ${expired} posting(s).`,
+      `  Directory: ${style.success(`+${diff.newCompanies.length} new`)}, ${style.warn(`-${diff.removedCompanies.length} gone`)}; expired ${expired} posting(s).`,
     );
   }
   for (const warning of warnings) {
-    log(`  ! [${warning.source}] ${warning.message}`);
+    log(style.warn(`  ! [${warning.source}] ${warning.message}`));
   }
   return { count: postings.length, warnings, ...diff, expired };
 }
@@ -162,10 +170,12 @@ async function recheckLiveness(
 export function listMatches(repo: Repository, minScore: number, log: Logger): void {
   const scored = repo.listScoredPostings(minScore);
   if (scored.length === 0) {
-    log("No matches yet. Run `job-hunter scan` first.");
+    log(style.dim("No matches yet. Run `job-hunter scan` first."));
     return;
   }
   for (const { posting, result } of scored) {
-    log(`[${result.score}] ${posting.title} — ${posting.company}  ${posting.url}`);
+    log(
+      `${scoreBadge(result.score)} ${style.bold(posting.title)} — ${posting.company}  ${style.url(posting.url)}`,
+    );
   }
 }
