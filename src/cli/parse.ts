@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { COMMAND_NAMES, renderHelp } from "./help";
+import { COMMAND_NAMES } from "./help";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
 export const DEFAULT_MIN_SCORE = 50;
@@ -109,6 +109,3 @@ export function parseCli(argv: string[]): Command {
       return command ? { kind: "help", error: `unknown command: ${command}` } : { kind: "help" };
   }
 }
-
-/** The global usage overview, kept as a named export for back-compat; see `renderHelp` for topics. */
-export const USAGE = renderHelp();

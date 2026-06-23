@@ -12,6 +12,8 @@ type CommandHelp = {
   details?: string;
   /** Options / subcommands as [token, description] rows. */
   options?: [string, string][];
+  /** Heading for the `options` block; defaults to "OPTIONS". */
+  optionsLabel?: string;
   examples?: string[];
 };
 
@@ -57,6 +59,7 @@ export const COMMANDS: CommandHelp[] = [
     invocation: "track <add|list|remove> …",
     summary: "Track companies alongside the directory",
     details: "Manage companies scanned alongside the public directory.",
+    optionsLabel: "SUBCOMMANDS",
     options: [
       ["add <url> [--name <name>]", "Track a company by its careers-page URL."],
       ["list", "List tracked companies."],
@@ -73,10 +76,6 @@ export const COMMANDS: CommandHelp[] = [
 export const COMMAND_NAMES = new Set(COMMANDS.map((c) => c.name));
 
 const INVOCATION_WIDTH = 38;
-
-function section(title: string): string {
-  return style.bold(title);
-}
 
 function row(token: string, description: string): string {
   // ANSI codes don't occupy columns, so styling the (padded) token keeps the layout aligned.
@@ -115,13 +114,13 @@ function globalHelp(): string {
     "",
     style.bold("job-hunter") + style.dim(" — a local-first job-search engine"),
     "",
-    section("USAGE"),
+    style.bold("USAGE"),
     `  ${style.bold("job-hunter <command> [options]")}`,
     "",
-    section("COMMANDS"),
+    style.bold("COMMANDS"),
     ...COMMANDS.map((c) => row(c.invocation, c.summary)),
     "",
-    section("OPTIONS"),
+    style.bold("OPTIONS"),
     row("-h, --help", "Show help (use `job-hunter <command> --help` for a command)"),
     row("-v, --version", "Print the installed version"),
     "",
@@ -133,17 +132,17 @@ function globalHelp(): string {
 /** A single command's detailed help page. */
 function commandHelp(cmd: CommandHelp): string {
   const lines = [
-    section("USAGE"),
+    style.bold("USAGE"),
     `  ${style.bold(`job-hunter ${cmd.invocation}`)}`,
     "",
     cmd.details ?? cmd.summary,
   ];
   if (cmd.options?.length) {
-    lines.push("", section(cmd.name === "track" ? "SUBCOMMANDS" : "OPTIONS"));
+    lines.push("", style.bold(cmd.optionsLabel ?? "OPTIONS"));
     for (const [token, description] of cmd.options) lines.push(row(token, description));
   }
   if (cmd.examples?.length) {
-    lines.push("", section("EXAMPLES"));
+    lines.push("", style.bold("EXAMPLES"));
     for (const example of cmd.examples) lines.push(`  ${style.dim(example)}`);
   }
   return lines.join("\n");
