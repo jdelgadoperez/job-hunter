@@ -1,13 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useEffect, useState } from "react";
 import { Button, Card, Loading } from "../components/ui";
-import { useProfile, useScanStatus, useStartScan, useUploadResume } from "../hooks";
+import { useLatestScan, useProfile, useScanStatus, useStartScan, useUploadResume } from "../hooks";
 
 export function Overview() {
   const profile = useProfile();
   const upload = useUploadResume();
   const scan = useScanStatus();
   const startScan = useStartScan();
+  const latestScan = useLatestScan();
   const qc = useQueryClient();
 
   const status = scan.data;
@@ -17,7 +18,10 @@ export function Overview() {
   // Keying on finishedAt re-runs this for each completed scan, not just the first.
   const finishedAt = status?.state === "done" ? status.finishedAt : null;
   useEffect(() => {
-    if (finishedAt) qc.invalidateQueries({ queryKey: ["matches"] });
+    if (finishedAt) {
+      qc.invalidateQueries({ queryKey: ["matches"] });
+      qc.invalidateQueries({ queryKey: ["latest-scan"] });
+    }
   }, [finishedAt, qc]);
 
   // Tick an elapsed counter while a scan runs, so the long opening step never looks frozen.
@@ -120,6 +124,27 @@ export function Overview() {
           Scans run in the background — you can switch tabs or close this page; it keeps going.
         </p>
       </Card>
+
+      {latestScan.data ? (
+        <Card>
+          <h2 className="font-semibold text-slate-800">Last scan</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            {latestScan.data.companiesSeen ?? 0} companies · {latestScan.data.postingsSeen ?? 0}{" "}
+            postings scored
+          </p>
+          {latestScan.data.newCompanies.length > 0 ||
+          latestScan.data.removedCompanies.length > 0 ? (
+            <p className="mt-1 text-sm">
+              <span className="text-emerald-700">+{latestScan.data.newCompanies.length} new</span> ·{" "}
+              <span className="text-amber-700">
+                −{latestScan.data.removedCompanies.length} no longer listed
+              </span>
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-slate-500">No directory changes since the last scan.</p>
+          )}
+        </Card>
+      ) : null}
     </section>
   );
 }

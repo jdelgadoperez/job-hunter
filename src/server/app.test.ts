@@ -361,3 +361,23 @@ describe("scan jobs", () => {
     expect(status.error).toContain("no profile yet");
   });
 });
+
+describe("GET /api/scans/latest", () => {
+  it("returns null before any scan, then the latest finished scan's diff", async () => {
+    const app = makeApp();
+    expect(await json(await app.request("/api/scans/latest"))).toBeNull();
+
+    const s = repo.startScan();
+    repo.finishScan(s, {
+      postingsSeen: 5,
+      companiesSeen: 2,
+      newCompanies: [{ careersUrl: "https://new.co", name: "New" }],
+      removedCompanies: [],
+    });
+    const latest = await json<{ postingsSeen: number; newCompanies: { careersUrl: string }[] }>(
+      await app.request("/api/scans/latest"),
+    );
+    expect(latest.postingsSeen).toBe(5);
+    expect(latest.newCompanies).toEqual([{ careersUrl: "https://new.co", name: "New" }]);
+  });
+});

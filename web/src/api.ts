@@ -26,6 +26,19 @@ export type TrackedCompany = { careersUrl: string; name?: string };
 
 export type Skill = { name: string; category: string };
 
+export type CompanyRef = { careersUrl: string; name?: string };
+
+/** A finished scan's outcome: counts plus the directory delta vs. the previous scan. */
+export type ScanRecord = {
+  id: number;
+  startedAt: string;
+  finishedAt: string | null;
+  postingsSeen: number | null;
+  companiesSeen: number | null;
+  newCompanies: CompanyRef[];
+  removedCompanies: CompanyRef[];
+};
+
 export type SkillProfile = {
   skills: string[];
   roleKeywords: string[];
@@ -126,4 +139,5 @@ export const api = {
     throw new Error(`${res.status} ${res.statusText}`);
   },
   getScanStatus: () => request<ScanJobStatus>("/api/scan/status"),
+  getLatestScan: () => request<ScanRecord | null>("/api/scans/latest"),
 };
