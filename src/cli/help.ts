@@ -89,13 +89,11 @@ function row(token: string, description: string): string {
 // A drawn bow loosing an arrow — the "hunt" in job-hunter. Pure 7-bit ASCII so it renders on any
 // default terminal, light or dark; color is applied per line in `banner()`.
 const BOW = [
-  "     __",
-  "    /  |",
-  "   /   |",
-  "  (    |>>------------------>",
-  "   \\   |",
-  "    \\  |",
-  "     --",
+  "|\\",
+  "| \\",
+  "|  >>------------------>",
+  "| /",
+  "|/",
 ];
 
 /** The bow-and-arrow banner: bow limbs dimmed, the arrow in the success accent so it pops. */
