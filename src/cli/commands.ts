@@ -1,8 +1,12 @@
 import { type DiscoverDeps, discover } from "@app/discovery/discover";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { Scorer, SkillProfile, Warning } from "@app/domain/types";
+import { detectLiveness } from "@app/freshness/detect-liveness";
+import { fetchLivenessSignal } from "@app/freshness/fetch-liveness";
+import type { Fetcher } from "@app/net/fetcher";
 import { buildProfile } from "@app/profile/build-profile";
 import type { CompanyRef, Repository } from "@app/storage/repository";
+import pLimit from "p-limit";
 
 export type Logger = (message: string) => void;
 
@@ -96,7 +100,17 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
     repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
   }
 
-  const expired = repo.expireStalePostings(scanId);
+  // Precise liveness re-check: postings we didn't see this scan get their source re-fetched and are
+  // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
+  // the consecutive-miss heuristic. "unknown" (unreachable) is left for that heuristic backstop.
+  const recheckedExpired = await recheckLiveness(
+    repo,
+    scanId,
+    deps.discoverDeps.fetcher,
+    onProgress,
+  );
+
+  const expired = recheckedExpired + repo.expireStalePostings(scanId);
   repo.finishScan(scanId, {
     postingsSeen: postings.length,
     companiesSeen: companies.length,
@@ -114,6 +128,35 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
     log(`  ! [${warning.source}] ${warning.message}`);
   }
   return { count: postings.length, warnings, ...diff, expired };
+}
+
+const RECHECK_CONCURRENCY = 4;
+
+/**
+ * Re-fetch the liveness of postings not seen in this scan and expire the ones confirmed gone.
+ * Bounded by a small concurrency cap; a failed/inconclusive re-check ("unknown") is left untouched
+ * for the consecutive-miss heuristic. Returns how many were expired.
+ */
+async function recheckLiveness(
+  repo: Repository,
+  scanId: number,
+  fetcher: Fetcher,
+  onProgress?: (event: ScanProgressEvent) => void,
+): Promise<number> {
+  const candidates = repo.listLivePostingsNotSeen(scanId);
+  if (candidates.length === 0) return 0;
+  onProgress?.({ kind: "recheck", total: candidates.length });
+
+  const limit = pLimit(RECHECK_CONCURRENCY);
+  const results = await Promise.all(
+    candidates.map((posting) =>
+      limit(async () => {
+        const signal = await fetchLivenessSignal(posting, { fetcher });
+        return detectLiveness(signal) === "expired" ? repo.markPostingExpired(posting.id) : false;
+      }),
+    ),
+  );
+  return results.filter(Boolean).length;
 }
 
 export function listMatches(repo: Repository, minScore: number, log: Logger): void {
