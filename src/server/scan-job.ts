@@ -1,5 +1,6 @@
 import { type ScanProgressEvent, formatProgress } from "@app/domain/scan-progress";
 import type { Warning } from "@app/domain/types";
+import { errorMessage } from "@app/net/error-message";
 import type { ScanRunner } from "./types";
 
 export type ScanJobState = "idle" | "running" | "done" | "error";
@@ -92,7 +93,7 @@ export class ScanJobManager {
       this.status = {
         ...this.status,
         state: "error",
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
         finishedAt: new Date().toISOString(),
       };
     }

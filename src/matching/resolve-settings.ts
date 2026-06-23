@@ -4,15 +4,15 @@ import {
   type LlmProviderConfig,
   type LlmProviderId,
 } from "./llm-providers";
+import { ANTHROPIC_KEY_SETTING, MODEL_SETTING, PROVIDER_SETTING } from "./settings-keys";
+
+// Re-exported so existing importers (and tests) can keep reaching these via resolve-settings.
+export { MODEL_SETTING, PROVIDER_SETTING } from "./settings-keys";
 
 /** Minimal structural reader, satisfied by `Repository`. */
 export interface SettingsReader {
   getSetting(key: string): string | undefined;
 }
-
-export const PROVIDER_SETTING = "scorerProvider";
-export const MODEL_SETTING = "scorerModel";
-const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
 
 /**
  * Wrap a `SettingsReader` so a missing Anthropic API key falls back to the `ANTHROPIC_API_KEY`

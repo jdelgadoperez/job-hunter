@@ -34,7 +34,7 @@ export function setTheme(theme: Theme): void {
 
 /** Reactive theme state with a toggle. The pre-paint script in index.html sets the initial class. */
 export function useTheme(): { theme: Theme; toggle: () => void } {
-  const theme = useSyncExternalStore(subscribe, currentTheme, () => "light" as Theme);
+  const theme = useSyncExternalStore(subscribe, currentTheme);
   const toggle = useCallback(() => setTheme(theme === "dark" ? "light" : "dark"), [theme]);
   return { theme, toggle };
 }

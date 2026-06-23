@@ -1,6 +1,4 @@
-import { AshbyConnector } from "./connectors/ashby";
-import { GreenhouseConnector } from "./connectors/greenhouse";
-import { LeverConnector } from "./connectors/lever";
+import { ashbyConnector, greenhouseConnector, leverConnector } from "./connectors/registry";
 import type { AtsConnector } from "./connectors/types";
 
 export type ResolvedAts = { connector: AtsConnector; boardToken: string };
@@ -26,13 +24,13 @@ export function resolveAts(careersUrl: string): ResolvedAts | null {
   }
 
   if (host === "boards.greenhouse.io" || host === "job-boards.greenhouse.io") {
-    return { connector: new GreenhouseConnector(), boardToken: token };
+    return { connector: greenhouseConnector, boardToken: token };
   }
   if (host === "jobs.lever.co") {
-    return { connector: new LeverConnector(), boardToken: token };
+    return { connector: leverConnector, boardToken: token };
   }
   if (host === "jobs.ashbyhq.com") {
-    return { connector: new AshbyConnector(), boardToken: token };
+    return { connector: ashbyConnector, boardToken: token };
   }
 
   return null;

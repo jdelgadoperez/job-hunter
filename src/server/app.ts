@@ -1,12 +1,14 @@
 import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
+import {
+  ANTHROPIC_KEY_SETTING,
+  MODEL_SETTING,
+  PROVIDER_SETTING,
+} from "@app/matching/settings-keys";
+import { errorMessage } from "@app/net/error-message";
 import { readResumeBuffer } from "@app/profile/read-resume";
 import { Hono } from "hono";
 import type { ServerDeps } from "./types";
-
-const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
-const MODEL_SETTING = "scorerModel";
-const PROVIDER_SETTING = "scorerProvider";
 
 // The Airtable directory URL is a fixed community resource (see `resolveShareUrl`), not user
 // config, so it's intentionally absent from the settings API.
@@ -148,7 +150,7 @@ export function createApp(deps: ServerDeps): Hono {
         resumeText = body.resumeText;
       }
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+      return c.json({ error: errorMessage(error) }, 400);
     }
     const profile = buildProfileFromText(resumeText);
     repo.saveProfile(profile);

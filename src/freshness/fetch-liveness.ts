@@ -1,16 +1,7 @@
-import { AshbyConnector } from "@app/discovery/connectors/ashby";
-import { GreenhouseConnector } from "@app/discovery/connectors/greenhouse";
-import { LeverConnector } from "@app/discovery/connectors/lever";
-import type { AtsConnector } from "@app/discovery/connectors/types";
+import { connectorBySource } from "@app/discovery/connectors/registry";
 import type { JobPosting } from "@app/domain/types";
 import type { Fetcher } from "@app/net/fetcher";
 import type { LivenessSignal } from "./detect-liveness";
-
-const ATS_CONNECTORS: Record<string, () => AtsConnector> = {
-  greenhouse: () => new GreenhouseConnector(),
-  lever: () => new LeverConnector(),
-  ashby: () => new AshbyConnector(),
-};
 
 /**
  * Produce the `LivenessSignal` that Plan 1's `detectLiveness` consumes. For an
@@ -24,9 +15,9 @@ export async function fetchLivenessSignal(
   posting: JobPosting,
   deps: { fetcher: Fetcher },
 ): Promise<LivenessSignal> {
-  const makeConnector = ATS_CONNECTORS[posting.source];
-  if (makeConnector) {
-    const result = await makeConnector().fetchPostings(posting.company, deps.fetcher);
+  const connector = connectorBySource[posting.source];
+  if (connector) {
+    const result = await connector.fetchPostings(posting.company, deps.fetcher);
     if (!result.ok) {
       return { kind: "ats-feed", feedAvailable: false, postingPresent: false };
     }

@@ -1,3 +1,4 @@
+import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
 import type { ZodType } from "zod";
 
@@ -39,8 +40,4 @@ export async function fetchFeed<T>(
   }
 
   return { ok: true, data: parsed.data };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

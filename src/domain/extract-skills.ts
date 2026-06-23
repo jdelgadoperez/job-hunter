@@ -5,8 +5,17 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Compiling a word-boundary regex per skill is the hot inner step of every scan (dictionary ×
+// postings), and the patterns are immutable, so memoize them across calls.
+const patternCache = new Map<string, RegExp>();
+
 function skillPattern(skill: string): RegExp {
-  return new RegExp(`(?<![a-z0-9])${escapeRegExp(skill.toLowerCase())}(?![a-z0-9])`, "i");
+  let pattern = patternCache.get(skill);
+  if (!pattern) {
+    pattern = new RegExp(`(?<![a-z0-9])${escapeRegExp(skill.toLowerCase())}(?![a-z0-9])`, "i");
+    patternCache.set(skill, pattern);
+  }
+  return pattern;
 }
 
 export function extractSkills(
