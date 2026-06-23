@@ -88,6 +88,7 @@ function row(token: string, description: string): string {
 
 // A drawn bow loosing an arrow — the "hunt" in job-hunter. Pure 7-bit ASCII so it renders on any
 // default terminal, light or dark; color is applied per line in `banner()`.
+// biome-ignore format: one row per line keeps the ASCII art legible
 const BOW = [
   "|\\",
   "| \\",
