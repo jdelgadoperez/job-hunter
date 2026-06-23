@@ -22,6 +22,22 @@ function isApiResponse(url: string): boolean {
 }
 
 /**
+ * Rewrite a full shared-view URL (`airtable.com/app…/shr…/tbl…`) to the embed form
+ * (`airtable.com/embed/shr…`). The full app redirects anonymous sessions to a sign-in wall and
+ * serves a binary `readSharedViewData` body; the embed renders anonymously and returns the legacy
+ * JSON our schema expects. Falls back to the input if no share id is present.
+ */
+export function toEmbedUrl(shareUrl: string): string {
+  try {
+    const url = new URL(shareUrl);
+    const shareId = url.pathname.split("/").find((segment) => segment.startsWith("shr"));
+    return shareId ? `https://airtable.com/embed/${shareId}` : shareUrl;
+  } catch {
+    return shareUrl;
+  }
+}
+
+/**
  * Production `SharedViewReader`: open the Airtable shared view in a real browser and capture the
  * `readSharedViewData` response the page issues itself — so Airtable's own page supplies the
  * access policy and we never reverse-engineer it. Integration-bound (browser + network); no unit
@@ -78,10 +94,18 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
       seen.push(`${response.status()} ${url.slice(0, 140)}`);
       step(`api response ${response.status()} ${url.slice(0, 100)}`);
       if (url.includes("readSharedViewData") && response.ok()) {
-        response.json().then(
-          (json) => {
-            step("captured shared-view data body");
-            resolveData(json);
+        // Read the raw body and parse it ourselves: report the byte signature on failure so a
+        // non-JSON (e.g. binary/compressed) body identifies its own format instead of a blind error.
+        response.body().then(
+          (buffer) => {
+            try {
+              resolveData(JSON.parse(buffer.toString("utf8")));
+              step("captured shared-view data body");
+            } catch {
+              step(
+                `data body is not JSON — ${buffer.length}B, head=${buffer.subarray(0, 8).toString("hex")}, sample=${JSON.stringify(buffer.toString("utf8").slice(0, 60))}`,
+              );
+            }
           },
           (error) =>
             step(`could not read data body: ${error instanceof Error ? error.message : error}`),
@@ -89,11 +113,12 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
       }
     });
 
-    // Don't await the navigation: in headless it redirects to /login, and `goto` can hang past its
-    // own timeout. We only need the captured data body.
-    step(`navigating to ${shareUrl}`);
+    // Use the embed URL: it renders anonymously (no sign-in redirect) and returns the legacy JSON
+    // format. Don't await the navigation — we only need the captured data body.
+    const target = toEmbedUrl(shareUrl);
+    step(`navigating to ${target}`);
     page
-      .goto(shareUrl, { waitUntil: "commit", timeout: this.timeoutMs })
+      .goto(target, { waitUntil: "commit", timeout: this.timeoutMs })
       .then(() => step("navigation committed"))
       .catch((error) =>
         step(`navigation error: ${error instanceof Error ? error.message : error}`),
