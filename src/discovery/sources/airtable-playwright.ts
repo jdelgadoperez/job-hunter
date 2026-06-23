@@ -9,6 +9,11 @@ const DESKTOP_UA =
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.JOB_HUNTER_DIRECTORY_TIMEOUT_MS) || 45_000;
 
+/** Response URLs worth reporting on failure — the data call, plus other Airtable API traffic. */
+function isApiResponse(url: string): boolean {
+  return /readSharedViewData|readSharedView|sharedView|airtable\.com\/v\d/i.test(url);
+}
+
 /**
  * Production `SharedViewReader`: open the Airtable shared view in a real browser and capture the
  * `readSharedViewData` response the page issues itself — so Airtable's own page supplies the
@@ -23,12 +28,11 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
     // Cap browser startup too (a slow/missing/downloading Chromium otherwise hangs unbounded).
     const browser = await chromium.launch({ timeout: this.timeoutMs });
     try {
-      // Hard wall-clock cap on the whole capture, a little above the per-step timeout so a
-      // descriptive `capture` rejection wins the race against the bare wall-clock timeout.
+      // Backstop only: the capture's own wait has a hard timeout, but guard the total in case the
+      // browser itself wedges. The descriptive `capture` rejection settles first and wins the race.
       const capture = this.capture(browser, shareUrl);
-      // Swallow a late rejection if the deadline wins, so it isn't an unhandled rejection.
-      capture.catch(() => {});
-      return await withTimeout(capture, this.timeoutMs + 10_000, "Airtable shared-view read");
+      capture.catch(() => {}); // avoid an unhandled rejection if the backstop ever wins
+      return await withTimeout(capture, this.timeoutMs + 15_000, "Airtable shared-view read");
     } finally {
       await browser.close();
     }
@@ -41,31 +45,40 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
     const context = await browser.newContext({
       userAgent: DESKTOP_UA,
       viewport: { width: 1280, height: 800 },
+      locale: "en-US",
+      extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
+    });
+    // Mask the most obvious headless tell so bot-detection serves the normal data-loading page.
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
     });
     const page = await context.newPage();
 
-    // Record every readSharedViewData response (even non-200s) so a failure can explain itself.
+    // Record Airtable API responses (even non-200s) so a failure can explain itself.
     const seen: string[] = [];
     page.on("response", (response) => {
-      if (response.url().includes("readSharedViewData")) {
-        seen.push(`${response.status()} ${response.url()}`);
-      }
+      const url = response.url();
+      if (isApiResponse(url)) seen.push(`${response.status()} ${url.slice(0, 140)}`);
     });
 
+    // Arm the data wait BEFORE navigating, and DON'T await the navigation itself: in headless,
+    // `goto` can hang past its own timeout on a challenge/redirect, which would starve this wait
+    // and surface only a bare wall-clock timeout. Awaiting the response (hard-timeout-bounded)
+    // guarantees we either get the data or throw a descriptive error.
+    const dataResponse = page.waitForResponse(
+      (response) => response.url().includes("readSharedViewData") && response.ok(),
+      { timeout: this.timeoutMs },
+    );
+    page.goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs }).catch(() => {});
+
     try {
-      // Arm the response wait before navigating so we don't miss the call.
-      const dataResponse = page.waitForResponse(
-        (response) => response.url().includes("readSharedViewData") && response.ok(),
-        { timeout: this.timeoutMs },
-      );
-      await page.goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs });
       const response = await dataResponse;
       return await response.json();
     } catch (error) {
       const detail =
         seen.length > 0
-          ? `the data call returned a non-OK status (seen: ${seen.join("; ")})`
-          : `the page never issued a readSharedViewData request (final URL: ${page.url()}) — Airtable may be serving a blocked/headless page, or the share URL has changed`;
+          ? `the data call did not return OK within ${this.timeoutMs}ms (Airtable responses seen: ${seen.join(" | ")})`
+          : `no readSharedViewData request was made within ${this.timeoutMs}ms (final URL: ${page.url()}) — Airtable is likely serving a blocked/headless page, or the request was renamed`;
       throw new Error(`Airtable directory capture failed: ${detail}`, { cause: error });
     }
   }
