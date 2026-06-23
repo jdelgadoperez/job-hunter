@@ -87,9 +87,32 @@ function row(token: string, description: string): string {
   return `  ${style.bold(token.padEnd(INVOCATION_WIDTH))}${description}`;
 }
 
-/** The global help: title, command list, top-level options, and a pointer to per-command help. */
+// A drawn bow loosing an arrow — the "hunt" in job-hunter. Pure 7-bit ASCII so it renders on any
+// default terminal, light or dark; color is applied per line in `banner()`.
+const BOW = [
+  "     __",
+  "    /  |",
+  "   /   |",
+  "  (    |>>------------------>",
+  "   \\   |",
+  "    \\  |",
+  "     --",
+];
+
+/** The bow-and-arrow banner: bow limbs dimmed, the arrow in the success accent so it pops. */
+function banner(): string {
+  return BOW.map((line) => {
+    const arrow = line.indexOf(">>");
+    if (arrow === -1) return style.dim(line);
+    return style.dim(line.slice(0, arrow)) + style.success(line.slice(arrow));
+  }).join("\n");
+}
+
+/** The global help: banner, title, command list, top-level options, and a per-command help pointer. */
 function globalHelp(): string {
   const lines = [
+    banner(),
+    "",
     style.bold("job-hunter") + style.dim(" — a local-first job-search engine"),
     "",
     section("USAGE"),

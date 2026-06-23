@@ -12,6 +12,11 @@ describe("renderHelp", () => {
     expect(out).toContain("--version");
   });
 
+  it("shows the bow-and-arrow banner on the overview but not command pages", () => {
+    expect(renderHelp()).toContain(">>------------------>");
+    expect(renderHelp("list")).not.toContain(">>------------------>");
+  });
+
   it("renders a command-specific page for a known topic", () => {
     const out = renderHelp("list");
     expect(out).toContain("job-hunter list");
