@@ -28,7 +28,7 @@ serve`) that exposes the same data over an HTTP API. A full browser dashboard is
 
 ## Install
 
-Clone or download this repository, then run the one-step installer from its folder:
+The **recommended** way is the one-step installer — run it from the repo folder:
 
 **macOS / Linux**
 ```bash
@@ -40,21 +40,13 @@ Clone or download this repository, then run the one-step installer from its fold
 ./install.ps1
 ```
 
-That installs dependencies and runs guided setup. (If you prefer to do it by hand:
-`npm install && npm run setup`.)
+It runs `npm install` then guided setup, which: installs Chromium and warms it up, builds the web
+dashboard, seeds the skill dictionary, and asks for your **Anthropic API key** (optional) and
+**resume** so you're ready to scan. It's safe to re-run, never blocks, and degrades to free
+heuristic scoring if you skip the key.
 
-### What setup does
-
-`npm run setup`:
-1. installs Chromium (used to read the public company directory and render careers pages),
-2. builds the web dashboard,
-3. seeds a skills dictionary into your local database,
-4. asks for your **Anthropic API key** (optional) and your **resume file** — then saves them so
-   you're ready to scan. (The job directory is the community-maintained stillhiring.today table, so
-   there's nothing to configure there.)
-
-Setup is safe to re-run, and it won't block: if you skip the API key you get free heuristic
-scoring, and you can build your profile later with `npm run cli profile <resume>`.
+👉 **See [INSTALL.md](INSTALL.md)** for the full breakdown — every step the installer performs,
+non-interactive/env-var usage, the manual (do-it-by-hand) path, and troubleshooting.
 
 ## Usage
 
