@@ -139,4 +139,48 @@ describe("runScan + listMatches", () => {
     expect(out.lines[0]).toContain("No matches yet");
     repo.close();
   });
+
+  it("expires a posting via liveness re-check once it's gone from its board", async () => {
+    const repo = newRepo();
+    const ghUrl = "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true";
+    const withJob = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "TypeScript and React.",
+        },
+      ],
+    });
+    const empty = JSON.stringify({ jobs: [] });
+
+    const deps = (companies: { name: string; url: string }[], routes: Record<string, string>) => ({
+      repo,
+      profile,
+      scorer: new HeuristicScorer(),
+      discoverDeps: {
+        fetcher: new RouteFetcher(routes),
+        renderer: new NullRenderer(),
+        sharedViewReader: new FakeSharedViewReader(airtableData(companies)),
+        shareUrl: "https://airtable.com/appX/shrX/tblX",
+        delayMs: 0,
+      },
+    });
+
+    // Scan 1: Acme is listed and its board has the job.
+    await runScan(
+      deps([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }], { [ghUrl]: withJob }),
+      capture().log,
+    );
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+
+    // Scan 2: Acme drops from the directory (so it isn't scanned) and its board now lists nothing.
+    // The unseen posting is re-checked against its board, found gone, and expired immediately —
+    // before the two-consecutive-miss heuristic would have caught it.
+    const result = await runScan(deps([], { [ghUrl]: empty }), capture().log);
+    expect(result.expired).toBe(1);
+    expect(repo.listScoredPostings(0)).toHaveLength(0);
+    expect(repo.listScoredPostings(0, { includeExpired: true })).toHaveLength(1);
+    repo.close();
+  });
 });

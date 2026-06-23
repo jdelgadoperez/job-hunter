@@ -350,6 +350,53 @@ export class Repository {
       .run(currentScanId, staleAfter).changes;
   }
 
+  /**
+   * Non-expired postings that were NOT seen in the given scan — candidates for a precise liveness
+   * re-check (their company may have dropped from the directory, or the role may be gone from a
+   * board that was scanned). Returns full `JobPosting`s so the re-check can re-fetch each source.
+   */
+  listLivePostingsNotSeen(scanId: number): JobPosting[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, company, title, url, source, description, location, posted_at, fetched_at
+         FROM postings
+         WHERE expired_at IS NULL AND (last_seen_scan IS NULL OR last_seen_scan != ?)`,
+      )
+      .all(scanId) as {
+      id: string;
+      company: string;
+      title: string;
+      url: string;
+      source: string;
+      description: string;
+      location: string | null;
+      posted_at: string | null;
+      fetched_at: string;
+    }[];
+    return rows.map((row) => ({
+      id: row.id,
+      company: row.company,
+      title: row.title,
+      url: row.url,
+      source: row.source,
+      description: row.description,
+      ...(row.location ? { location: row.location } : {}),
+      ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
+      fetchedAt: new Date(row.fetched_at),
+    }));
+  }
+
+  /** Mark a single posting expired (idempotent); returns whether it newly expired. */
+  markPostingExpired(postingId: string): boolean {
+    return (
+      this.db
+        .prepare(
+          "UPDATE postings SET expired_at = datetime('now') WHERE id = ? AND expired_at IS NULL",
+        )
+        .run(postingId).changes > 0
+    );
+  }
+
   /** Record the outcome (counts + directory diff) of a finished scan. */
   finishScan(
     scanId: number,
