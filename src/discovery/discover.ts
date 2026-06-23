@@ -1,5 +1,7 @@
+import { hostnameOf } from "@app/domain/normalize";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Warning } from "@app/domain/types";
+import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
 import pLimit from "p-limit";
 import { BrowserConnector, type PageRenderer } from "./connectors/browser";
@@ -37,14 +39,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
 /** Stable key for de-duplicating leads that point at the same careers page. */
 function normalizeUrl(url: string): string {
   try {
@@ -72,10 +66,7 @@ async function collectLeads(
     airtableLeads = mapped.leads;
     if (mapped.warning) warnings.push({ source: "airtable", message: mapped.warning });
   } catch (error) {
-    warnings.push({
-      source: "airtable",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    warnings.push({ source: "airtable", message: errorMessage(error) });
   }
 
   const trackedLeads: CompanyLead[] = (deps.trackedCompanies ?? []).map((tracked) => ({
@@ -150,8 +141,7 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         try {
           return { lead, result: await fetchLead(lead) };
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return { lead, result: { ok: false, warning: message } };
+          return { lead, result: { ok: false, warning: errorMessage(error) } };
         }
       });
     }),

@@ -1,4 +1,5 @@
 import { AnthropicLlmClient, type LlmClient } from "./llm-client";
+import { ANTHROPIC_KEY_SETTING } from "./settings-keys";
 
 /** String-literal union of supported engines. Grows as a sibling client is added. */
 export type LlmProviderId = "anthropic";
@@ -20,7 +21,7 @@ export interface LlmProviderConfig {
 export const LLM_PROVIDERS: Record<LlmProviderId, LlmProviderConfig> = {
   anthropic: {
     id: "anthropic",
-    apiKeySetting: "anthropicApiKey",
+    apiKeySetting: ANTHROPIC_KEY_SETTING,
     defaultModel: "claude-sonnet-4-6",
     createClient: (opts) => new AnthropicLlmClient(opts),
   },

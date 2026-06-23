@@ -1,3 +1,4 @@
+import { hostnameOf } from "@app/domain/normalize";
 import { z } from "zod";
 import type { CompanyLead } from "./types";
 
@@ -99,14 +100,6 @@ function cellToString(value: unknown): string {
     }
   }
   return "";
-}
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
 }
 
 /**

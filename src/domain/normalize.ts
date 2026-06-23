@@ -12,3 +12,12 @@ export function normalizeSkill(raw: string): string {
   const cleaned = raw.trim().toLowerCase().replace(/\s+/g, " ");
   return SKILL_ALIASES[cleaned] ?? cleaned;
 }
+
+/** The hostname of a URL with a leading `www.` stripped, or the input unchanged if unparseable. */
+export function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}

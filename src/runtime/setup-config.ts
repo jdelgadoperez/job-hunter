@@ -1,7 +1,6 @@
+import { ANTHROPIC_KEY_SETTING } from "@app/matching/settings-keys";
 import { buildProfile } from "@app/profile/build-profile";
 import type { Repository } from "@app/storage/repository";
-
-const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
 
 export type SetupAnswers = {
   /** Anthropic API key. Blank/omitted → LLM scoring degrades to the heuristic. */

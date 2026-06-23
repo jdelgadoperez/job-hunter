@@ -1,4 +1,5 @@
 import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@app/domain/types";
+import { errorMessage } from "@app/net/error-message";
 import type { LlmClient } from "./llm-client";
 import { MatchPayloadSchema } from "./llm-schema";
 import { buildScorePrompt, toMatchResult } from "./score-prompt";
@@ -31,8 +32,7 @@ export class LlmScorer implements Scorer {
       }
       return toMatchResult(parsed.data);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return this.degrade(profile, posting, `LLM scoring failed: ${message}`);
+      return this.degrade(profile, posting, `LLM scoring failed: ${errorMessage(error)}`);
     }
   }
 
