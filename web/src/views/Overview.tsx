@@ -88,12 +88,16 @@ export function Overview() {
         </div>
 
         {running ? (
-          <div className="mt-3">
+          <div className="mt-3" aria-live="polite">
             <p className="text-sm text-slate-600">
-              {status?.message ?? "Working…"} <span className="text-slate-400">· {elapsed}s</span>
+              {status?.message ?? "Working…"} <span className="text-slate-500">· {elapsed}s</span>
             </p>
             {status?.total ? (
-              <div className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-100">
+              // Decorative bar; the live text above conveys progress to assistive tech.
+              <div
+                aria-hidden="true"
+                className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-100"
+              >
                 <div
                   className="h-full bg-indigo-500 transition-all"
                   style={{ width: `${Math.round((100 * (status.current ?? 0)) / status.total)}%` }}
@@ -121,7 +125,7 @@ export function Overview() {
           <p className="mt-2 text-sm text-red-700">{status.error}</p>
         ) : null}
 
-        <p className="mt-2 text-xs text-slate-400">
+        <p className="mt-2 text-xs text-slate-500">
           Scans run in the background — you can switch tabs or close this page; it keeps going.
         </p>
       </Card>
@@ -175,7 +179,7 @@ function CompanyDelta({
         {label}
       </p>
       {companies.length === 0 ? (
-        <p className="text-xs text-slate-400">—</p>
+        <p className="text-xs text-slate-500">—</p>
       ) : (
         <ul className="mt-1 text-xs text-slate-600">
           {shown.map((c) => (
@@ -184,7 +188,7 @@ function CompanyDelta({
             </li>
           ))}
           {companies.length > shown.length ? (
-            <li className="text-slate-400">…and {companies.length - shown.length} more</li>
+            <li className="text-slate-500">…and {companies.length - shown.length} more</li>
           ) : null}
         </ul>
       )}

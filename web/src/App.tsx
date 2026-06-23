@@ -16,7 +16,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {version.data?.updateAvailable ? (
-        <div className="bg-indigo-600 px-4 py-2 text-center text-sm text-white">
+        <div aria-live="polite" className="bg-indigo-600 px-4 py-2 text-center text-sm text-white">
           An update is available ({version.data.behind} new commit
           {version.data.behind === 1 ? "" : "s"}). Run{" "}
           <code className="font-mono">./update.sh</code> (or{" "}
@@ -28,13 +28,14 @@ export function App() {
           <h1 className="text-lg font-bold">
             job<span className="text-indigo-600">-hunter</span>
           </h1>
-          <nav className="flex gap-1">
+          <nav aria-label="Primary" className="flex gap-1">
             {TABS.map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                aria-current={tab === t ? "page" : undefined}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                   tab === t ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"
                 }`}
               >

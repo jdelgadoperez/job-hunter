@@ -16,7 +16,7 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${label}`}
-        className="text-slate-400 hover:text-red-600"
+        className="rounded text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
       >
         ×
       </button>
@@ -162,13 +162,13 @@ function Dictionary() {
             {shown.map((s) => (
               <li key={s.name} className="flex items-center justify-between px-3 py-1.5 text-sm">
                 <span>
-                  {s.name} <span className="text-xs text-slate-400">· {s.category}</span>
+                  {s.name} <span className="text-xs text-slate-500">· {s.category}</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => removeSkill.mutate(s.name)}
                   aria-label={`Remove ${s.name}`}
-                  className="text-slate-400 hover:text-red-600"
+                  className="rounded text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                 >
                   ×
                 </button>

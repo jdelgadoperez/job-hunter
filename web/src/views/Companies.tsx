@@ -76,7 +76,7 @@ export function Companies() {
               <button
                 type="button"
                 onClick={() => removeCompany.mutate(c.careersUrl)}
-                className="shrink-0 text-sm text-slate-400 hover:text-red-600"
+                className="shrink-0 rounded text-sm text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
                 Remove
               </button>
