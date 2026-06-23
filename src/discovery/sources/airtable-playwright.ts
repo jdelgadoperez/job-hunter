@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { withTimeout } from "@app/net/with-timeout";
 import type { SharedViewReader } from "./airtable";
 
@@ -8,6 +10,11 @@ const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.JOB_HUNTER_DIRECTORY_TIMEOUT_MS) || 45_000;
+
+/** Step trace to stderr so a stall is locatable; stdout stays reserved for the captured data. */
+function step(message: string): void {
+  console.error(`[airtable] ${message}`);
+}
 
 /** Response URLs worth reporting on failure — the data call, plus other Airtable API traffic. */
 function isApiResponse(url: string): boolean {
@@ -25,11 +32,10 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
 
   async read(shareUrl: string): Promise<unknown> {
     const { chromium } = await import("playwright");
-    // Cap browser startup too (a slow/missing/downloading Chromium otherwise hangs unbounded).
+    step("launching Chromium…");
     const browser = await chromium.launch({ timeout: this.timeoutMs });
+    step("Chromium launched");
     try {
-      // Backstop only: the capture's own wait has a hard timeout, but guard the total in case the
-      // browser itself wedges. The descriptive `capture` rejection settles first and wins the race.
       const capture = this.capture(browser, shareUrl);
       capture.catch(() => {}); // avoid an unhandled rejection if the backstop ever wins
       return await withTimeout(capture, this.timeoutMs + 15_000, "Airtable shared-view read");
@@ -42,6 +48,7 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
     browser: Awaited<ReturnType<typeof import("playwright").chromium.launch>>,
     shareUrl: string,
   ): Promise<unknown> {
+    step("creating browser context");
     const context = await browser.newContext({
       userAgent: DESKTOP_UA,
       viewport: { width: 1280, height: 800 },
@@ -52,29 +59,52 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
     await context.addInitScript(() => {
       Object.defineProperty(navigator, "webdriver", { get: () => undefined });
     });
+    step("opening page");
     const page = await context.newPage();
 
-    // Record Airtable API responses (even non-200s) so a failure can explain itself.
+    // Record (and trace) Airtable API responses so a failure can explain itself.
     const seen: string[] = [];
     page.on("response", (response) => {
       const url = response.url();
-      if (isApiResponse(url)) seen.push(`${response.status()} ${url.slice(0, 140)}`);
+      if (isApiResponse(url)) {
+        seen.push(`${response.status()} ${url.slice(0, 140)}`);
+        step(`api response ${response.status()} ${url.slice(0, 100)}`);
+      }
     });
 
-    // Arm the data wait BEFORE navigating, and DON'T await the navigation itself: in headless,
-    // `goto` can hang past its own timeout on a challenge/redirect, which would starve this wait
-    // and surface only a bare wall-clock timeout. Awaiting the response (hard-timeout-bounded)
-    // guarantees we either get the data or throw a descriptive error.
+    // Arm the data wait BEFORE navigating, and DON'T await the navigation: in headless, `goto`
+    // can hang past its own timeout on a challenge/redirect, which would starve this wait.
     const dataResponse = page.waitForResponse(
       (response) => response.url().includes("readSharedViewData") && response.ok(),
       { timeout: this.timeoutMs },
     );
-    page.goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs }).catch(() => {});
+    step(`navigating to ${shareUrl}`);
+    page
+      .goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs })
+      .then(() => step("navigation committed"))
+      .catch((error) =>
+        step(`navigation error: ${error instanceof Error ? error.message : error}`),
+      );
 
     try {
+      step("waiting for readSharedViewData…");
       const response = await dataResponse;
+      step("got data response; parsing JSON");
       return await response.json();
     } catch (error) {
+      // Best-effort: capture what headless actually rendered, to tell a bot wall from a renamed
+      // data call. Wrapped because the page may be in a bad state.
+      try {
+        const png = join(process.cwd(), "airtable-debug.png");
+        const html = join(process.cwd(), "airtable-debug.html");
+        await page.screenshot({ path: png });
+        writeFileSync(html, await page.content());
+        step(`wrote debug artifacts: ${png} and ${html} — please share the screenshot`);
+      } catch (dumpError) {
+        step(
+          `could not write debug artifacts: ${dumpError instanceof Error ? dumpError.message : dumpError}`,
+        );
+      }
       const detail =
         seen.length > 0
           ? `the data call did not return OK within ${this.timeoutMs}ms (Airtable responses seen: ${seen.join(" | ")})`
