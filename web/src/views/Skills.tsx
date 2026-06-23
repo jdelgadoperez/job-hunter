@@ -10,13 +10,13 @@ import {
 
 function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-sm text-slate-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-subtle px-2.5 py-1 text-sm text-fg">
       {label}
       <button
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${label}`}
-        className="rounded text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        className="rounded text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         ×
       </button>
@@ -46,8 +46,8 @@ function ProfileSkills() {
 
   return (
     <Card>
-      <h2 className="font-semibold text-slate-800">Your skills</h2>
-      <p className="mt-1 text-xs text-slate-500">
+      <h2 className="font-semibold text-fg">Your skills</h2>
+      <p className="mt-1 text-xs text-faint">
         These are matched against every posting. Search the dictionary or type a brand-new skill —
         changes apply on the next scan.
       </p>
@@ -60,7 +60,7 @@ function ProfileSkills() {
         <>
           <div className="mt-3 flex flex-wrap gap-2">
             {skills.length === 0 ? (
-              <span className="text-sm text-slate-500">No skills yet.</span>
+              <span className="text-sm text-faint">No skills yet.</span>
             ) : (
               skills.map((s) => (
                 <Chip
@@ -118,10 +118,10 @@ function Dictionary() {
 
   return (
     <Card>
-      <h2 className="font-semibold text-slate-800">
+      <h2 className="font-semibold text-fg">
         Skill dictionary{dict.data ? ` (${all.length})` : ""}
       </h2>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-faint">
         The vocabulary the resume parser recognizes. Adding a term here lets future resume uploads
         detect it.
       </p>
@@ -158,24 +158,24 @@ function Dictionary() {
             placeholder="Filter…"
             className="input mt-3"
           />
-          <ul className="mt-2 max-h-80 divide-y divide-slate-100 overflow-auto rounded border border-slate-100">
+          <ul className="mt-2 max-h-80 divide-y divide-border overflow-auto rounded border border-border">
             {shown.map((s) => (
               <li key={s.name} className="flex items-center justify-between px-3 py-1.5 text-sm">
                 <span>
-                  {s.name} <span className="text-xs text-slate-500">· {s.category}</span>
+                  {s.name} <span className="text-xs text-faint">· {s.category}</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => removeSkill.mutate(s.name)}
                   aria-label={`Remove ${s.name}`}
-                  className="rounded text-slate-500 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className="rounded text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   ×
                 </button>
               </li>
             ))}
             {shown.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-slate-500">No matches.</li>
+              <li className="px-3 py-2 text-sm text-faint">No matches.</li>
             ) : null}
           </ul>
         </>
