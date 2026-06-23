@@ -2,6 +2,20 @@ import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import Database from "better-sqlite3";
 import { SCHEMA } from "./schema";
 
+/** A company referenced by its careers-page URL (the directory snapshot + diff unit). */
+export type CompanyRef = { careersUrl: string; name?: string };
+
+/** A completed scan's outcome: counts plus the directory delta vs. the previous snapshot. */
+export type ScanRecord = {
+  id: number;
+  startedAt: string;
+  finishedAt: string | null;
+  postingsSeen: number | null;
+  companiesSeen: number | null;
+  newCompanies: CompanyRef[];
+  removedCompanies: CompanyRef[];
+};
+
 export class Repository {
   private readonly db: Database.Database;
 
@@ -9,6 +23,26 @@ export class Repository {
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /**
+   * Add columns introduced after a database was first created. `CREATE TABLE IF NOT EXISTS` never
+   * alters an existing table, so new `postings` columns need an explicit, idempotent `ALTER` for
+   * databases that predate them. Each add is guarded by the table's current columns.
+   */
+  private migrate(): void {
+    const columns = new Set(
+      (this.db.prepare("PRAGMA table_info(postings)").all() as { name: string }[]).map(
+        (c) => c.name,
+      ),
+    );
+    if (!columns.has("last_seen_scan")) {
+      this.db.exec("ALTER TABLE postings ADD COLUMN last_seen_scan INTEGER");
+    }
+    if (!columns.has("expired_at")) {
+      this.db.exec("ALTER TABLE postings ADD COLUMN expired_at TEXT");
+    }
   }
 
   saveProfile(profile: SkillProfile): number {
@@ -25,11 +59,18 @@ export class Repository {
     return row ? (JSON.parse(row.data) as SkillProfile) : undefined;
   }
 
-  savePosting(posting: JobPosting): void {
+  /**
+   * Upsert a posting. When `scanId` is given, stamp it as last seen by that scan and clear any
+   * prior expiry — so a posting that reappears after vanishing is revived rather than left expired.
+   */
+  savePosting(posting: JobPosting, scanId: number | null = null): void {
     this.db
       .prepare(
-        `INSERT INTO postings (id, company, title, url, source, description, location, posted_at, fetched_at)
-         VALUES (@id, @company, @title, @url, @source, @description, @location, @postedAt, @fetchedAt)
+        `INSERT INTO postings
+           (id, company, title, url, source, description, location, posted_at, fetched_at,
+            last_seen_scan, expired_at)
+         VALUES (@id, @company, @title, @url, @source, @description, @location, @postedAt,
+            @fetchedAt, @scanId, NULL)
          ON CONFLICT(id) DO UPDATE SET
            company = excluded.company,
            title = excluded.title,
@@ -38,7 +79,10 @@ export class Repository {
            description = excluded.description,
            location = excluded.location,
            posted_at = excluded.posted_at,
-           fetched_at = excluded.fetched_at`,
+           fetched_at = excluded.fetched_at,
+           last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
+           -- Reviving a reappeared posting only when this save belongs to a scan.
+           expired_at = CASE WHEN excluded.last_seen_scan IS NULL THEN postings.expired_at ELSE NULL END`,
       )
       .run({
         id: posting.id,
@@ -50,6 +94,7 @@ export class Repository {
         location: posting.location ?? null,
         postedAt: posting.postedAt?.toISOString() ?? null,
         fetchedAt: posting.fetchedAt.toISOString(),
+        scanId,
       });
   }
 
@@ -73,8 +118,14 @@ export class Repository {
       });
   }
 
-  /** Scored postings (joined with their match result), highest score first. */
-  listScoredPostings(minScore = 0): { posting: JobPosting; result: MatchResult }[] {
+  /**
+   * Scored postings (joined with their match result), highest score first. Postings expired by a
+   * later scan are excluded unless `includeExpired` is set.
+   */
+  listScoredPostings(
+    minScore = 0,
+    opts: { includeExpired?: boolean } = {},
+  ): { posting: JobPosting; result: MatchResult }[] {
     const rows = this.db
       .prepare(
         `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
@@ -82,7 +133,7 @@ export class Repository {
                 m.score, m.matched_skills, m.missing_skills, m.rationale
          FROM match_results m
          JOIN postings p ON p.id = m.posting_id
-         WHERE m.score >= ?
+         WHERE m.score >= ?${opts.includeExpired ? "" : " AND p.expired_at IS NULL"}
          ORDER BY m.score DESC, p.title`,
       )
       .all(minScore) as {
@@ -204,6 +255,125 @@ export class Repository {
       .prepare("DELETE FROM tracked_companies WHERE careers_url = ?")
       .run(careersUrl);
     return info.changes > 0;
+  }
+
+  /** Open a new scan run and return its sequential id (drives the diff + posting expiry). */
+  startScan(): number {
+    const info = this.db.prepare("INSERT INTO scans (started_at) VALUES (datetime('now'))").run();
+    return Number(info.lastInsertRowid);
+  }
+
+  /**
+   * Snapshot the directory for this scan and diff it against the previous snapshot: returns the
+   * companies that appeared and disappeared. The first scan establishes a baseline (empty diff).
+   */
+  recordDirectory(
+    scanId: number,
+    companies: CompanyRef[],
+  ): { newCompanies: CompanyRef[]; removedCompanies: CompanyRef[] } {
+    const existing = this.db
+      .prepare("SELECT careers_url, name, last_seen_scan FROM companies")
+      .all() as { careers_url: string; name: string | null; last_seen_scan: number }[];
+    const existingUrls = new Set(existing.map((e) => e.careers_url));
+    const currentUrls = new Set(companies.map((c) => c.careersUrl));
+    // The previous scan run, from the scans table — so "removed" means dropped *this* scan only
+    // (a company gone several scans ago has an older last_seen_scan and isn't re-reported).
+    const prevRow = this.db.prepare("SELECT MAX(id) AS id FROM scans WHERE id < ?").get(scanId) as {
+      id: number | null;
+    };
+    const prevScan = prevRow.id;
+    const isBaseline = existing.length === 0;
+
+    const newCompanies = isBaseline ? [] : companies.filter((c) => !existingUrls.has(c.careersUrl));
+    const removedCompanies =
+      isBaseline || prevScan === null
+        ? []
+        : existing
+            .filter((e) => e.last_seen_scan === prevScan && !currentUrls.has(e.careers_url))
+            .map((e) => ({ careersUrl: e.careers_url, ...(e.name ? { name: e.name } : {}) }));
+
+    const upsert = this.db.prepare(
+      `INSERT INTO companies (careers_url, name, first_seen_scan, last_seen_scan, last_seen_at)
+       VALUES (@url, @name, @scanId, @scanId, datetime('now'))
+       ON CONFLICT(careers_url) DO UPDATE SET
+         name = excluded.name,
+         last_seen_scan = excluded.last_seen_scan,
+         last_seen_at = excluded.last_seen_at`,
+    );
+    const upsertMany = this.db.transaction((rows: CompanyRef[]) => {
+      for (const c of rows) upsert.run({ url: c.careersUrl, name: c.name ?? null, scanId });
+    });
+    upsertMany(companies);
+
+    return { newCompanies, removedCompanies };
+  }
+
+  /**
+   * Mark postings not seen for `staleAfter` consecutive scans as expired (they vanished from their
+   * board). Postings never stamped by a scan (legacy rows) are left alone. Returns how many expired.
+   */
+  expireStalePostings(currentScanId: number, staleAfter = 2): number {
+    return this.db
+      .prepare(
+        `UPDATE postings SET expired_at = datetime('now')
+         WHERE expired_at IS NULL AND last_seen_scan IS NOT NULL
+           AND (? - last_seen_scan) >= ?`,
+      )
+      .run(currentScanId, staleAfter).changes;
+  }
+
+  /** Record the outcome (counts + directory diff) of a finished scan. */
+  finishScan(
+    scanId: number,
+    summary: {
+      postingsSeen: number;
+      companiesSeen: number;
+      newCompanies: CompanyRef[];
+      removedCompanies: CompanyRef[];
+    },
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE scans SET finished_at = datetime('now'), postings_seen = @postings,
+           companies_seen = @companies, new_companies = @new, removed_companies = @removed
+         WHERE id = @id`,
+      )
+      .run({
+        id: scanId,
+        postings: summary.postingsSeen,
+        companies: summary.companiesSeen,
+        new: JSON.stringify(summary.newCompanies),
+        removed: JSON.stringify(summary.removedCompanies),
+      });
+  }
+
+  /** The most recently completed scan (counts + directory diff), or undefined if none finished. */
+  getLatestScan(): ScanRecord | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM scans WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1")
+      .get() as
+      | {
+          id: number;
+          started_at: string;
+          finished_at: string;
+          postings_seen: number | null;
+          companies_seen: number | null;
+          new_companies: string | null;
+          removed_companies: string | null;
+        }
+      | undefined;
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      postingsSeen: row.postings_seen,
+      companiesSeen: row.companies_seen,
+      newCompanies: row.new_companies ? (JSON.parse(row.new_companies) as CompanyRef[]) : [],
+      removedCompanies: row.removed_companies
+        ? (JSON.parse(row.removed_companies) as CompanyRef[])
+        : [],
+    };
   }
 
   getSetting(key: string): string | undefined {

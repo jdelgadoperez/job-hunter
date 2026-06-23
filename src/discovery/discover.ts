@@ -26,6 +26,8 @@ export type DiscoverDeps = {
 export type DiscoverResult = {
   postings: JobPosting[];
   warnings: Warning[];
+  /** The merged, de-duplicated company list this run scanned (directory + tracked). */
+  companies: CompanyLead[];
 };
 
 const DEFAULT_CONCURRENCY = 4;
@@ -165,5 +167,5 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     }
   }
 
-  return { postings: [...byId.values()], warnings };
+  return { postings: [...byId.values()], warnings, companies: leads };
 }

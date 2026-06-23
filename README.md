@@ -73,7 +73,9 @@ default on <http://localhost:4317> — and opens a React dashboard in your brows
   also **auto-refreshes** on a schedule (default every 6h; tune with `--refresh-hours N`, or
   `--refresh-hours 0` to disable).
 - **Matches** — ranked postings filtered by a minimum-score slider (default **50**), with the LLM
-  rationale and matched/missing skills
+  rationale and matched/missing skills. Scans are **incremental**: postings that vanish from their
+  board across consecutive scans are auto-expired and drop off the list, and a **Last scan** panel
+  shows the directory delta (companies that appeared / are no longer listed).
 - **Skills** — edit the skills on your profile (search the dictionary or add new ones) and manage
   the skill **dictionary** the resume parser recognizes (a broad ~340-term default ships out of the
   box)

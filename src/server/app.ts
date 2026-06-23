@@ -185,5 +185,8 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.get("/api/scan/status", (c) => c.json(jobs.getStatus()));
 
+  // The most recently completed scan: counts plus the directory diff (new/removed companies).
+  app.get("/api/scans/latest", (c) => c.json(repo.getLatestScan() ?? null));
+
   return app;
 }

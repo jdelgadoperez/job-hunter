@@ -110,3 +110,86 @@ describe("Repository", () => {
     repo.close();
   });
 });
+
+function postingWith(id: string): JobPosting {
+  return { ...posting, id, url: `https://example.com/${id}` };
+}
+
+describe("incremental scans — directory diff", () => {
+  it("treats the first scan as a baseline (no diff), then reports new/removed", () => {
+    const repo = newRepo();
+
+    const s1 = repo.startScan();
+    const baseline = repo.recordDirectory(s1, [
+      { careersUrl: "https://a.com", name: "A" },
+      { careersUrl: "https://b.com", name: "B" },
+    ]);
+    expect(baseline).toEqual({ newCompanies: [], removedCompanies: [] });
+
+    const s2 = repo.startScan();
+    const diff = repo.recordDirectory(s2, [
+      { careersUrl: "https://a.com", name: "A" },
+      { careersUrl: "https://c.com", name: "C" },
+    ]);
+    expect(diff.newCompanies).toEqual([{ careersUrl: "https://c.com", name: "C" }]);
+    expect(diff.removedCompanies).toEqual([{ careersUrl: "https://b.com", name: "B" }]);
+
+    repo.finishScan(s2, {
+      postingsSeen: 0,
+      companiesSeen: 2,
+      newCompanies: diff.newCompanies,
+      removedCompanies: diff.removedCompanies,
+    });
+    const latest = repo.getLatestScan();
+    expect(latest?.id).toBe(s2);
+    expect(latest?.removedCompanies).toEqual([{ careersUrl: "https://b.com", name: "B" }]);
+    repo.close();
+  });
+
+  it("does not re-report a company removed in an earlier scan", () => {
+    const repo = newRepo();
+    repo.recordDirectory(repo.startScan(), [{ careersUrl: "https://b.com" }]); // baseline
+    const drop = repo.recordDirectory(repo.startScan(), []); // b removed here
+    expect(drop.removedCompanies).toEqual([{ careersUrl: "https://b.com" }]);
+    const after = repo.recordDirectory(repo.startScan(), []); // already gone — silent
+    expect(after.removedCompanies).toEqual([]);
+    repo.close();
+  });
+});
+
+describe("incremental scans — posting expiry", () => {
+  function seedScored(repo: Repository, id: string, scanId: number): void {
+    repo.savePosting(postingWith(id), scanId);
+    repo.saveMatchResult(id, { score: 80, matchedSkills: [], missingSkills: [] });
+  }
+
+  it("expires a posting after it misses two consecutive scans, and revives it on return", () => {
+    const repo = newRepo();
+    const s1 = repo.startScan();
+    seedScored(repo, "p1", s1);
+
+    // One missed scan: still listed.
+    expect(repo.expireStalePostings(repo.startScan())).toBe(0);
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+
+    // Second consecutive miss: expired and dropped from the default list.
+    const expired = repo.expireStalePostings(repo.startScan());
+    expect(expired).toBe(1);
+    expect(repo.listScoredPostings(0)).toHaveLength(0);
+    expect(repo.listScoredPostings(0, { includeExpired: true })).toHaveLength(1);
+
+    // Seen again in a later scan: revived.
+    seedScored(repo, "p1", repo.startScan());
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+    repo.close();
+  });
+
+  it("never expires legacy postings saved without a scan id", () => {
+    const repo = newRepo();
+    repo.savePosting(postingWith("legacy")); // no scanId
+    repo.saveMatchResult("legacy", { score: 90, matchedSkills: [], missingSkills: [] });
+    expect(repo.expireStalePostings(99)).toBe(0);
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+    repo.close();
+  });
+});

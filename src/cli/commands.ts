@@ -2,7 +2,7 @@ import { type DiscoverDeps, discover } from "@app/discovery/discover";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { buildProfile } from "@app/profile/build-profile";
-import type { Repository } from "@app/storage/repository";
+import type { CompanyRef, Repository } from "@app/storage/repository";
 
 export type Logger = (message: string) => void;
 
@@ -62,23 +62,58 @@ export type ScanDeps = {
   onProgress?: (event: ScanProgressEvent) => void;
 };
 
-export async function runScan(
-  deps: ScanDeps,
-  log: Logger,
-): Promise<{ count: number; warnings: Warning[] }> {
-  const { onProgress } = deps;
-  const { postings, warnings } = await discover({ ...deps.discoverDeps, onProgress });
+export type ScanOutcome = {
+  count: number;
+  warnings: Warning[];
+  /** Directory companies that appeared / disappeared vs. the previous scan. */
+  newCompanies: CompanyRef[];
+  removedCompanies: CompanyRef[];
+  /** Postings marked expired this run (gone from their board across consecutive scans). */
+  expired: number;
+};
+
+/**
+ * Run a full scan as an incremental step: open a scan, snapshot+diff the directory, upsert and
+ * score postings (stamping the scan), expire postings that have vanished, and record the outcome.
+ */
+export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome> {
+  const { onProgress, repo } = deps;
+  const scanId = repo.startScan();
+
+  const {
+    postings,
+    warnings,
+    companies = [],
+  } = await discover({ ...deps.discoverDeps, onProgress });
+  const diff = repo.recordDirectory(
+    scanId,
+    companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
+  );
+
   onProgress?.({ kind: "scoring", total: postings.length });
   for (const posting of postings) {
-    deps.repo.savePosting(posting);
-    deps.repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
+    repo.savePosting(posting, scanId);
+    repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
   }
+
+  const expired = repo.expireStalePostings(scanId);
+  repo.finishScan(scanId, {
+    postingsSeen: postings.length,
+    companiesSeen: companies.length,
+    ...diff,
+  });
+
   onProgress?.({ kind: "summary", count: postings.length });
   log(`Scanned and scored ${postings.length} posting(s).`);
+  if (diff.newCompanies.length || diff.removedCompanies.length || expired) {
+    log(
+      `  Directory: +${diff.newCompanies.length} new, -${diff.removedCompanies.length} gone; expired ${expired} posting(s).`,
+    );
+  }
   for (const warning of warnings) {
     log(`  ! [${warning.source}] ${warning.message}`);
   }
-  return { count: postings.length, warnings };
+  return { count: postings.length, warnings, ...diff, expired };
 }
 
 export function listMatches(repo: Repository, minScore: number, log: Logger): void {
