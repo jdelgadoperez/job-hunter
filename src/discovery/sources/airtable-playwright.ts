@@ -11,9 +11,12 @@ const DESKTOP_UA =
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.JOB_HUNTER_DIRECTORY_TIMEOUT_MS) || 45_000;
 
+// Verbose step/diagnostic tracing, off by default (set JOB_HUNTER_DIRECTORY_DEBUG=1 to enable).
+const DIRECTORY_DEBUG = Boolean(process.env.JOB_HUNTER_DIRECTORY_DEBUG);
+
 /** Step trace to stderr so a stall is locatable; stdout stays reserved for the captured data. */
 function step(message: string): void {
-  console.error(`[airtable] ${message}`);
+  if (DIRECTORY_DEBUG) console.error(`[airtable] ${message}`);
 }
 
 /** Response URLs worth reporting on failure — the data call, plus other Airtable API traffic. */
@@ -149,17 +152,19 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
       step("waiting for shared-view data…");
       return await withTimeout(dataBody, this.timeoutMs, "readSharedViewData capture");
     } catch (error) {
-      // Best-effort: capture what headless rendered (likely the sign-in wall) for diagnosis.
-      try {
-        const png = join(process.cwd(), "airtable-debug.png");
-        const html = join(process.cwd(), "airtable-debug.html");
-        await page.screenshot({ path: png });
-        writeFileSync(html, await page.content());
-        step(`wrote debug artifacts: ${png} and ${html}`);
-      } catch (dumpError) {
-        step(
-          `could not write debug artifacts: ${dumpError instanceof Error ? dumpError.message : dumpError}`,
-        );
+      // In debug mode, capture what headless rendered (e.g. a sign-in wall) for diagnosis.
+      if (DIRECTORY_DEBUG) {
+        try {
+          const png = join(process.cwd(), "airtable-debug.png");
+          const html = join(process.cwd(), "airtable-debug.html");
+          await page.screenshot({ path: png });
+          writeFileSync(html, await page.content());
+          step(`wrote debug artifacts: ${png} and ${html}`);
+        } catch (dumpError) {
+          step(
+            `could not write debug artifacts: ${dumpError instanceof Error ? dumpError.message : dumpError}`,
+          );
+        }
       }
       const detail =
         seen.length > 0
