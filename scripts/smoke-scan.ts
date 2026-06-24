@@ -7,7 +7,7 @@
  * resume, discovers companies (live Playwright Airtable read of the community directory + ATS
  * connectors), scores with the real LLM (or the heuristic fallback if no key), and prints the
  * ranked matches. Set AIRTABLE_SHARE_URL to override the directory. Touches the network and a
- * real browser, so it is excluded from CI. Requires `npx playwright install chromium`.
+ * real browser, so it is excluded from CI. Requires `npx playwright install chromium chromium-headless-shell`.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

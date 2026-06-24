@@ -31,7 +31,7 @@ The installer runs `npm install` and then `npm run setup`.
 
 `npm run setup` performs the post-install legwork (it's safe to re-run at any time):
 
-1. **Installs Chromium for Playwright** (`npx playwright install chromium`). A real browser is used
+1. **Installs Chromium for Playwright** (`npx playwright install chromium chromium-headless-shell`). A real browser is used
    to read the public company directory and render careers pages that don't expose a JSON API.
 2. **Warms up the browser** — launches and closes Chromium once, so its one-time first-run setup
    happens now instead of slowing your first scan. If the browser can't launch, setup says so with
@@ -76,7 +76,7 @@ npm run setup            # or run the individual steps below
 The individual steps `setup` automates:
 
 ```bash
-npx playwright install chromium   # browser for the directory read + page rendering
+npx playwright install chromium chromium-headless-shell   # browser for the directory read + page rendering
 npm run build:web                 # build the dashboard
 npm run cli -- profile ./resume.pdf   # build your skill profile (seeds skills on first DB use)
 ```
@@ -121,7 +121,7 @@ overview.
 ## Troubleshooting
 
 - **A scan stalls on "Reading the company directory…"** — the browser likely isn't launching.
-  Re-run `npx playwright install chromium` (and `npx playwright install-deps chromium` on Linux).
+  Re-run `npx playwright install chromium chromium-headless-shell` (and `npx playwright install-deps chromium` on Linux).
   Watch the `job-hunter serve` terminal for `[scan] …` lines to see exactly where it's stuck.
 - **"No profile yet"** — run `npm run cli -- profile <resume>` (or re-run `npm run setup`).
 - **Where your data lives** — a single SQLite file: `~/.job-hunter/jobhunter.db` (macOS/Linux) or

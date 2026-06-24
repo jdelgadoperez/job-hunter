@@ -5,7 +5,7 @@ import { withTimeout } from "@app/net/with-timeout";
 /**
  * Production `PageRenderer` backed by Playwright/Chromium. This is an integration-bound edge
  * (a real browser + live network), so it has no unit tests — it's exercised only by the opt-in
- * smoke scripts, exactly like `HttpFetcher`. Requires `npx playwright install chromium`.
+ * smoke scripts, exactly like `HttpFetcher`. Requires `npx playwright install chromium chromium-headless-shell`.
  */
 export class PlaywrightRenderer implements PageRenderer {
   constructor(private readonly timeoutMs = 30_000) {}

@@ -8,7 +8,7 @@
  * warnings. It is polite by default (the orchestrator's concurrency cap + delay) and
  * verifies the connectors still match real-world feeds when run intentionally.
  *
- * The browser path needs a Chromium build: `npx playwright install chromium`.
+ * The browser path needs a Chromium build: `npx playwright install chromium chromium-headless-shell`.
  * Board tokens below are public but may go stale; update them if a feed 404s.
  */
 import { AshbyConnector } from "../src/discovery/connectors/ashby";

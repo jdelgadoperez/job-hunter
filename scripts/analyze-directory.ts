@@ -9,7 +9,7 @@ import { PlaywrightSharedViewReader } from "../src/discovery/sources/airtable-pl
  *   npm run analyze:directory
  *
  * Drives a real Chromium against the public Airtable share (like smoke:airtable), so it needs
- * network + `npx playwright install chromium`.
+ * network + `npx playwright install chromium chromium-headless-shell`.
  */
 import { hostnameOf } from "../src/domain/normalize";
 
