@@ -1,4 +1,9 @@
-import { ashbyConnector, greenhouseConnector, leverConnector } from "./connectors/registry";
+import {
+  ashbyConnector,
+  greenhouseConnector,
+  leverConnector,
+  workdayConnector,
+} from "./connectors/registry";
 import type { AtsConnector } from "./connectors/types";
 
 export type ResolvedAts = { connector: AtsConnector; boardToken: string };
@@ -18,6 +23,13 @@ export function resolveAts(careersUrl: string): ResolvedAts | null {
   }
 
   const host = parsed.hostname.toLowerCase();
+
+  // Workday encodes tenant + site across the host and path, so it takes the whole careers URL as
+  // its "board token" rather than a single path segment.
+  if (host.endsWith(".myworkdayjobs.com")) {
+    return { connector: workdayConnector, boardToken: careersUrl };
+  }
+
   const token = parsed.pathname.split("/").filter(Boolean)[0];
   if (!token) {
     return null;

@@ -45,3 +45,21 @@ const AshbyJob = z
 
 export const AshbyFeed = z.object({ jobs: z.array(AshbyJob) }).passthrough();
 export type AshbyFeed = z.infer<typeof AshbyFeed>;
+
+// Workday — POST https://{tenant}.{dc}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs
+// `externalPath` is the job's path under the site root; `total` drives pagination.
+const WorkdayJob = z
+  .object({
+    title: z.string(),
+    externalPath: z.string(),
+    locationsText: z.string().optional(),
+  })
+  .passthrough();
+
+export const WorkdayFeed = z
+  .object({
+    total: z.number().optional(),
+    jobPostings: z.array(WorkdayJob),
+  })
+  .passthrough();
+export type WorkdayFeed = z.infer<typeof WorkdayFeed>;
