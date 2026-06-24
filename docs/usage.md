@@ -131,7 +131,7 @@ Set `JOB_HUNTER_HOME` to relocate it. Delete the file to start fresh.
 
 - **"No profile yet"** — run `npm run cli -- profile <resume>` (or re-run `npm run setup`).
 - **Chromium errors / a careers page won't load** — ensure the browser is installed:
-  `npx playwright install chromium`. A single company failing is reported as a warning and doesn't
+  `npx playwright install chromium chromium-headless-shell`. A single company failing is reported as a warning and doesn't
   stop the scan.
 - **Scores look shallow / no rationale** — you're on heuristic scoring; add an Anthropic API key
   (re-run setup) for semantic scoring with rationales.

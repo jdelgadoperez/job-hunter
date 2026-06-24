@@ -138,6 +138,45 @@ describe("discover", () => {
     expect(gauge.max).toBeGreaterThan(1);
   });
 
+  it("skips un-scrapable hosts (LinkedIn) without rendering, and surfaces them for review", async () => {
+    const rendered: string[] = [];
+    const renderer: PageRenderer = {
+      async render(url) {
+        rendered.push(url);
+        return JSONLD_HTML;
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Acme", url: "https://boards.greenhouse.io/acme" },
+        { name: "BigCo", url: "https://www.linkedin.com/company/bigco/jobs/" },
+        { name: "Initech", url: "https://initech.com/careers" },
+      ]),
+    );
+    const fetcher = new GaugedFetcher(
+      {
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
+      },
+      new Gauge(),
+    );
+
+    const { skipped, warnings, companies } = await discover({
+      fetcher,
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+    });
+
+    // The LinkedIn company is never rendered; the real company site still is.
+    expect(rendered).toContain("https://initech.com/careers");
+    expect(rendered).not.toContain("https://www.linkedin.com/company/bigco/jobs/");
+    // It's surfaced for manual review and noted in a summary warning, but still counted as a company.
+    expect(skipped.map((c) => c.company)).toEqual(["BigCo"]);
+    expect(companies.map((c) => c.company)).toContain("BigCo");
+    expect(warnings.some((w) => w.message.includes("Skipped 1"))).toBe(true);
+  });
+
   it("merges tracked companies with the Airtable directory, de-duplicating by URL", async () => {
     const gauge = new Gauge();
     const reader = new FakeSharedViewReader(

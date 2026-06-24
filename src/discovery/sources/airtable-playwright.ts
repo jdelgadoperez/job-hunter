@@ -44,7 +44,7 @@ export function toEmbedUrl(shareUrl: string): string {
  * Production `SharedViewReader`: open the Airtable shared view in a real browser and capture the
  * `readSharedViewData` response the page issues itself — so Airtable's own page supplies the
  * access policy and we never reverse-engineer it. Integration-bound (browser + network); no unit
- * tests, exercised only by `npm run smoke:airtable`. Requires `npx playwright install chromium`.
+ * tests, exercised only by `npm run smoke:airtable`. Requires `npx playwright install chromium chromium-headless-shell`.
  */
 export class PlaywrightSharedViewReader implements SharedViewReader {
   constructor(private readonly timeoutMs = DEFAULT_TIMEOUT_MS) {}

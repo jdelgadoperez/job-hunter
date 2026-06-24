@@ -5,8 +5,18 @@ $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Error "Node.js is required but was not found. Install Node 20+ from https://nodejs.org and re-run."
+    Write-Error "Node.js is required but was not found. Install Node 24 (see .nvmrc) from https://nodejs.org and re-run."
     exit 1
+}
+
+# The CLI uses APIs that require Node 22+ (array-format util.styleText); .nvmrc pins 24.
+$nodeMajor = [int](node -p 'process.versions.node.split(".")[0]')
+if ($nodeMajor -lt 22) {
+    Write-Error "job-hunter needs Node 22 or newer (found $(node -v)). Install Node 24 (see .nvmrc) from https://nodejs.org and re-run."
+    exit 1
+}
+if ($nodeMajor -lt 24) {
+    Write-Host "Note: Node 24 is recommended (see .nvmrc) - you're on $(node -v). Continuing..."
 }
 
 Write-Host "Installing dependencies..."

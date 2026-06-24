@@ -53,7 +53,9 @@ async function warmUpBrowser(): Promise<void> {
     console.log("  ✓ Chromium launches OK");
   } catch (error) {
     console.warn(`  ⚠ Chromium did not launch: ${error instanceof Error ? error.message : error}`);
-    console.warn("    Scans need a browser. Re-run: npx playwright install chromium");
+    console.warn(
+      "    Scans need a browser. Re-run: npx playwright install chromium chromium-headless-shell",
+    );
     console.warn("    On Linux you may also need: npx playwright install-deps chromium");
   }
 }
@@ -88,8 +90,13 @@ async function readResumeSafely(path: string): Promise<string | undefined> {
 async function main(): Promise<void> {
   console.log("job-hunter setup\n================");
 
-  // 1. Playwright browser (needed for the Airtable read + careers-page rendering).
-  run("npx playwright install chromium", "Installing Chromium for Playwright");
+  // 1. Playwright browser (needed for the Airtable read + careers-page rendering). Install the
+  // headless shell too: modern `chromium.launch()` runs headless via the separate
+  // chrome-headless-shell binary, which a bare `install chromium` can leave out.
+  run(
+    "npx playwright install chromium chromium-headless-shell",
+    "Installing Chromium for Playwright (browser + headless shell)",
+  );
 
   // 1b. Warm up the browser now: the first launch does one-time setup, so doing it here moves that
   // cost out of the user's first scan — and surfaces a broken/missing browser with clear advice

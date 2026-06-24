@@ -6,7 +6,7 @@
  * Drives a real Chromium (Playwright) against the public Airtable share, captures the embed's
  * own `readSharedViewData` response, prints the mapped company leads, and writes the raw response
  * to `src/discovery/sources/__fixtures__/airtable-shared-view.json` so the unit tests run against
- * a REAL capture instead of the synthetic placeholder. Requires `npx playwright install chromium`.
+ * a REAL capture instead of the synthetic placeholder. Requires `npx playwright install chromium chromium-headless-shell`.
  *
  * Defaults to stillhiring's published share if AIRTABLE_SHARE_URL is unset.
  */
