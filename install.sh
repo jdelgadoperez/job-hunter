@@ -6,8 +6,18 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js is required but was not found. Install Node 20+ from https://nodejs.org and re-run." >&2
+  echo "Node.js is required but was not found. Install Node 24 (see .nvmrc) from https://nodejs.org and re-run." >&2
   exit 1
+fi
+
+# The CLI uses APIs that require Node 22+ (array-format util.styleText); .nvmrc pins 24.
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  echo "job-hunter needs Node 22 or newer (found $(node -v)). Install Node 24 (see .nvmrc) from https://nodejs.org and re-run." >&2
+  exit 1
+fi
+if [ "$NODE_MAJOR" -lt 24 ]; then
+  echo "Note: Node 24 is recommended (see .nvmrc) — you're on $(node -v). Continuing…"
 fi
 
 echo "Installing dependencies…"

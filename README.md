@@ -21,7 +21,7 @@ against the same local database.
 
 ## Requirements
 
-- **Node.js 22 or newer** ([nodejs.org](https://nodejs.org)) — the only thing you must install first.
+- **Node.js 22 or newer** (24 recommended; see `.nvmrc`) ([nodejs.org](https://nodejs.org)) — the only thing you must install first.
 - macOS (Intel or Apple Silicon) or Windows 11+. (Linux works too.)
 - *Optional:* an [Anthropic API key](https://console.anthropic.com) for high-quality LLM scoring.
   Without one, job-hunter still works using a free, offline keyword-based scorer.
