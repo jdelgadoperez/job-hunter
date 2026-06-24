@@ -22,6 +22,7 @@
     "smoke:scorer": "node --import tsx scripts/smoke-scorer.ts",
     "smoke:airtable": "node --import tsx scripts/smoke-airtable.ts",
     "smoke:scan": "node --import tsx scripts/smoke-scan.ts",
+    "analyze:directory": "node --import tsx scripts/analyze-directory.ts",
     "build:skill-seed": "node --import tsx scripts/build-skill-seed.ts"
   },
   "devDependencies": {
