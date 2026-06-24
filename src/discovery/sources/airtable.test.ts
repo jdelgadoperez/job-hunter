@@ -36,6 +36,41 @@ describe("airtableRowsToLeads", () => {
     ]);
   });
 
+  it("maps the real Airtable shape: columns/rows under data, button-cell url, primaryColumnId", () => {
+    // Mirrors a real readSharedViewData capture: no `data.table` wrapper, and the "Jobs Page"
+    // button cell carries the URL as `{ label, url }`.
+    const raw = {
+      msg: "SUCCESS",
+      data: {
+        primaryColumnId: "fldCompany",
+        columns: [
+          { id: "fldCompany", name: "Company Name", type: "text" },
+          { id: "fldJobs", name: "Jobs Page", type: "button" },
+          { id: "fldCity", name: "HQ City", type: "text" },
+        ],
+        rows: [
+          {
+            id: "rec1",
+            cellValuesByColumnId: {
+              fldCompany: "EDB",
+              fldJobs: { label: "Open", url: "https://www.enterprisedb.com/careers/job-openings" },
+              fldCity: "Wilmington",
+            },
+          },
+        ],
+      },
+    };
+    const { leads, warning } = airtableRowsToLeads(raw);
+    expect(warning).toBeUndefined();
+    expect(leads).toEqual([
+      {
+        company: "EDB",
+        careersUrl: "https://www.enterprisedb.com/careers/job-openings",
+        categories: [],
+      },
+    ]);
+  });
+
   it("skips rows that have no careers URL", () => {
     const { leads } = airtableRowsToLeads(fixture);
     expect(leads.map((l) => l.company)).not.toContain("NoUrlCo");

@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { withTimeout } from "@app/net/with-timeout";
 import type { SharedViewReader } from "./airtable";
 
@@ -8,6 +10,35 @@ const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.JOB_HUNTER_DIRECTORY_TIMEOUT_MS) || 45_000;
+
+// Verbose step/diagnostic tracing, off by default (set JOB_HUNTER_DIRECTORY_DEBUG=1 to enable).
+const DIRECTORY_DEBUG = Boolean(process.env.JOB_HUNTER_DIRECTORY_DEBUG);
+
+/** Step trace to stderr so a stall is locatable; stdout stays reserved for the captured data. */
+function step(message: string): void {
+  if (DIRECTORY_DEBUG) console.error(`[airtable] ${message}`);
+}
+
+/** Response URLs worth reporting on failure — the data call, plus other Airtable API traffic. */
+function isApiResponse(url: string): boolean {
+  return /readSharedViewData|readSharedView|sharedView|airtable\.com\/v\d/i.test(url);
+}
+
+/**
+ * Rewrite a full shared-view URL (`airtable.com/app…/shr…/tbl…`) to the embed form
+ * (`airtable.com/embed/shr…`). The full app redirects anonymous sessions to a sign-in wall and
+ * serves a binary `readSharedViewData` body; the embed renders anonymously and returns the legacy
+ * JSON our schema expects. Falls back to the input if no share id is present.
+ */
+export function toEmbedUrl(shareUrl: string): string {
+  try {
+    const url = new URL(shareUrl);
+    const shareId = url.pathname.split("/").find((segment) => segment.startsWith("shr"));
+    return shareId ? `https://airtable.com/embed/${shareId}` : shareUrl;
+  } catch {
+    return shareUrl;
+  }
+}
 
 /**
  * Production `SharedViewReader`: open the Airtable shared view in a real browser and capture the
@@ -20,15 +51,13 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
 
   async read(shareUrl: string): Promise<unknown> {
     const { chromium } = await import("playwright");
-    // Cap browser startup too (a slow/missing/downloading Chromium otherwise hangs unbounded).
+    step("launching Chromium…");
     const browser = await chromium.launch({ timeout: this.timeoutMs });
+    step("Chromium launched");
     try {
-      // Hard wall-clock cap on the whole capture, a little above the per-step timeout so a
-      // descriptive `capture` rejection wins the race against the bare wall-clock timeout.
       const capture = this.capture(browser, shareUrl);
-      // Swallow a late rejection if the deadline wins, so it isn't an unhandled rejection.
-      capture.catch(() => {});
-      return await withTimeout(capture, this.timeoutMs + 10_000, "Airtable shared-view read");
+      capture.catch(() => {}); // avoid an unhandled rejection if the backstop ever wins
+      return await withTimeout(capture, this.timeoutMs + 15_000, "Airtable shared-view read");
     } finally {
       await browser.close();
     }
@@ -38,34 +67,109 @@ export class PlaywrightSharedViewReader implements SharedViewReader {
     browser: Awaited<ReturnType<typeof import("playwright").chromium.launch>>,
     shareUrl: string,
   ): Promise<unknown> {
+    step("creating browser context");
     const context = await browser.newContext({
       userAgent: DESKTOP_UA,
       viewport: { width: 1280, height: 800 },
+      locale: "en-US",
+      extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
     });
+    // Mask the most obvious headless tell so bot-detection serves the normal data-loading page.
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    });
+
+    // Airtable's default `shouldUseNestedResponseFormat: true` makes readSharedViewData return a
+    // MessagePack body. Flip it to false so we get the legacy JSON our schema parses — rewriting the
+    // request param rather than taking on a MessagePack decoder.
+    await context.route(/readSharedViewData/, async (route) => {
+      try {
+        const url = new URL(route.request().url());
+        const raw = url.searchParams.get("stringifiedObjectParams");
+        if (raw) {
+          const params = JSON.parse(raw) as Record<string, unknown>;
+          params.shouldUseNestedResponseFormat = false;
+          url.searchParams.set("stringifiedObjectParams", JSON.stringify(params));
+          await route.continue({ url: url.toString() });
+          return;
+        }
+      } catch {
+        // fall through to an unmodified continue
+      }
+      await route.continue();
+    });
+
+    step("opening page");
     const page = await context.newPage();
 
-    // Record every readSharedViewData response (even non-200s) so a failure can explain itself.
+    // Airtable returns readSharedViewData (200) and then immediately redirects the tab to a sign-in
+    // wall, which tears the page down. If we await the Response and read its body a beat later,
+    // `response.json()` hangs because the page is gone. So read the body *in the response handler*,
+    // the instant it arrives — and resolve on the first one we successfully parse (Airtable may
+    // emit the call more than once).
     const seen: string[] = [];
+    let resolveData: (value: unknown) => void = () => {};
+    const dataBody = new Promise<unknown>((resolve) => {
+      resolveData = resolve;
+    });
     page.on("response", (response) => {
-      if (response.url().includes("readSharedViewData")) {
-        seen.push(`${response.status()} ${response.url()}`);
+      const url = response.url();
+      if (!isApiResponse(url)) return;
+      seen.push(`${response.status()} ${url.slice(0, 140)}`);
+      step(`api response ${response.status()} ${url.slice(0, 100)}`);
+      if (url.includes("readSharedViewData") && response.ok()) {
+        // Read the raw body and parse it ourselves: report the byte signature on failure so a
+        // non-JSON (e.g. binary/compressed) body identifies its own format instead of a blind error.
+        response.body().then(
+          (buffer) => {
+            try {
+              resolveData(JSON.parse(buffer.toString("utf8")));
+              step("captured shared-view data body");
+            } catch {
+              step(
+                `data body is not JSON — ${buffer.length}B, head=${buffer.subarray(0, 8).toString("hex")}, sample=${JSON.stringify(buffer.toString("utf8").slice(0, 60))}`,
+              );
+            }
+          },
+          (error) =>
+            step(`could not read data body: ${error instanceof Error ? error.message : error}`),
+        );
       }
     });
 
-    try {
-      // Arm the response wait before navigating so we don't miss the call.
-      const dataResponse = page.waitForResponse(
-        (response) => response.url().includes("readSharedViewData") && response.ok(),
-        { timeout: this.timeoutMs },
+    // Use the embed URL: it renders anonymously (no sign-in redirect) and returns the legacy JSON
+    // format. Don't await the navigation — we only need the captured data body.
+    const target = toEmbedUrl(shareUrl);
+    step(`navigating to ${target}`);
+    page
+      .goto(target, { waitUntil: "commit", timeout: this.timeoutMs })
+      .then(() => step("navigation committed"))
+      .catch((error) =>
+        step(`navigation error: ${error instanceof Error ? error.message : error}`),
       );
-      await page.goto(shareUrl, { waitUntil: "domcontentloaded", timeout: this.timeoutMs });
-      const response = await dataResponse;
-      return await response.json();
+
+    try {
+      step("waiting for shared-view data…");
+      return await withTimeout(dataBody, this.timeoutMs, "readSharedViewData capture");
     } catch (error) {
+      // In debug mode, capture what headless rendered (e.g. a sign-in wall) for diagnosis.
+      if (DIRECTORY_DEBUG) {
+        try {
+          const png = join(process.cwd(), "airtable-debug.png");
+          const html = join(process.cwd(), "airtable-debug.html");
+          await page.screenshot({ path: png });
+          writeFileSync(html, await page.content());
+          step(`wrote debug artifacts: ${png} and ${html}`);
+        } catch (dumpError) {
+          step(
+            `could not write debug artifacts: ${dumpError instanceof Error ? dumpError.message : dumpError}`,
+          );
+        }
+      }
       const detail =
         seen.length > 0
-          ? `the data call returned a non-OK status (seen: ${seen.join("; ")})`
-          : `the page never issued a readSharedViewData request (final URL: ${page.url()}) — Airtable may be serving a blocked/headless page, or the share URL has changed`;
+          ? `the data body never parsed within ${this.timeoutMs}ms (Airtable responses seen: ${seen.join(" | ")})`
+          : `no readSharedViewData request was made within ${this.timeoutMs}ms (final URL: ${page.url()}) — Airtable is likely serving a blocked/headless page, or the request was renamed`;
       throw new Error(`Airtable directory capture failed: ${detail}`, { cause: error });
     }
   }

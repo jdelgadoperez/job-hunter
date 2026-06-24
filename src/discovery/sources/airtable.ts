@@ -12,11 +12,11 @@ import type { CompanyLead } from "./types";
  * `readSharedViewData` response, so Airtable supplies the access policy. `airtableRowsToLeads`
  * is the pure transform from that response to `CompanyLead`s.
  *
- * ⚠️ The shape below and the test fixture are the **documented/observed** Airtable
- * `readSharedViewData` structure, but have NOT yet been validated against a live capture from
- * this environment (egress is blocked here). Run `npm run smoke:airtable` on a networked machine
- * to capture a real response, replace the fixture, and confirm this schema. The mapping degrades
- * to `{ leads: [], warning }` on any mismatch, so a wrong assumption surfaces as a warning rather
+ * Shape (validated against a real capture): `{ data: { columns: [{id,name,type}],
+ * rows: [{id, cellValuesByColumnId}], primaryColumnId } }`. The careers URL lives in the "Jobs
+ * Page" button column, whose cell is `{ label, url }`. Older/synthetic captures nested
+ * columns/rows under `data.table`, which we still accept. The mapping degrades to
+ * `{ leads: [], warning }` on any mismatch, so a wrong assumption surfaces as a warning rather
  * than silently producing garbage.
  */
 
@@ -44,14 +44,20 @@ const Row = z
   })
   .passthrough();
 
-// Airtable nests rows under `data.rows` in some responses and `data.table.rows` in others;
-// accept either.
+// Real shape: `columns`/`rows` live directly under `data` (with `primaryColumnId`). Older/synthetic
+// captures nested them under `data.table`. Accept both; every field stays optional so a partial
+// response degrades to a warning rather than a parse throw.
 const SharedViewData = z
   .object({
     data: z
       .object({
-        table: z.object({ columns: z.array(Column), rows: z.array(Row).optional() }).passthrough(),
+        columns: z.array(Column).optional(),
         rows: z.array(Row).optional(),
+        primaryColumnId: z.string().optional(),
+        table: z
+          .object({ columns: z.array(Column), rows: z.array(Row).optional() })
+          .passthrough()
+          .optional(),
       })
       .passthrough(),
   })
@@ -117,8 +123,12 @@ export function airtableRowsToLeads(
     return { leads: [], warning: "unexpected Airtable shared-view response shape" };
   }
 
-  const { columns } = parsed.data.data.table;
-  const rows = parsed.data.data.rows ?? parsed.data.data.table.rows ?? [];
+  const { data } = parsed.data;
+  const columns = data.columns ?? data.table?.columns;
+  if (!columns) {
+    return { leads: [], warning: "unexpected Airtable shared-view response shape" };
+  }
+  const rows = data.rows ?? data.table?.rows ?? [];
 
   const careersFieldName = mapping.careersUrlField ?? DEFAULT_CAREERS_FIELD;
   const careersCol = columns.find(
@@ -128,9 +138,10 @@ export function airtableRowsToLeads(
     return { leads: [], warning: `Airtable column "${careersFieldName}" not found` };
   }
 
+  // Company name comes from the explicit primary column when present, else the first column.
   const resolvedCompanyCol = mapping.companyField
     ? columns.find((c) => c.name.trim().toLowerCase() === mapping.companyField?.toLowerCase())
-    : columns[0];
+    : (columns.find((c) => c.id === data.primaryColumnId) ?? columns[0]);
   // Never name a company after its own careers-URL column (degenerate single-column case).
   const companyCol =
     resolvedCompanyCol && resolvedCompanyCol.id !== careersCol.id ? resolvedCompanyCol : undefined;
