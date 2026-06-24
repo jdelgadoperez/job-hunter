@@ -9,6 +9,7 @@ import type { ConnectorResult } from "./connectors/types";
 import { resolveAts } from "./resolve-ats";
 import { type SharedViewReader, airtableRowsToLeads } from "./sources/airtable";
 import type { CompanyLead } from "./sources/types";
+import { isUnscrapableHost } from "./unscrapable";
 
 export type DiscoverDeps = {
   fetcher: Fetcher;
@@ -30,6 +31,8 @@ export type DiscoverResult = {
   warnings: Warning[];
   /** The merged, de-duplicated company list this run scanned (directory + tracked). */
   companies: CompanyLead[];
+  /** Companies on hosts we don't scrape (LinkedIn/Indeed/…), surfaced for manual review. */
+  skipped: CompanyLead[];
 };
 
 const DEFAULT_CONCURRENCY = 4;
@@ -123,6 +126,11 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     if (resolved) {
       return resolved.connector.fetchPostings(resolved.boardToken, fetcher);
     }
+    // Hosts we don't scrape (LinkedIn/Indeed/…) would just be a ~30s headless timeout returning
+    // nothing — skip the render; they're surfaced for manual review via `skipped`.
+    if (isUnscrapableHost(lead.careersUrl)) {
+      return { ok: true, postings: [] };
+    }
     const postings = await browser.fetchPostings(lead.careersUrl, lead.company, renderer);
     return { ok: true, postings };
   };
@@ -157,5 +165,13 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     }
   }
 
-  return { postings: [...byId.values()], warnings, companies: leads };
+  const skipped = leads.filter((lead) => isUnscrapableHost(lead.careersUrl));
+  if (skipped.length > 0) {
+    warnings.push({
+      source: "directory",
+      message: `Skipped ${skipped.length} companies on sites we don't scrape (LinkedIn/Indeed) — review them manually.`,
+    });
+  }
+
+  return { postings: [...byId.values()], warnings, companies: leads, skipped };
 }
