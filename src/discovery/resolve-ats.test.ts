@@ -25,6 +25,13 @@ describe("resolveAts", () => {
     expect(resolved?.boardToken).toBe("acme");
   });
 
+  it("detects Workday on any tenant subdomain, passing the full URL as the token", () => {
+    const url = "https://genesys.wd1.myworkdayjobs.com/en-US/Genesys";
+    const resolved = resolveAts(url);
+    expect(resolved?.connector.source).toBe("workday");
+    expect(resolved?.boardToken).toBe(url);
+  });
+
   it("returns null for an unknown careers host", () => {
     expect(resolveAts("https://acme.com/careers")).toBeNull();
   });

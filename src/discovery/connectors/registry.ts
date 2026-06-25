@@ -2,6 +2,7 @@ import { AshbyConnector } from "./ashby";
 import { GreenhouseConnector } from "./greenhouse";
 import { LeverConnector } from "./lever";
 import type { AtsConnector } from "./types";
+import { WorkdayConnector } from "./workday";
 
 // Connectors are stateless, so a single shared instance each is enough — used by both URL
 // resolution (resolve-ats, by host) and liveness re-checks (fetch-liveness, by source), which
@@ -9,8 +10,13 @@ import type { AtsConnector } from "./types";
 export const greenhouseConnector = new GreenhouseConnector();
 export const leverConnector = new LeverConnector();
 export const ashbyConnector = new AshbyConnector();
+export const workdayConnector = new WorkdayConnector();
 
-/** ATS connectors keyed by their `source` (the value stamped onto every posting they produce). */
+/**
+ * ATS connectors keyed by their `source`, for liveness re-checks that re-fetch a board feed.
+ * Workday is intentionally absent: it takes a full careers URL (not a re-derivable board token),
+ * so its postings fall to the generic HTTP liveness re-check of the job URL instead.
+ */
 export const connectorBySource: Record<string, AtsConnector> = Object.fromEntries(
   [greenhouseConnector, leverConnector, ashbyConnector].map((connector) => [
     connector.source,
