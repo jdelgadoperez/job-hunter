@@ -72,3 +72,32 @@ export const WorkdayJobDetail = z
   })
   .passthrough();
 export type WorkdayJobDetail = z.infer<typeof WorkdayJobDetail>;
+
+// Rippling list — GET https://ats.rippling.com/api/v2/board/{slug}/jobs?page=&pageSize=
+// Like Workday, the list omits the description; `totalPages` drives pagination and each item
+// carries its own human-facing `url` and one-or-more `locations`.
+const RipplingJob = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    url: z.string(),
+    locations: z.array(z.object({ name: z.string() }).passthrough()).optional(),
+  })
+  .passthrough();
+
+export const RipplingFeed = z
+  .object({
+    items: z.array(RipplingJob),
+    totalPages: z.number().optional(),
+  })
+  .passthrough();
+export type RipplingFeed = z.infer<typeof RipplingFeed>;
+
+// Rippling job detail — GET https://ats.rippling.com/api/v2/board/{slug}/jobs/{id}
+// The full (HTML) description lives under `description.role`.
+export const RipplingJobDetail = z
+  .object({
+    description: z.object({ role: z.string().optional() }).passthrough(),
+  })
+  .passthrough();
+export type RipplingJobDetail = z.infer<typeof RipplingJobDetail>;
