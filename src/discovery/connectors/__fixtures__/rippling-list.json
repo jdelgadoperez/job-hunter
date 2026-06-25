@@ -1,0 +1,48 @@
+{
+  "items": [
+    {
+      "id": "c224bc39-251f-47ba-b6f8-45b187c40471",
+      "name": "Customer Engineer",
+      "url": "https://ats.rippling.com/just-appraised-jobs/jobs/c224bc39-251f-47ba-b6f8-45b187c40471",
+      "department": {
+        "name": "Customer Engineering"
+      },
+      "locations": [
+        {
+          "name": "Remote (United States)",
+          "country": "United States",
+          "countryCode": "US",
+          "state": "",
+          "stateCode": null,
+          "city": "",
+          "workplaceType": "REMOTE"
+        }
+      ],
+      "language": "en-US"
+    },
+    {
+      "id": "263be5d3-8e88-4aca-ae90-5c85e368d760",
+      "name": "Engineering Manager",
+      "url": "https://ats.rippling.com/just-appraised-jobs/jobs/263be5d3-8e88-4aca-ae90-5c85e368d760",
+      "department": {
+        "name": "Engineering (All)"
+      },
+      "locations": [
+        {
+          "name": "Remote (United States)",
+          "country": "United States",
+          "countryCode": "US",
+          "state": "",
+          "stateCode": null,
+          "city": "",
+          "workplaceType": "REMOTE"
+        }
+      ],
+      "language": "en-US"
+    }
+  ],
+  "page": 0,
+  "pageSize": 50,
+  "totalItems": 2,
+  "totalPages": 1
+}
