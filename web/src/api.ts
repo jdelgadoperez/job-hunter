@@ -114,6 +114,7 @@ export const api = {
       method: "DELETE",
     }),
   getCompanies: () => request<TrackedCompany[]>("/api/companies"),
+  getManualReviewCompanies: () => request<CompanyRef[]>("/api/companies/manual-review"),
   addCompany: (careersUrl: string, name?: string) =>
     request<TrackedCompany[]>("/api/companies", {
       method: "POST",

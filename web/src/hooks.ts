@@ -28,6 +28,13 @@ export function useCompanies() {
   return useQuery({ queryKey: ["companies"], queryFn: api.getCompanies });
 }
 
+export function useManualReviewCompanies() {
+  return useQuery({
+    queryKey: ["companies", "manual-review"],
+    queryFn: api.getManualReviewCompanies,
+  });
+}
+
 export function useAddCompany() {
   const qc = useQueryClient();
   return useMutation({

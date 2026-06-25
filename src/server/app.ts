@@ -1,3 +1,4 @@
+import { isUnscrapableHost } from "@app/discovery/unscrapable";
 import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
 import {
@@ -90,6 +91,14 @@ export function createApp(deps: ServerDeps): Hono {
   });
 
   app.get("/api/companies", (c) => c.json(repo.listTrackedCompanies()));
+
+  // Directory companies we don't auto-scan (LinkedIn/Indeed/…) — surfaced so the user can review
+  // them by hand rather than silently losing them.
+  app.get("/api/companies/manual-review", (c) =>
+    c.json(
+      repo.listDirectoryCompanies().filter((company) => isUnscrapableHost(company.careersUrl)),
+    ),
+  );
 
   // Track a company by its careers-page URL. Validated as an http(s) URL so a typo doesn't become
   // a phantom lead. Upserts by URL; returns the updated list.

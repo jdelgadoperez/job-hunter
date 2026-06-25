@@ -163,6 +163,18 @@ describe("companies", () => {
     expect(await json(res)).toEqual([{ careersUrl: "https://acme.com/careers", name: "Acme" }]);
   });
 
+  it("lists only un-scrapable directory companies for manual review", async () => {
+    const scanId = repo.startScan();
+    repo.recordDirectory(scanId, [
+      { careersUrl: "https://boards.greenhouse.io/acme", name: "Acme" },
+      { careersUrl: "https://www.linkedin.com/company/bigco/jobs/", name: "BigCo" },
+    ]);
+    const res = await makeApp().request("/api/companies/manual-review");
+    expect(await json(res)).toEqual([
+      { careersUrl: "https://www.linkedin.com/company/bigco/jobs/", name: "BigCo" },
+    ]);
+  });
+
   it("adds a company (201) and returns the updated list", async () => {
     const res = await makeApp().request("/api/companies", {
       method: "POST",
