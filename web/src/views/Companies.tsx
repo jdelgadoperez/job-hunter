@@ -1,9 +1,10 @@
 import { type FormEvent, useState } from "react";
 import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
-import { useAddCompany, useCompanies, useRemoveCompany } from "../hooks";
+import { useAddCompany, useCompanies, useManualReviewCompanies, useRemoveCompany } from "../hooks";
 
 export function Companies() {
   const companies = useCompanies();
+  const manualReview = useManualReviewCompanies();
   const addCompany = useAddCompany();
   const removeCompany = useRemoveCompany();
   const [url, setUrl] = useState("");
@@ -84,6 +85,31 @@ export function Companies() {
           ))}
         </div>
       )}
+
+      {manualReview.data && manualReview.data.length > 0 ? (
+        <Card>
+          <h2 className="font-semibold text-fg">Review manually ({manualReview.data.length})</h2>
+          <p className="mt-1 text-xs text-faint">
+            These directory companies post on sites we don't auto-scan (LinkedIn/Indeed) — open them
+            to check their roles yourself.
+          </p>
+          <ul className="mt-3 space-y-1">
+            {manualReview.data.map((c) => (
+              <li key={c.careersUrl} className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="truncate text-fg">{c.name ?? c.careersUrl}</span>
+                <a
+                  href={c.careersUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 text-link hover:underline"
+                >
+                  open ↗
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </section>
   );
 }

@@ -155,6 +155,18 @@ describe("incremental scans — directory diff", () => {
     expect(after.removedCompanies).toEqual([]);
     repo.close();
   });
+
+  it("listDirectoryCompanies returns the most recent snapshot's companies", () => {
+    const repo = newRepo();
+    repo.recordDirectory(repo.startScan(), [
+      { careersUrl: "https://a.com", name: "A" },
+      { careersUrl: "https://b.com", name: "B" },
+    ]);
+    // A later scan no longer lists B — it should drop out of the current snapshot.
+    repo.recordDirectory(repo.startScan(), [{ careersUrl: "https://a.com", name: "A" }]);
+    expect(repo.listDirectoryCompanies()).toEqual([{ careersUrl: "https://a.com", name: "A" }]);
+    repo.close();
+  });
 });
 
 describe("incremental scans — posting expiry", () => {

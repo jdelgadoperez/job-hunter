@@ -285,6 +285,24 @@ export class Repository {
     return info.changes > 0;
   }
 
+  /**
+   * The most recent directory snapshot's companies (those seen in the latest scan that recorded the
+   * directory). Used to surface companies that can't be auto-scanned for manual review.
+   */
+  listDirectoryCompanies(): CompanyRef[] {
+    const rows = this.db
+      .prepare(
+        `SELECT careers_url, name FROM companies
+         WHERE last_seen_scan = (SELECT MAX(last_seen_scan) FROM companies)
+         ORDER BY name, careers_url`,
+      )
+      .all() as { careers_url: string; name: string | null }[];
+    return rows.map((row) => ({
+      careersUrl: row.careers_url,
+      ...(row.name ? { name: row.name } : {}),
+    }));
+  }
+
   /** Open a new scan run and return its sequential id (drives the diff + posting expiry). */
   startScan(): number {
     const info = this.db.prepare("INSERT INTO scans (started_at) VALUES (datetime('now'))").run();
