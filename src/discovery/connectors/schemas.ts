@@ -63,3 +63,12 @@ export const WorkdayFeed = z
   })
   .passthrough();
 export type WorkdayFeed = z.infer<typeof WorkdayFeed>;
+
+// Workday job detail — GET https://{host}/wday/cxs/{tenant}/{site}{externalPath}
+// Carries the full (HTML) job description the list endpoint omits.
+export const WorkdayJobDetail = z
+  .object({
+    jobPostingInfo: z.object({ jobDescription: z.string().optional() }).passthrough(),
+  })
+  .passthrough();
+export type WorkdayJobDetail = z.infer<typeof WorkdayJobDetail>;
