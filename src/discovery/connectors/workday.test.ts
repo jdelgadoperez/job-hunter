@@ -5,6 +5,12 @@ import { WorkdayConnector, parseWorkdayUrl } from "./workday";
 
 const CAREERS = "https://genesys.wd1.myworkdayjobs.com/Genesys";
 const API = "https://genesys.wd1.myworkdayjobs.com/wday/cxs/genesys/Genesys/jobs";
+// Per-job detail endpoints (CXS path = jobs path minus "/jobs", plus the job's externalPath).
+const DETAIL_1 =
+  "https://genesys.wd1.myworkdayjobs.com/wday/cxs/genesys/Genesys/job/Remote/Senior-Software-Engineer_JR-100";
+const DETAIL_1_BODY = JSON.stringify({
+  jobPostingInfo: { jobDescription: "<p>We need strong TypeScript and React skills.</p>" },
+});
 
 const FEED = JSON.stringify({
   total: 2,
@@ -41,9 +47,11 @@ describe("parseWorkdayUrl", () => {
 });
 
 describe("WorkdayConnector", () => {
-  it("maps the CXS jobs feed into normalized postings", async () => {
+  it("maps the CXS jobs feed and pulls each posting's full description", async () => {
     const fetcher = new FakeFetcher({
       [API]: { statusCode: 200, finalUrl: API, bodyText: FEED },
+      // Job 1 has a detail page; job 2's is missing (404) to exercise the fallback.
+      [DETAIL_1]: { statusCode: 200, finalUrl: DETAIL_1, bodyText: DETAIL_1_BODY },
     });
 
     const result = await new WorkdayConnector().fetchPostings(CAREERS, fetcher);
@@ -58,11 +66,12 @@ describe("WorkdayConnector", () => {
       "https://genesys.wd1.myworkdayjobs.com/Genesys/job/Remote/Senior-Software-Engineer_JR-100",
     );
     expect(first?.location).toBe("Remote, US");
-    expect(first?.description).toContain("Remote, US");
+    // Description now comes from the detail endpoint, not just title/location.
+    expect(first?.description).toContain("TypeScript");
     expect(first?.id).toBe(
       makePostingId({ company: "genesys", title: first?.title ?? "", url: first?.url ?? "" }),
     );
-    // A posting with no locationsText still gets a title-based description.
+    // Job 2's detail 404s, so it falls back to a title-based description.
     expect(second?.description).toBe("Product Manager");
   });
 
