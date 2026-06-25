@@ -1,0 +1,31 @@
+{
+  "totalCount": 2,
+  "opportunities": [
+    {
+      "Id": "6c330bad-375e-40ba-a295-5afaf638baa3",
+      "Title": "Business Advisor (Marketing Services Account Manager) - Perth WA",
+      "BriefDescription": "Love building relationships and helping businesses grow? Thryv is looking for a Sales Account Manager to manage and grow a portfolio of 150+ SMB clients across your region. You'll be out in the field every day, presenting tailored digital marketing solutions — SEO, SEM, social, websites and more — that deliver real results for local businesses. You bring a consultative approach, digital marketing ",
+      "Locations": [
+        {
+          "LocalizedDescription": "WFA - Western Australia",
+          "Address": {
+            "City": "Virtual"
+          }
+        }
+      ]
+    },
+    {
+      "Id": "b3c65a9d-062a-45e8-bca4-84f1891b6bca",
+      "Title": "Business Development Manager | Drive Growth in Gippsland VIC",
+      "BriefDescription": "Are you a born hunter who thrives on building something from nothing? Thryv is looking for a driven Business Advisor to join our field sales team across Australia and New Zealand. You'll be out in the market every day — door knocking, cold calling and meeting business owners face-to-face — introducing them to our award-winning SaaS platform that helps SMBs save time, communicate better and get pai",
+      "Locations": [
+        {
+          "LocalizedDescription": "WFA - Victoria",
+          "Address": {
+            "City": "Virtual"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "totalCount": 2
+  },
+  "result": [
+    {
+      "id": "878",
+      "jobOpeningName": "Legal and Business Affairs Manager",
+      "atsLocation": {
+        "country": "Canada",
+        "state": "Ontario",
+        "province": null,
+        "city": "Remote"
+      },
+      "location": {
+        "city": null,
+        "state": null
+      }
+    },
+    {
+      "id": "907",
+      "jobOpeningName": "Marketing and Communications Manager",
+      "atsLocation": {
+        "country": "Canada",
+        "state": "Ontario",
+        "province": null,
+        "city": "Remote"
+      },
+      "location": {
+        "city": null,
+        "state": null
+      }
+    }
+  ]
+}

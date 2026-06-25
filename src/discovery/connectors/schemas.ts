@@ -157,3 +157,87 @@ export const SmartRecruitersDetail = z
   })
   .passthrough();
 export type SmartRecruitersDetail = z.infer<typeof SmartRecruitersDetail>;
+
+// BambooHR list — GET https://{slug}.bamboohr.com/careers/list
+// The list omits the description; `atsLocation` is a structured location whose parts we join.
+const BambooHrAtsLocation = z
+  .object({
+    city: z.string().nullish(),
+    state: z.string().nullish(),
+    country: z.string().nullish(),
+  })
+  .passthrough();
+
+const BambooHrJob = z
+  .object({
+    id: z.string(),
+    jobOpeningName: z.string(),
+    atsLocation: BambooHrAtsLocation.optional(),
+  })
+  .passthrough();
+
+export const BambooHrFeed = z.object({ result: z.array(BambooHrJob) }).passthrough();
+export type BambooHrFeed = z.infer<typeof BambooHrFeed>;
+
+// BambooHR job detail — GET https://{slug}.bamboohr.com/careers/{id}/detail
+// Carries the full (HTML) `description` and the canonical `jobOpeningShareUrl`.
+export const BambooHrDetail = z
+  .object({
+    result: z
+      .object({
+        jobOpening: z
+          .object({
+            description: z.string().optional(),
+            jobOpeningShareUrl: z.string().optional(),
+          })
+          .passthrough(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+export type BambooHrDetail = z.infer<typeof BambooHrDetail>;
+
+// UKG / UltiPro list — POST https://recruiting{N}.ultipro.com/{tenant}/JobBoard/{guid}/JobBoardView/LoadSearchResults
+// `opportunitySearch.{Top,Skip}` drives pagination. The list carries a `BriefDescription` (a real
+// summary, not a snippet), so this is a single-call feed connector — the full description would
+// require rendering the SPA detail page, which we skip. `Locations[].LocalizedDescription` is the
+// display location.
+const UkgLocation = z
+  .object({
+    LocalizedDescription: z.string().nullish(),
+    Address: z.object({ City: z.string().nullish() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const UkgOpportunity = z
+  .object({
+    Id: z.string(),
+    Title: z.string(),
+    BriefDescription: z.string().nullish(),
+    Locations: z.array(UkgLocation).optional(),
+  })
+  .passthrough();
+
+export const UkgFeed = z
+  .object({
+    totalCount: z.number().optional(),
+    opportunities: z.array(UkgOpportunity),
+  })
+  .passthrough();
+export type UkgFeed = z.infer<typeof UkgFeed>;
+
+// Breezy list — GET https://{slug}.breezy.hr/json
+// The list omits the description; each item carries its own `url` (the position page, whose embedded
+// JSON-LD JobPosting holds the description, fetched over plain HTTP). `location.name` is the display
+// location.
+const BreezyJob = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    url: z.string(),
+    location: z.object({ name: z.string().nullish() }).passthrough().optional(),
+  })
+  .passthrough();
+
+export const BreezyFeed = z.array(BreezyJob);
+export type BreezyFeed = z.infer<typeof BreezyFeed>;
