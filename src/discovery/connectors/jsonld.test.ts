@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { makePostingId } from "../posting-id";
-import { extractJsonLdPostings } from "./jsonld";
+import { extractJsonLdDescription, extractJsonLdPostings } from "./jsonld";
 
 async function fixtureHtml(): Promise<string> {
   const path = fileURLToPath(new URL("./__fixtures__/jobposting.html", import.meta.url));
@@ -59,5 +59,25 @@ describe("extractJsonLdPostings", () => {
     })}</script>`;
     const postings = extractJsonLdPostings(html, PAGE_URL, "Acme");
     expect(postings.map((p) => p.title)).toEqual(["Analyst"]);
+  });
+});
+
+describe("extractJsonLdDescription", () => {
+  it("returns the description of the first JobPosting on the page", () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Engineer",
+      description: "  We need TypeScript skills.  ",
+    })}</script>`;
+    expect(extractJsonLdDescription(html)).toBe("We need TypeScript skills.");
+  });
+
+  it("returns undefined when no JobPosting (or no description) is present", () => {
+    expect(extractJsonLdDescription("<html><body>nothing</body></html>")).toBeUndefined();
+    const noDesc = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Engineer",
+    })}</script>`;
+    expect(extractJsonLdDescription(noDesc)).toBeUndefined();
   });
 });

@@ -64,16 +64,8 @@ function collectJobPostings(value: unknown, out: JsonLdNode[]): void {
   }
 }
 
-/**
- * Deterministic, network-free core of the browser fallback: find every
- * `schema.org/JobPosting` embedded as JSON-LD in a page and normalize it. A block with
- * malformed JSON, or a posting missing a title, is skipped without throwing.
- */
-export function extractJsonLdPostings(
-  html: string,
-  pageUrl: string,
-  company: string,
-): JobPosting[] {
+/** Collect every JobPosting JSON-LD node embedded in a page (shared by the helpers below). */
+function jobPostingNodes(html: string): JsonLdNode[] {
   const nodes: JsonLdNode[] = [];
   for (const match of html.matchAll(SCRIPT_BLOCK)) {
     const block = match[1];
@@ -86,10 +78,38 @@ export function extractJsonLdPostings(
       // A malformed JSON-LD block is skipped, never fatal.
     }
   }
+  return nodes;
+}
 
+/**
+ * Pull just the `description` from the first JobPosting JSON-LD node on a page. Used by connectors
+ * (e.g. Breezy) whose JSON list omits the description but whose position pages embed it as JSON-LD,
+ * so the description can be read over plain HTTP instead of a full browser render. Returns undefined
+ * when no JobPosting / description is present.
+ */
+export function extractJsonLdDescription(html: string): string | undefined {
+  for (const node of jobPostingNodes(html)) {
+    const description = asString(node.description)?.trim();
+    if (description) {
+      return description;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Deterministic, network-free core of the browser fallback: find every
+ * `schema.org/JobPosting` embedded as JSON-LD in a page and normalize it. A block with
+ * malformed JSON, or a posting missing a title, is skipped without throwing.
+ */
+export function extractJsonLdPostings(
+  html: string,
+  pageUrl: string,
+  company: string,
+): JobPosting[] {
   const fetchedAt = new Date();
   const postings: JobPosting[] = [];
-  for (const node of nodes) {
+  for (const node of jobPostingNodes(html)) {
     const title = asString(node.title);
     if (!title) {
       continue;

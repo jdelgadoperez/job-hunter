@@ -49,10 +49,35 @@ describe("resolveAts", () => {
     expect(resolved?.boardToken).toBe("Freshworks");
   });
 
+  it("detects BambooHR, taking the subdomain as the token", () => {
+    const resolved = resolveAts("https://acme.bamboohr.com/careers");
+    expect(resolved?.connector.source).toBe("bamboohr");
+    expect(resolved?.boardToken).toBe("acme");
+  });
+
+  it("detects Breezy, taking the subdomain as the token", () => {
+    const resolved = resolveAts("https://acme.breezy.hr/");
+    expect(resolved?.connector.source).toBe("breezy");
+    expect(resolved?.boardToken).toBe("acme");
+  });
+
+  it("does not treat a subdomain-ATS apex or reserved subdomain as a board", () => {
+    expect(resolveAts("https://breezy.hr/")).toBeNull();
+    expect(resolveAts("https://www.breezy.hr/attract")).toBeNull();
+    expect(resolveAts("https://bamboohr.com/")).toBeNull();
+  });
+
   it("detects Workday on any tenant subdomain, passing the full URL as the token", () => {
     const url = "https://genesys.wd1.myworkdayjobs.com/en-US/Genesys";
     const resolved = resolveAts(url);
     expect(resolved?.connector.source).toBe("workday");
+    expect(resolved?.boardToken).toBe(url);
+  });
+
+  it("detects UKG/UltiPro, passing the full URL as the token", () => {
+    const url = "https://recruiting.ultipro.com/ACME1000/JobBoard/abc-123/?q=&o=postedDateDesc";
+    const resolved = resolveAts(url);
+    expect(resolved?.connector.source).toBe("ukg");
     expect(resolved?.boardToken).toBe(url);
   });
 
