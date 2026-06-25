@@ -25,6 +25,12 @@ describe("resolveAts", () => {
     expect(resolved?.boardToken).toBe("acme");
   });
 
+  it("detects Rippling, taking the board slug as the token", () => {
+    const resolved = resolveAts("https://ats.rippling.com/acme/jobs");
+    expect(resolved?.connector.source).toBe("rippling");
+    expect(resolved?.boardToken).toBe("acme");
+  });
+
   it("detects Workday on any tenant subdomain, passing the full URL as the token", () => {
     const url = "https://genesys.wd1.myworkdayjobs.com/en-US/Genesys";
     const resolved = resolveAts(url);

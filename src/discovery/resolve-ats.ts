@@ -2,6 +2,7 @@ import {
   ashbyConnector,
   greenhouseConnector,
   leverConnector,
+  ripplingConnector,
   workdayConnector,
 } from "./connectors/registry";
 import type { AtsConnector } from "./connectors/types";
@@ -43,6 +44,9 @@ export function resolveAts(careersUrl: string): ResolvedAts | null {
   }
   if (host === "jobs.ashbyhq.com") {
     return { connector: ashbyConnector, boardToken: token };
+  }
+  if (host === "ats.rippling.com") {
+    return { connector: ripplingConnector, boardToken: token };
   }
 
   return null;
