@@ -31,6 +31,24 @@ describe("resolveAts", () => {
     expect(resolved?.boardToken).toBe("acme");
   });
 
+  it("detects Recruitee, taking the subdomain as the token", () => {
+    const resolved = resolveAts("https://acme.recruitee.com/");
+    expect(resolved?.connector.source).toBe("recruitee");
+    expect(resolved?.boardToken).toBe("acme");
+  });
+
+  it("does not treat the Recruitee apex or reserved subdomains as a board", () => {
+    expect(resolveAts("https://recruitee.com/")).toBeNull();
+    expect(resolveAts("https://www.recruitee.com/")).toBeNull();
+    expect(resolveAts("https://support.recruitee.com/en/")).toBeNull();
+  });
+
+  it("detects SmartRecruiters, taking the company id as the token", () => {
+    const resolved = resolveAts("https://careers.smartrecruiters.com/Freshworks");
+    expect(resolved?.connector.source).toBe("smartrecruiters");
+    expect(resolved?.boardToken).toBe("Freshworks");
+  });
+
   it("detects Workday on any tenant subdomain, passing the full URL as the token", () => {
     const url = "https://genesys.wd1.myworkdayjobs.com/en-US/Genesys";
     const resolved = resolveAts(url);

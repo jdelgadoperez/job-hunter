@@ -2,7 +2,9 @@ import {
   ashbyConnector,
   greenhouseConnector,
   leverConnector,
+  recruiteeConnector,
   ripplingConnector,
+  smartRecruitersConnector,
   workdayConnector,
 } from "./connectors/registry";
 import type { AtsConnector } from "./connectors/types";
@@ -31,6 +33,17 @@ export function resolveAts(careersUrl: string): ResolvedAts | null {
     return { connector: workdayConnector, boardToken: careersUrl };
   }
 
+  // Recruitee puts the board slug in the subdomain (`{slug}.recruitee.com`), not the path. The bare
+  // apex (`recruitee.com`, `www.recruitee.com`, `support.recruitee.com`) is the platform site, not a
+  // board, so require a non-reserved subdomain.
+  if (host.endsWith(".recruitee.com")) {
+    const subdomain = host.slice(0, -".recruitee.com".length);
+    if (subdomain && subdomain !== "www" && subdomain !== "support") {
+      return { connector: recruiteeConnector, boardToken: subdomain };
+    }
+    return null;
+  }
+
   const token = parsed.pathname.split("/").filter(Boolean)[0];
   if (!token) {
     return null;
@@ -47,6 +60,9 @@ export function resolveAts(careersUrl: string): ResolvedAts | null {
   }
   if (host === "ats.rippling.com") {
     return { connector: ripplingConnector, boardToken: token };
+  }
+  if (host === "careers.smartrecruiters.com") {
+    return { connector: smartRecruitersConnector, boardToken: token };
   }
 
   return null;

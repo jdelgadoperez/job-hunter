@@ -101,3 +101,59 @@ export const RipplingJobDetail = z
   })
   .passthrough();
 export type RipplingJobDetail = z.infer<typeof RipplingJobDetail>;
+
+// Recruitee — GET https://{slug}.recruitee.com/api/offers/
+// The list already carries the full (HTML) description, so this is a simple feed (no detail fetch).
+const RecruiteeOffer = z
+  .object({
+    title: z.string(),
+    careers_url: z.string(),
+    description: z.string().optional(),
+    location: z.string().optional(),
+  })
+  .passthrough();
+
+export const RecruiteeFeed = z.object({ offers: z.array(RecruiteeOffer) }).passthrough();
+export type RecruiteeFeed = z.infer<typeof RecruiteeFeed>;
+
+// SmartRecruiters list — GET https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit=&offset=
+// The list omits the description; `totalFound` drives offset pagination. Location is a structured
+// object whose `fullLocation` is the display string.
+const SmartRecruitersPosting = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    location: z.object({ fullLocation: z.string().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
+export const SmartRecruitersFeed = z
+  .object({
+    totalFound: z.number().optional(),
+    content: z.array(SmartRecruitersPosting),
+  })
+  .passthrough();
+export type SmartRecruitersFeed = z.infer<typeof SmartRecruitersFeed>;
+
+// SmartRecruiters job detail — GET https://api.smartrecruiters.com/v1/companies/{slug}/postings/{id}
+// The full (HTML) text lives under `jobAd.sections.{jobDescription,qualifications}.text`; `postingUrl`
+// is the canonical human-facing posting link (absent from the list).
+const SmartRecruitersSection = z.object({ text: z.string().optional() }).passthrough();
+
+export const SmartRecruitersDetail = z
+  .object({
+    postingUrl: z.string().optional(),
+    jobAd: z
+      .object({
+        sections: z
+          .object({
+            jobDescription: SmartRecruitersSection.optional(),
+            qualifications: SmartRecruitersSection.optional(),
+          })
+          .passthrough(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+export type SmartRecruitersDetail = z.infer<typeof SmartRecruitersDetail>;
