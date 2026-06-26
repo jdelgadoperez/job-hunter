@@ -34,6 +34,20 @@ find it.
 The company left the public directory (or you stopped tracking it). Roles already found stay until
 they close on their own.
 
+## Tracking your own companies
+
+Want a company that isn't in the public directory? Add it and it'll be searched alongside everything
+else. The easiest way is the dashboard's **Companies** tab, but you can also do it from the terminal:
+
+```bash
+npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
+npm run cli -- track list
+npm run cli -- track remove https://boards.greenhouse.io/acme
+```
+
+Use the company's careers-page URL. Greenhouse, Lever, and Ashby pages are read quickly through
+their public feeds; any other careers page is opened in a browser and read for its job listings.
+
 ## Privacy
 
 Everything runs on your machine. Your resume and matches live in a single file on your computer. The
