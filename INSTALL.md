@@ -115,7 +115,7 @@ npm run cli -- scan
 npm run cli -- list --min-score 70
 ```
 
-See **[docs/usage.md](docs/usage.md)** for the full command guide and **[README](README.md)** for an
+See the **[user guide](docs/guide/index.md)** for the full walkthrough and **[README](README.md)** for an
 overview.
 
 ## Troubleshooting
