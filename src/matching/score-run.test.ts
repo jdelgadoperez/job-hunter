@@ -1,0 +1,211 @@
+import type { JobPosting, MatchResult, SkillProfile, Warning } from "@app/domain/types";
+import type { ScoringCandidate } from "@app/storage/repository";
+import { describe, expect, it } from "vitest";
+import { LlmTriager } from "./llm-triager";
+import { type ScoreOptions, type ScoreRepo, runScoreRun } from "./score-run";
+import { FakeTriageClient } from "./triage-client";
+
+const profile: SkillProfile = { skills: ["ts"], roleKeywords: [], categories: [] };
+
+function posting(id: string, title: string, location?: string): JobPosting {
+  return {
+    id,
+    company: "acme",
+    title,
+    url: `https://example.test/${id}`,
+    source: "test",
+    description: `${title} description`,
+    ...(location ? { location } : {}),
+    fetchedAt: new Date("2026-06-26T00:00:00Z"),
+  };
+}
+
+function candidate(
+  id: string,
+  title: string,
+  heuristicScore: number,
+  opts: { location?: string; alreadyLlmScored?: boolean } = {},
+): ScoringCandidate {
+  return {
+    posting: posting(id, title, opts.location),
+    heuristicScore,
+    alreadyLlmScored: opts.alreadyLlmScored ?? false,
+  };
+}
+
+/** In-memory ScoreRepo capturing saved results. */
+function fakeRepo(candidates: ScoringCandidate[]): {
+  repo: ScoreRepo;
+  saved: { id: string; result: MatchResult; scorer: "heuristic" | "llm" }[];
+} {
+  const saved: { id: string; result: MatchResult; scorer: "heuristic" | "llm" }[] = [];
+  const repo: ScoreRepo = {
+    countLivePostings: () => candidates.length,
+    listPostingsForScoring: ({ minHeuristic }) =>
+      candidates.filter((c) => c.heuristicScore >= minHeuristic),
+    saveMatchResult: (id, result, scorer) => saved.push({ id, result, scorer }),
+  };
+  return { repo, saved };
+}
+
+const baseOptions: ScoreOptions = {
+  minHeuristic: 30,
+  limit: 100,
+  remoteOnly: false,
+  rescore: false,
+  dryRun: false,
+  batchSize: 40,
+  cost: { perTriageTitleUsd: 0.002, perDeepScoreUsd: 0.03 },
+};
+
+/** A Scorer that returns a fixed score derived from the posting id length (deterministic, no hardcode). */
+const deepScorer = {
+  score: (_p: SkillProfile, posting: JobPosting): MatchResult => ({
+    score: posting.title.length,
+    matchedSkills: [],
+    missingSkills: [],
+    rationale: "deep",
+  }),
+};
+
+function keepAllTriager(): LlmTriager {
+  // FakeTriageClient keeping every id in the batch.
+  const client = new FakeTriageClient((request) => ({
+    decisions: request.user
+      .split("\n")
+      .filter((line) => line.includes("id="))
+      .map((line) => {
+        const id = line.split("id=")[1]?.split(" ")[0] ?? "";
+        return { id, keep: true, reason: "keep" };
+      }),
+  }));
+  return new LlmTriager(client, baseOptions.batchSize);
+}
+
+describe("runScoreRun", () => {
+  it("gates by heuristic floor, caps by limit, and deep-scores survivors", async () => {
+    const candidates = [
+      candidate("a", "Staff Engineer", 80),
+      candidate("b", "Backend Engineer", 45),
+      candidate("c", "Sales Rep", 10), // below floor
+    ];
+    const { repo, saved } = fakeRepo(candidates);
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, limit: 1 },
+    });
+
+    expect(outcome.counts.afterHeuristic).toBe(2);
+    expect(outcome.counts.afterCap).toBe(1);
+    // Only the top-by-heuristic ("a") is deep-scored, tagged llm.
+    expect(saved).toEqual([
+      {
+        id: "a",
+        result: {
+          score: "Staff Engineer".length,
+          matchedSkills: [],
+          missingSkills: [],
+          rationale: "deep",
+        },
+        scorer: "llm",
+      },
+    ]);
+  });
+
+  it("skips already-LLM-scored postings unless rescore is set", async () => {
+    const candidates = [candidate("a", "Staff Engineer", 80, { alreadyLlmScored: true })];
+    const skip = await runScoreRun({
+      repo: fakeRepo(candidates).repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: baseOptions,
+    });
+    expect(skip.counts.alreadyScoredSkipped).toBe(1);
+    expect(skip.counts.deepScored).toBe(0);
+
+    const forced = fakeRepo(candidates);
+    const rescore = await runScoreRun({
+      repo: forced.repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, rescore: true },
+    });
+    expect(rescore.counts.deepScored).toBe(1);
+    expect(forced.saved.length).toBe(1);
+  });
+
+  it("drops non-remote postings when remoteOnly is on (unknown location kept)", async () => {
+    const candidates = [
+      candidate("remote", "Engineer A", 70, { location: "Remote - US" }),
+      candidate("onsite", "Engineer B", 70, { location: "London, UK" }),
+      candidate("unknown", "Engineer C", 70),
+    ];
+    const { repo, saved } = fakeRepo(candidates);
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true },
+    });
+
+    expect(outcome.counts.afterRemote).toBe(2);
+    expect(saved.map((s) => s.id).sort()).toEqual(["remote", "unknown"]);
+  });
+
+  it("dry-run spends nothing: no triage calls, no saves, estimate populated", async () => {
+    const candidates = [candidate("a", "Staff Engineer", 80)];
+    const { repo, saved } = fakeRepo(candidates);
+    // A triager whose client throws — proves dry-run never calls it.
+    const throwingTriager = new LlmTriager(
+      new FakeTriageClient(new Error("should not be called")),
+      40,
+    );
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: throwingTriager,
+      scorer: deepScorer,
+      options: { ...baseOptions, dryRun: true },
+    });
+
+    expect(saved).toEqual([]);
+    expect(outcome.counts.deepScored).toBe(0);
+    expect(outcome.estimate.deepScores).toBe(1);
+    expect(outcome.estimate.totalUsd).toBeGreaterThan(0);
+  });
+
+  it("aborts deep-scoring on a usage-limit error and reports it", async () => {
+    const candidates = [candidate("a", "Engineer A", 80), candidate("b", "Engineer B", 70)];
+    const { repo, saved } = fakeRepo(candidates);
+    const warnings: Warning[] = [];
+    const limitScorer = {
+      score: () => {
+        throw new Error(
+          '400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits."}}',
+        );
+      },
+    };
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: limitScorer,
+      options: baseOptions,
+      onWarning: (w) => warnings.push(w),
+    });
+
+    expect(outcome.abortedOnLimit).toBe(true);
+    expect(saved.length).toBe(0);
+    expect(warnings.some((w) => /usage limit|abort/i.test(w.message))).toBe(true);
+  });
+});
