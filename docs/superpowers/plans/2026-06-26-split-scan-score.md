@@ -36,6 +36,7 @@
   - `Repository.saveMatchResult(postingId: string, result: MatchResult, scorer?: "heuristic" | "llm"): void` — `scorer` defaults to `"heuristic"`.
   - `type ScoringCandidate = { posting: JobPosting; heuristicScore: number; alreadyLlmScored: boolean }`
   - `Repository.listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[]` — non-expired postings that HAVE a `match_results` row with `score >= minHeuristic`, each tagged with whether its row was written by the LLM (`scorer = 'llm'`), ordered by score desc then title.
+  - `Repository.countLivePostings(): number` — count of non-expired postings (`SELECT COUNT(*) FROM postings WHERE expired_at IS NULL`). Drives the dry-run's true "In DB" total.
 
 - [ ] **Step 1: Find the repository test file and the match_results assertions**
 
@@ -94,6 +95,18 @@ describe("scorer tagging + listPostingsForScoring", () => {
     repo.markPostingExpired(p.id);
 
     expect(repo.listPostingsForScoring({ minHeuristic: 30 })).toEqual([]);
+    repo.close();
+  });
+
+  it("counts only non-expired postings", () => {
+    const repo = new Repository(":memory:");
+    const live = makePosting("live", "Backend Engineer");
+    const gone = makePosting("gone", "Frontend Engineer");
+    repo.savePosting(live);
+    repo.savePosting(gone);
+    repo.markPostingExpired(gone.id);
+
+    expect(repo.countLivePostings()).toBe(1);
     repo.close();
   });
 });
@@ -222,6 +235,14 @@ listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[] {
     heuristicScore: row.score,
     alreadyLlmScored: row.scorer === "llm",
   }));
+}
+
+/** Count of non-expired postings — the dry-run's "In DB" total before any filtering. */
+countLivePostings(): number {
+  const row = this.db
+    .prepare("SELECT COUNT(*) AS n FROM postings WHERE expired_at IS NULL")
+    .get() as { n: number };
+  return row.n;
 }
 ```
 
@@ -957,7 +978,7 @@ git commit -m "feat(matching): add remote-only setting key and resolver"
   - `type ScoreOptions = { minHeuristic: number; limit: number; remoteOnly: boolean; rescore: boolean; dryRun: boolean; batchSize: number; cost: { perTriageTitleUsd: number; perDeepScoreUsd: number } }`.
   - `type ScoreStageCounts = { inDb: number; afterRemote: number; afterHeuristic: number; afterCap: number; alreadyScoredSkipped: number; triageTitles: number; deepScored: number }`.
   - `type ScoreOutcome = { counts: ScoreStageCounts; estimate: CostEstimate; warnings: Warning[]; abortedOnLimit: boolean }`.
-  - `type ScoreRepo` — structural: `{ listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[]; saveMatchResult(id: string, result: MatchResult, scorer: "heuristic" | "llm"): void }`.
+  - `type ScoreRepo` — structural: `{ countLivePostings(): number; listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[]; saveMatchResult(id: string, result: MatchResult, scorer: "heuristic" | "llm"): void }`.
   - `async function runScoreRun(deps: { repo: ScoreRepo; profile: SkillProfile; triager: LlmTriager; scorer: Scorer; options: ScoreOptions; onWarning?: (w: Warning) => void }): Promise<ScoreOutcome>`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1007,6 +1028,7 @@ function fakeRepo(candidates: ScoringCandidate[]): {
 } {
   const saved: { id: string; result: MatchResult; scorer: "heuristic" | "llm" }[] = [];
   const repo: ScoreRepo = {
+    countLivePostings: () => candidates.length,
     listPostingsForScoring: ({ minHeuristic }) =>
       candidates.filter((c) => c.heuristicScore >= minHeuristic),
     saveMatchResult: (id, result, scorer) => saved.push({ id, result, scorer }),
@@ -1228,6 +1250,7 @@ export type ScoreOutcome = {
 
 /** Structural repo subset score-run needs — keeps the orchestrator unit-testable without SQLite. */
 export type ScoreRepo = {
+  countLivePostings(): number;
   listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[];
   saveMatchResult(id: string, result: MatchResult, scorer: "heuristic" | "llm"): void;
 };
@@ -1254,11 +1277,12 @@ export async function runScoreRun(deps: {
     onWarning?.(warning);
   };
 
+  // True total of non-expired postings in the DB, before any filtering.
+  const inDb = repo.countLivePostings();
+
   // Heuristic gate is applied by the query (score >= minHeuristic).
   const gated = repo.listPostingsForScoring({ minHeuristic: options.minHeuristic });
 
-  // The DB total at/above the floor is the closest cheap proxy for "in DB"; the remote filter and
-  // cap then narrow it. (A separate count of every posting isn't needed for the plan.)
   const afterRemote = options.remoteOnly
     ? gated.filter((c) => isRemote(c.posting.location))
     : gated;
@@ -1269,7 +1293,7 @@ export async function runScoreRun(deps: {
   const alreadyScoredSkipped = capped.length - eligible.length;
 
   const counts: ScoreStageCounts = {
-    inDb: gated.length,
+    inDb,
     afterRemote: afterRemote.length,
     afterHeuristic: gated.length,
     afterCap: capped.length,
@@ -1399,8 +1423,10 @@ function outcome(overrides: Partial<ScoreOutcome["counts"]> = {}): ScoreOutcome 
 }
 
 describe("formatScorePlan", () => {
-  it("shows the cap, skipped count, and estimated total for a dry run", () => {
-    const text = formatScorePlan(outcome(), { remoteOnly: true, limit: 100, dryRun: true });
+  it("shows the db total, cap, skipped count, and estimated total for a dry run", () => {
+    const result = outcome();
+    const text = formatScorePlan(result, { remoteOnly: true, limit: 100, dryRun: true });
+    expect(text).toContain(String(result.counts.inDb));
     expect(text).toContain("100");
     expect(text).toContain("18");
     expect(text).toContain("2.62");
@@ -1441,6 +1467,7 @@ export function formatScorePlan(
   const { counts, estimate } = outcome;
   const lines = [
     style.bold(opts.dryRun ? "Score plan (dry run)" : "Score run"),
+    `  In DB:              ${counts.inDb} postings`,
     `  Heuristic-gated:    ${counts.afterHeuristic}`,
     `  Remote filter:      ${counts.afterRemote} remain   (remote_only=${opts.remoteOnly ? "on" : "off"})`,
     `  Cap (--limit ${opts.limit}):   ${counts.afterCap} selected`,
