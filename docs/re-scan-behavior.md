@@ -217,4 +217,5 @@ untracked it). Its already-discovered postings remain until they expire on their
 
 > **TODO — user-facing wiki.** This doc is engineering-oriented. A friendlier, task-oriented wiki
 > (getting started, "why is my match list empty?", scoring explained, FAQ) would help non-technical
-> users understand the tool. Tracked as a backlog item — see the linked issue.
+> users understand the tool. Tracked in
+> [#41](https://github.com/jdelgadoperez/job-hunter/issues/41).
