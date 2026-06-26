@@ -28,6 +28,13 @@ let each client skip straight to phase 2 against that feed. A user's "scan" stop
 internet* and becomes *pull a JSON feed and score it* — seconds of fetch instead of minutes of
 crawl, and zero duplicated crawling across the user base.
 
+> **Enabling work in flight.** Decoupling these two phases into separate steps is being done
+> independently (a parallel work thread is splitting `scan` and `score` so sourcing writes postings
+> and scoring reads them, rather than interleaving in one pass). That decoupling is the precondition
+> for everything below — once `score` reads postings from the store instead of from an in-process
+> crawl, pointing it at a *remote* feed becomes a source swap rather than a redesign. The rest of
+> this doc assumes that split has landed (see "A phased path → Phase 0.5").
+
 ## What's shared vs. per-user (the data split)
 
 The current SQLite schema (`src/storage/schema.ts`) splits cleanly along this seam:
@@ -124,23 +131,47 @@ stay local, so we get the speed-up without weakening privacy.
 
 ## Where the current code already fits
 
-This isn't a rewrite — the seams already exist:
+This isn't a rewrite — the seams already exist, and the in-flight scan/score split widens the most
+important one:
 
+- **The decoupled `scan`/`score` steps** (landing in parallel) are the key seam. Today `runScan`
+  (`src/cli/commands.ts`) interleaves discover → save → score in a single pass; once that's split so
+  `score` reads postings from the store rather than from the just-finished crawl, the *only* thing
+  Phase 2 changes is **where `score` reads postings from** (local SQLite → remote feed). No new
+  coupling to unwind.
 - **`discover()`** (`src/discovery/discover.ts`) is already a pure-ish pipeline taking injected
   `fetcher` / `renderer` / `sharedViewReader`. The scanner worker calls it as-is and writes results
-  to Postgres instead of SQLite.
+  to Postgres instead of SQLite — it becomes the body of the standalone `scan` step, just pointed at
+  a shared store.
 - **`Repository`** (`src/storage/repository.ts`) is the single DB seam. A `PostgresRepository`
   implementing the same interface (or a thin remote-feed client) lets the client read shared postings
-  with minimal churn — `runScan` wouldn't need to know whether postings came from a local crawl or a
-  remote feed.
+  with minimal churn — the decoupled `score` step wouldn't need to know whether postings came from a
+  local crawl or a remote feed.
 - **Incremental scan + expiry** (`scans`, `last_seen_scan`, `expired_at`) port directly to Postgres;
   the diffing logic is dialect-agnostic.
 - **Hono server** (`src/server/app.ts`) already defines the API surface; the same routes can back a
   hosted read API.
 
+### Two things to keep aligned across the threads
+
+For the remote feed to drop in later without reworking the scoring step, the in-flight split should
+preserve:
+
+- **Stable posting identity.** `score` keys off `postings.id` (`src/discovery/posting-id.ts`). If the
+  ID derivation stays identical whether a posting came from a local crawl or the shared feed, scores
+  and `user_actions` stay attached across the source swap. Diverging IDs would orphan saved/dismissed
+  state when a client moves to the feed.
+- **`score` tolerating postings it didn't just fetch.** The decoupled step must handle postings that
+  are already scored (re-score vs. skip) and ones that have since **expired** between scan and score —
+  exactly the states a periodically-refreshed shared feed produces.
+
 ## A phased path
 
 - **Phase 0 — today.** Local-first SQLite; each client crawls independently.
+- **Phase 0.5 — decouple `scan` from `score` (in flight, separate thread).** Split the single
+  interleaved pass so `scan` writes postings to the store and `score` reads them back independently.
+  This is local-only and ships value on its own (re-score without re-crawling), but it's also the
+  precondition that turns Phases 1–2 into a source swap rather than a redesign.
 - **Phase 1 — shared store + scheduled scanner.** Stand up Supabase Postgres; run `discover()` in a
   container/cron worker on a schedule; write the de-duplicated posting feed. Expose a **read-only**
   feed (PostgREST or a small Hono endpoint). No client changes yet — validate the feed in isolation.
@@ -175,5 +206,6 @@ Phases 1–2 deliver the entire speed + redundancy win; Phase 3 is a separate pr
 The redundancy is duplicated **sourcing**, and sourcing is exactly the public, shareable half of the
 pipeline. Centralize it — Supabase Postgres + auto API for the data, a container/cron worker for the
 Playwright crawl, optionally Vercel for the dashboard/edge API — keep scoring on the client, and a
-user's scan collapses from a multi-minute crawl to a feed pull. The existing `discover()` /
-`Repository` seams mean Phases 1–2 are additive, not a rewrite.
+user's scan collapses from a multi-minute crawl to a feed pull. The in-flight `scan`/`score` split
+(Phase 0.5) is the linchpin: once scoring reads postings from the store instead of an in-process
+crawl, the existing `discover()` / `Repository` seams make Phases 1–2 a source swap, not a rewrite.
