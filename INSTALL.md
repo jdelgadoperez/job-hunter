@@ -115,7 +115,7 @@ npm run cli -- scan
 npm run cli -- list --min-score 70
 ```
 
-See the **[user guide](docs/guide/index.md)** for the full walkthrough and **[README](README.md)** for an
+See the **[user guide](https://github.com/jdelgadoperez/job-hunter/wiki)** for the full walkthrough and **[README](README.md)** for an
 overview.
 
 ## Troubleshooting
