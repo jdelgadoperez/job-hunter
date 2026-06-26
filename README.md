@@ -116,7 +116,7 @@ npm run cli -- scan
 npm run cli -- list --min-score 70
 ```
 
-See **[docs/usage.md](docs/usage.md)** for the full guide (how scoring works, tracking companies,
+See the **[user guide](docs/guide/index.md)** for the full walkthrough (getting started, how scoring works,
 refreshing the directory, where your data lives, and troubleshooting).
 
 ## Where your data lives

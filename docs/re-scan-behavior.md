@@ -5,7 +5,7 @@ a baseline of companies, postings, and scores from prior runs. This guide explai
 does differently, how postings move through their lifecycle (new → scored → expired → revived), and
 where those changes surface to you in the CLI and the dashboard.
 
-For everyday command usage, see [usage.md](./usage.md). This doc is for understanding the *behavior*
+For everyday usage, see the [getting-started guide](./guide/getting-started.md). This doc is for understanding the *behavior*
 — useful if you're wondering "why did that posting disappear?" or "does a re-scan re-charge my LLM
 budget?".
 
