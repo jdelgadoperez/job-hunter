@@ -38,7 +38,7 @@ they close on their own.
 
 Everything runs on your machine. Your resume and matches live in a single file on your computer. The
 only things that leave your machine are the public job pages the tool reads and — *only if you turn
-on Claude scoring* — the role text and your profile sent to Anthropic's API. The tool deliberately
+on LLM scoring* — the role text and your profile sent to Anthropic's API. The tool deliberately
 does **not** read sites like LinkedIn or Indeed.
 
 **Where is my data stored?**
@@ -54,8 +54,8 @@ Set `JOB_HUNTER_HOME` to move it. Delete the file to start completely fresh.
 - **A company page won't load / Chromium error** — install the browser the tool uses:
   `npx playwright install chromium chromium-headless-shell`. A single company failing is just a
   warning and doesn't stop the search.
-- **Scores look shallow and there's no rationale** — you're on the free scorer; add an Anthropic API
-  key (re-run setup) for Claude scoring.
+- **Scores look shallow and there's no rationale** — you're on heuristic scoring; add an Anthropic API
+  key (re-run setup) for semantic scoring with rationales.
 - **Start over completely** — delete the database file above and re-run setup.
 
 ---
