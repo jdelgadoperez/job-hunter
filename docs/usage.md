@@ -1,7 +1,8 @@
 # job-hunter — Usage Guide
 
 This guide covers day-to-day use of the command-line tool. For install instructions, see the
-[README](../README.md).
+[README](../README.md). For what a scan does once you already have data — how re-scans diff against
+your baseline, expire stale postings, and re-score — see [re-scan-behavior.md](./re-scan-behavior.md).
 
 ## Concepts
 
