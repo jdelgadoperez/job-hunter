@@ -79,6 +79,26 @@ clean structured feeds; HN is noisier but yields lots of direct ATS board links 
 will pick up automatically. A useful pattern: have these sources emit a careers URL and let
 `resolve-ats` + `detect-ats-fingerprint` decide whether it's a known ATS — the source stays dumb.
 
+### Worked example: a key-gated source (The Muse)
+
+Sources that need an API key follow the same `LeadSource` contract as Remotive, plus a self-skip when
+the key is unset — mirroring the LLM scorer's no-key fallback. The shape:
+
+- **Endpoint:** `https://api-v2.themuse.com/jobs?api_key={key}&page={n}` — paginated, returns
+  `{ results: [{ company: { name }, refs: { landing_page }, categories, levels }], page_count }`.
+- **Key:** read from `LeadSourceDeps.settings` under a `theMuseApiKey` setting (add to
+  `src/matching/settings-keys.ts`). When unset, return
+  `{ leads: [], warnings: [{ source: "themuse", message: "no API key configured; skipping" }] }` —
+  never an error. The source is registered unconditionally in `LEAD_SOURCES`; the key check gates it.
+- **Mapping:** one `CompanyLead` per listing — `company ← results[].company.name`,
+  `careersUrl ← results[].refs.landing_page`, `categories ← results[].categories[].name`. Stay dumb
+  about ATS specifics; let `resolve-ats` classify the landing page.
+- **Pagination:** follow `page` up to `page_count` (cap it, like the Workable connector's `MAX_PAGES`).
+- **Attribution / ToS:** The Muse API key is tied to their terms — honor rate limits and attribution.
+
+This is the template for Adzuna and USAJobs too (both key-gated): a new file under
+`src/discovery/sources/`, a settings key, registration in `LEAD_SOURCES`, and the self-skip guard.
+
 ---
 
 ## 3. Directories of companies-by-ATS (analogous to stillhiring.today)
