@@ -54,7 +54,7 @@ export type ScoreRepo = {
 };
 
 /**
- * Run the `score` pipeline over postings already in the DB: remote filter → heuristic gate (the
+ * Run the `score` pipeline over postings already in the DB: heuristic gate → remote filter (the
  * repo query applies the floor) → cap → skip-already-scored → batch title-triage → deep score.
  * Dry-run computes the plan + estimate and returns before any LLM call. Deep-scoring aborts on the
  * first usage-limit error (no point hammering a hard limit). Never throws; warnings are collected.

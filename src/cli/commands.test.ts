@@ -2,10 +2,19 @@ import type { PageRenderer } from "@app/discovery/connectors/browser";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
+import type { ScoreOutcome } from "@app/matching/score-run";
 import type { FetchResponse, Fetcher } from "@app/net/fetcher";
 import { Repository } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
-import { listMatches, runProfile, runScan, trackAdd, trackList, trackRemove } from "./commands";
+import {
+  formatScorePlan,
+  listMatches,
+  runProfile,
+  runScan,
+  trackAdd,
+  trackList,
+  trackRemove,
+} from "./commands";
 
 function newRepo(): Repository {
   return new Repository(":memory:");
@@ -54,6 +63,52 @@ function airtableData(companies: { name: string; url: string }[]): unknown {
     },
   };
 }
+
+function outcome(overrides: Partial<ScoreOutcome["counts"]> = {}): ScoreOutcome {
+  const counts = {
+    inDb: 200,
+    afterRemote: 120,
+    afterHeuristic: 200,
+    afterCap: 100,
+    alreadyScoredSkipped: 18,
+    triageTitles: 82,
+    deepScored: 0,
+    ...overrides,
+  };
+  return {
+    counts,
+    estimate: {
+      triageTitles: counts.triageTitles,
+      triageBatches: 3,
+      deepScores: counts.triageTitles,
+      triageUsd: 0.16,
+      deepScoreUsd: 2.46,
+      totalUsd: 2.62,
+    },
+    warnings: [],
+    abortedOnLimit: false,
+  };
+}
+
+describe("formatScorePlan", () => {
+  it("shows the db total, cap, skipped count, and estimated total for a dry run", () => {
+    const result = outcome();
+    const text = formatScorePlan(result, { remoteOnly: true, limit: 100, dryRun: true });
+    expect(text).toContain(String(result.counts.inDb));
+    expect(text).toContain("100");
+    expect(text).toContain("18");
+    expect(text).toContain("2.62");
+  });
+
+  it("reports how many were deep-scored after a real run", () => {
+    const text = formatScorePlan(outcome({ deepScored: 80 }), {
+      remoteOnly: false,
+      limit: 100,
+      dryRun: false,
+    });
+    expect(text).toContain("80");
+  });
+});
 
 describe("track commands", () => {
   it("adds, lists, and removes", () => {

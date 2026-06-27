@@ -3,6 +3,7 @@ import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { detectLiveness } from "@app/freshness/detect-liveness";
 import { fetchLivenessSignal } from "@app/freshness/fetch-liveness";
+import type { ScoreOutcome } from "@app/matching/score-run";
 import type { Fetcher } from "@app/net/fetcher";
 import { buildProfile } from "@app/profile/build-profile";
 import type { CompanyRef, Repository } from "@app/storage/repository";
@@ -174,6 +175,38 @@ async function recheckLiveness(
     ),
   );
   return results.filter(Boolean).length;
+}
+
+function usd(amount: number): string {
+  return `$${amount.toFixed(2)}`;
+}
+
+/** A human-readable plan/summary for a `score` run (dry-run preview or post-run report). */
+export function formatScorePlan(
+  outcome: ScoreOutcome,
+  opts: { remoteOnly: boolean; limit: number; dryRun: boolean },
+): string {
+  const { counts, estimate } = outcome;
+  const lines = [
+    style.bold(opts.dryRun ? "Score plan (dry run)" : "Score run"),
+    `  In DB:              ${counts.inDb} postings`,
+    `  Heuristic-gated:    ${counts.afterHeuristic}`,
+    `  Remote filter:      ${counts.afterRemote} remain   (remote_only=${opts.remoteOnly ? "on" : "off"})`,
+    `  Cap (--limit ${opts.limit}):   ${counts.afterCap} selected`,
+    `  Already LLM-scored: ${counts.alreadyScoredSkipped} skipped   (--rescore to re-score)`,
+    `  Triage:             ${estimate.triageTitles} titles (${estimate.triageBatches} batch(es))   est. ~${usd(estimate.triageUsd)}`,
+    `  Deep-score (max):   ${estimate.deepScores}                 est. ~${usd(estimate.deepScoreUsd)}`,
+    `  Estimated total:                          ~${usd(estimate.totalUsd)}`,
+  ];
+  if (!opts.dryRun) {
+    lines.push(`  Deep-scored:        ${counts.deepScored}`);
+    if (outcome.abortedOnLimit) {
+      lines.push(style.warn("  ! Stopped early — provider usage limit reached."));
+    }
+  } else {
+    lines.push(style.dim("  (estimate only — no LLM calls made; rates are approximate)"));
+  }
+  return lines.join("\n");
 }
 
 export function listMatches(repo: Repository, minScore: number, log: Logger): void {
