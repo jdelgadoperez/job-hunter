@@ -3,3 +3,4 @@ export const ANTHROPIC_KEY_SETTING = "anthropicApiKey";
 export const MODEL_SETTING = "scorerModel";
 export const PROVIDER_SETTING = "scorerProvider";
 export const REMOTE_ONLY_SETTING = "remoteOnly";
+export const THE_MUSE_KEY_SETTING = "theMuseApiKey";
