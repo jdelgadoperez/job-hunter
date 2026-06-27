@@ -17,6 +17,9 @@ export default defineConfig({
         // scripts, like `HttpFetcher`. Instrumenting them would skew the gate.
         "src/net/playwright-renderer.ts",
         "src/discovery/sources/airtable-playwright.ts",
+        // Live Postgres (service-role) store for the hosted worker — smoke-only via
+        // `npm run smoke:postgres`. The pure row mappers it uses ARE unit-tested.
+        "src/backend/postgres-scan-store.ts",
         // Shells out to git + network for the update check; pure logic lives in version.ts.
         "src/runtime/update-check.ts",
         // Server listener + real scan pipeline: bind a port / launch a browser / hit the
