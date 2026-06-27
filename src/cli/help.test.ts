@@ -36,6 +36,19 @@ describe("renderHelp", () => {
   });
 
   it("exposes every command name as a help topic", () => {
-    expect(COMMAND_NAMES).toEqual(new Set(["scan", "list", "serve", "profile", "track"]));
+    expect(COMMAND_NAMES).toEqual(
+      new Set(["scan", "score", "config", "list", "serve", "profile", "track"]),
+    );
+  });
+
+  it("documents the score and config commands", () => {
+    const help = renderHelp();
+    expect(help).toContain("score");
+    expect(help).toContain("config");
+  });
+
+  it("scan help no longer claims to score", () => {
+    const scanHelp = renderHelp("scan");
+    expect(scanHelp.toLowerCase()).not.toContain("scores every posting");
   });
 });

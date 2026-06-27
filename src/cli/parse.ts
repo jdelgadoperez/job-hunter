@@ -3,6 +3,10 @@ import { COMMAND_NAMES } from "./help";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
 export const DEFAULT_MIN_SCORE = 50;
+/** Default heuristic-score floor for `score` gating when `--min-heuristic` is omitted. */
+export const DEFAULT_MIN_HEURISTIC = 30;
+/** Default cap on postings deep-scored by `score` when `--limit` is omitted. */
+export const DEFAULT_SCORE_LIMIT = 100;
 
 export type Command =
   | { kind: "scan" }
@@ -12,6 +16,15 @@ export type Command =
   | { kind: "track-remove"; url: string }
   | { kind: "profile"; resumePath: string }
   | { kind: "list"; minScore: number }
+  | {
+      kind: "score";
+      minHeuristic: number;
+      limit: number;
+      remoteOnly?: boolean;
+      rescore: boolean;
+      dryRun: boolean;
+    }
+  | { kind: "config-remote"; on: boolean }
   | { kind: "version" }
   | { kind: "help"; error?: string; topic?: string };
 
@@ -103,6 +116,54 @@ export function parseCli(argv: string[]): Command {
         return { kind: "track-remove", url };
       }
       return { kind: "help", error: `unknown track subcommand: ${sub ?? "(none)"}` };
+    }
+
+    case "score": {
+      const { values } = parseArgs({
+        args: rest,
+        options: {
+          "min-heuristic": { type: "string" },
+          limit: { type: "string" },
+          remote: { type: "boolean" },
+          "no-remote": { type: "boolean" },
+          rescore: { type: "boolean" },
+          "dry-run": { type: "boolean" },
+        },
+        allowPositionals: true,
+      });
+      const minRaw = values["min-heuristic"];
+      const limitRaw = values.limit;
+      const minHeuristic = minRaw === undefined ? DEFAULT_MIN_HEURISTIC : Number(minRaw);
+      const limit = limitRaw === undefined ? DEFAULT_SCORE_LIMIT : Number(limitRaw);
+      if (!Number.isFinite(minHeuristic) || minHeuristic < 0) {
+        return { kind: "help", error: `invalid --min-heuristic: ${minRaw}` };
+      }
+      if (!Number.isInteger(limit) || limit < 1) {
+        return { kind: "help", error: `invalid --limit: ${limitRaw}` };
+      }
+      const cmd: Extract<Command, { kind: "score" }> = {
+        kind: "score",
+        minHeuristic,
+        limit,
+        rescore: Boolean(values.rescore),
+        dryRun: Boolean(values["dry-run"]),
+      };
+      // --remote / --no-remote are explicit overrides; absent means "use the saved setting".
+      if (values.remote) cmd.remoteOnly = true;
+      else if (values["no-remote"]) cmd.remoteOnly = false;
+      return cmd;
+    }
+
+    case "config": {
+      const [sub, ...configRest] = rest;
+      if (sub === "remote") {
+        const { positionals } = parseArgs({ args: configRest, allowPositionals: true });
+        const value = positionals[0];
+        if (value === "on") return { kind: "config-remote", on: true };
+        if (value === "off") return { kind: "config-remote", on: false };
+        return { kind: "help", error: `config remote expects on|off, got: ${value ?? "(none)"}` };
+      }
+      return { kind: "help", error: `unknown config subcommand: ${sub ?? "(none)"}` };
     }
 
     default:

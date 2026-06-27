@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCli } from "./parse";
+import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT, parseCli } from "./parse";
 
 describe("parseCli", () => {
   it("parses scan", () => {
@@ -96,5 +96,61 @@ describe("parseCli", () => {
     // `help <topic>` works too, and an unknown topic falls back to the global overview.
     expect(parseCli(["help", "list"])).toEqual({ kind: "help", topic: "list" });
     expect(parseCli(["help", "bogus"])).toEqual({ kind: "help" });
+  });
+});
+
+describe("score command", () => {
+  it("defaults min-heuristic and limit", () => {
+    expect(parseCli(["score"])).toEqual({
+      kind: "score",
+      minHeuristic: DEFAULT_MIN_HEURISTIC,
+      limit: DEFAULT_SCORE_LIMIT,
+      rescore: false,
+      dryRun: false,
+    });
+  });
+
+  it("parses the knobs and flags", () => {
+    expect(
+      parseCli([
+        "score",
+        "--min-heuristic",
+        "40",
+        "--limit",
+        "25",
+        "--rescore",
+        "--dry-run",
+        "--remote",
+      ]),
+    ).toEqual({
+      kind: "score",
+      minHeuristic: 40,
+      limit: 25,
+      remoteOnly: true,
+      rescore: true,
+      dryRun: true,
+    });
+  });
+
+  it("parses --no-remote as an explicit override", () => {
+    const cmd = parseCli(["score", "--no-remote"]);
+    expect(cmd).toMatchObject({ kind: "score", remoteOnly: false });
+  });
+});
+
+describe("config remote command", () => {
+  it("parses on/off", () => {
+    expect(parseCli(["config", "remote", "on"])).toEqual({
+      kind: "config-remote",
+      on: true,
+    });
+    expect(parseCli(["config", "remote", "off"])).toEqual({
+      kind: "config-remote",
+      on: false,
+    });
+  });
+
+  it("errors on a bad value", () => {
+    expect(parseCli(["config", "remote", "maybe"]).kind).toBe("help");
   });
 });

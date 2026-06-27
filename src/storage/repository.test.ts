@@ -246,3 +246,62 @@ describe("match actions — save / dismiss", () => {
     repo.close();
   });
 });
+
+function makePosting(id: string, title: string): JobPosting {
+  return {
+    id,
+    company: "acme",
+    title,
+    url: `https://example.test/${id}`,
+    source: "test",
+    description: "desc",
+    fetchedAt: new Date("2026-06-26T00:00:00Z"),
+  };
+}
+
+describe("scorer tagging + listPostingsForScoring", () => {
+  it("tags rows by scorer and lists candidates above the heuristic floor, score desc", () => {
+    const repo = newRepo();
+    const low = makePosting("low", "Sales Rep");
+    const mid = makePosting("mid", "Backend Engineer");
+    const high = makePosting("high", "Staff Engineer");
+    for (const p of [low, mid, high]) repo.savePosting(p);
+
+    repo.saveMatchResult(low.id, { score: 10, matchedSkills: [], missingSkills: [] });
+    repo.saveMatchResult(mid.id, { score: 45, matchedSkills: [], missingSkills: [] });
+    repo.saveMatchResult(high.id, { score: 80, matchedSkills: [], missingSkills: [] }, "llm");
+
+    const candidates = repo.listPostingsForScoring({ minHeuristic: 30 });
+
+    expect(candidates.map((c) => c.posting.id)).toEqual([high.id, mid.id]);
+    const highCandidate = candidates.find((c) => c.posting.id === high.id);
+    const midCandidate = candidates.find((c) => c.posting.id === mid.id);
+    expect(highCandidate?.alreadyLlmScored).toBe(true);
+    expect(midCandidate?.alreadyLlmScored).toBe(false);
+    expect(highCandidate?.heuristicScore).toBe(80);
+    repo.close();
+  });
+
+  it("excludes expired postings from scoring candidates", () => {
+    const repo = newRepo();
+    const p = makePosting("p", "Backend Engineer");
+    repo.savePosting(p);
+    repo.saveMatchResult(p.id, { score: 60, matchedSkills: [], missingSkills: [] });
+    repo.markPostingExpired(p.id);
+
+    expect(repo.listPostingsForScoring({ minHeuristic: 30 })).toEqual([]);
+    repo.close();
+  });
+
+  it("counts only non-expired postings", () => {
+    const repo = newRepo();
+    const live = makePosting("live", "Backend Engineer");
+    const gone = makePosting("gone", "Frontend Engineer");
+    repo.savePosting(live);
+    repo.savePosting(gone);
+    repo.markPostingExpired(gone.id);
+
+    expect(repo.countLivePostings()).toBe(1);
+    repo.close();
+  });
+});

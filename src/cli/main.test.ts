@@ -153,16 +153,16 @@ describe("scan command", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("discovers, scores, and stores postings, surfacing scorer warnings", async () => {
+  it("discovers, heuristic-scores, and stores postings without any LLM warnings", async () => {
     // No Airtable URL is configured: the directory is the fixed community table.
     seedProfile();
     h.postings = [posting("1")];
 
     await runCli("scan");
 
+    // Scan is heuristic-only — no LLM calls, no scorer warning even without an API key.
     expect(logged()).toContain("Scanned and scored 1");
-    // With no API key, resolveScorer falls back to the heuristic and warns.
-    expect(logged()).toContain("!");
+    expect(logged()).not.toContain("No LLM key");
 
     const repo = openDb();
     expect(repo.listScoredPostings(0)).toHaveLength(1);

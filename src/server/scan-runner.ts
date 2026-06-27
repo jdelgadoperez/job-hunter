@@ -3,9 +3,7 @@ import { style } from "@app/cli/style";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
-import type { Warning } from "@app/domain/types";
-import { resolveScorer } from "@app/matching/resolve-scorer";
-import { settingsWithEnvKey } from "@app/matching/resolve-settings";
+import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import type { Repository } from "@app/storage/repository";
@@ -22,13 +20,8 @@ export function createScanRunner(repo: Repository): ScanRunner {
     const profile = repo.getLatestProfile();
     if (!profile) throw new Error("No profile yet. Upload a resume first.");
 
-    const warnings: Warning[] = [];
     const dictionary = repo.getSkillDictionary();
-    const scorer = resolveScorer({
-      settings: settingsWithEnvKey(repo),
-      dictionary: dictionary.length > 0 ? dictionary : undefined,
-      onWarning: (warning) => warnings.push(warning),
-    });
+    const scorer = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
 
     const result = await runScan(
       {
@@ -53,10 +46,6 @@ export function createScanRunner(repo: Repository): ScanRunner {
       (message) => console.log(`${style.dim("[scan]")} ${message}`),
     );
 
-    for (const warning of warnings)
-      console.log(
-        `${style.dim("[scan]")} ${style.warn(`  ! [${warning.source}] ${warning.message}`)}`,
-      );
-    return { count: result.count, warnings: [...warnings, ...result.warnings] };
+    return { count: result.count, warnings: result.warnings };
   };
 }

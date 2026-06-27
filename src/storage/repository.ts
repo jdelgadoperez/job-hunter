@@ -19,6 +19,13 @@ export type ScoredPosting = {
 /** Filters for `listScoredPostings`. By default expired and dismissed postings are hidden. */
 export type ListMatchesOptions = { includeExpired?: boolean; includeDismissed?: boolean };
 
+/** A posting eligible for LLM scoring: its heuristic score plus whether the LLM already scored it. */
+export type ScoringCandidate = {
+  posting: JobPosting;
+  heuristicScore: number;
+  alreadyLlmScored: boolean;
+};
+
 /** A completed scan's outcome: counts plus the directory delta vs. the previous snapshot. */
 export type ScanRecord = {
   id: number;
@@ -46,16 +53,25 @@ export class Repository {
    * databases that predate them. Each add is guarded by the table's current columns.
    */
   private migrate(): void {
-    const columns = new Set(
+    const postingColumns = new Set(
       (this.db.prepare("PRAGMA table_info(postings)").all() as { name: string }[]).map(
         (c) => c.name,
       ),
     );
-    if (!columns.has("last_seen_scan")) {
+    if (!postingColumns.has("last_seen_scan")) {
       this.db.exec("ALTER TABLE postings ADD COLUMN last_seen_scan INTEGER");
     }
-    if (!columns.has("expired_at")) {
+    if (!postingColumns.has("expired_at")) {
       this.db.exec("ALTER TABLE postings ADD COLUMN expired_at TEXT");
+    }
+
+    const matchColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(match_results)").all() as { name: string }[]).map(
+        (c) => c.name,
+      ),
+    );
+    if (!matchColumns.has("scorer")) {
+      this.db.exec("ALTER TABLE match_results ADD COLUMN scorer TEXT");
     }
   }
 
@@ -112,16 +128,21 @@ export class Repository {
       });
   }
 
-  saveMatchResult(postingId: string, result: MatchResult): void {
+  saveMatchResult(
+    postingId: string,
+    result: MatchResult,
+    scorer: "heuristic" | "llm" = "heuristic",
+  ): void {
     this.db
       .prepare(
-        `INSERT INTO match_results (posting_id, score, matched_skills, missing_skills, rationale)
-         VALUES (@postingId, @score, @matched, @missing, @rationale)
+        `INSERT INTO match_results (posting_id, score, matched_skills, missing_skills, rationale, scorer)
+         VALUES (@postingId, @score, @matched, @missing, @rationale, @scorer)
          ON CONFLICT(posting_id) DO UPDATE SET
            score = excluded.score,
            matched_skills = excluded.matched_skills,
            missing_skills = excluded.missing_skills,
-           rationale = excluded.rationale`,
+           rationale = excluded.rationale,
+           scorer = excluded.scorer`,
       )
       .run({
         postingId,
@@ -129,6 +150,7 @@ export class Repository {
         matched: JSON.stringify(result.matchedSkills),
         missing: JSON.stringify(result.missingSkills),
         rationale: result.rationale ?? null,
+        scorer,
       });
   }
 
@@ -413,6 +435,59 @@ export class Repository {
         )
         .run(postingId).changes > 0
     );
+  }
+
+  /**
+   * Non-expired postings whose heuristic score meets `minHeuristic`, ranked score-desc then title,
+   * each tagged with whether its match row was written by the LLM. Drives the `score` command's
+   * candidate gating; expired postings are never re-scored.
+   */
+  listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[] {
+    const rows = this.db
+      .prepare(
+        `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
+                p.posted_at, p.fetched_at, m.score, m.scorer
+         FROM match_results m
+         JOIN postings p ON p.id = m.posting_id
+         WHERE p.expired_at IS NULL AND m.score >= ?
+         ORDER BY m.score DESC, p.title`,
+      )
+      .all(opts.minHeuristic) as {
+      id: string;
+      company: string;
+      title: string;
+      url: string;
+      source: string;
+      description: string;
+      location: string | null;
+      posted_at: string | null;
+      fetched_at: string;
+      score: number;
+      scorer: string | null;
+    }[];
+    return rows.map((row) => ({
+      posting: {
+        id: row.id,
+        company: row.company,
+        title: row.title,
+        url: row.url,
+        source: row.source,
+        description: row.description,
+        ...(row.location ? { location: row.location } : {}),
+        ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
+        fetchedAt: new Date(row.fetched_at),
+      },
+      heuristicScore: row.score,
+      alreadyLlmScored: row.scorer === "llm",
+    }));
+  }
+
+  /** Count of non-expired postings — the dry-run's "In DB" total before any filtering. */
+  countLivePostings(): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS n FROM postings WHERE expired_at IS NULL")
+      .get() as { n: number };
+    return row.n;
   }
 
   /** Record the outcome (counts + directory diff) of a finished scan. */
