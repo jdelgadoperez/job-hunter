@@ -10,16 +10,21 @@ export type DirectoryDiff = { newCompanies: CompanyRef[]; removedCompanies: Comp
  * SQLite `Repository` satisfies this structurally today; a Postgres-backed store (the hosted scanner
  * worker) will too. Keeping `runSourcing` behind this seam lets the same pipeline target either
  * store — the central crawl writes postings the local client scores independently.
+ *
+ * Every method may be sync or async: better-sqlite3 is synchronous, but a Postgres driver is not.
+ * The `T | Promise<T>` returns let the synchronous `Repository` satisfy the interface unchanged
+ * while a `PostgresScanStore` returns promises; callers (`runSourcing`) `await` every call, which is
+ * a no-op for the synchronous values.
  */
 export interface ScanStore {
-  startScan(): number;
-  recordDirectory(scanId: number, companies: CompanyRef[]): DirectoryDiff;
-  savePosting(posting: JobPosting, scanId?: number | null): void;
-  listLivePostingsNotSeen(scanId: number): JobPosting[];
-  markPostingExpired(postingId: string): boolean;
-  expireStalePostings(scanId: number, staleAfter?: number): number;
+  startScan(): number | Promise<number>;
+  recordDirectory(scanId: number, companies: CompanyRef[]): DirectoryDiff | Promise<DirectoryDiff>;
+  savePosting(posting: JobPosting, scanId?: number | null): void | Promise<void>;
+  listLivePostingsNotSeen(scanId: number): JobPosting[] | Promise<JobPosting[]>;
+  markPostingExpired(postingId: string): boolean | Promise<boolean>;
+  expireStalePostings(scanId: number, staleAfter?: number): number | Promise<number>;
   finishScan(
     scanId: number,
     summary: { postingsSeen: number; companiesSeen: number } & DirectoryDiff,
-  ): void;
+  ): void | Promise<void>;
 }

@@ -112,19 +112,21 @@ export type SourcingOutcome = {
  */
 export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> {
   const { repo, onProgress } = deps;
-  const scanId = repo.startScan();
+  // `await` every store call: a no-op for the synchronous SQLite Repository, but required for an
+  // async Postgres-backed store (both satisfy the ScanStore seam).
+  const scanId = await repo.startScan();
 
   const {
     postings,
     warnings,
     companies = [],
   } = await discover({ ...deps.discoverDeps, onProgress });
-  const diff = repo.recordDirectory(
+  const diff = await repo.recordDirectory(
     scanId,
     companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
   );
 
-  for (const posting of postings) repo.savePosting(posting, scanId);
+  for (const posting of postings) await repo.savePosting(posting, scanId);
 
   // Precise liveness re-check: postings we didn't see this scan get their source re-fetched and are
   // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
@@ -136,8 +138,8 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
     onProgress,
   );
 
-  const expired = recheckedExpired + repo.expireStalePostings(scanId);
-  repo.finishScan(scanId, {
+  const expired = recheckedExpired + (await repo.expireStalePostings(scanId));
+  await repo.finishScan(scanId, {
     postingsSeen: postings.length,
     companiesSeen: companies.length,
     ...diff,
@@ -206,7 +208,7 @@ async function recheckLiveness(
   fetcher: Fetcher,
   onProgress?: (event: ScanProgressEvent) => void,
 ): Promise<number> {
-  const candidates = repo.listLivePostingsNotSeen(scanId);
+  const candidates = await repo.listLivePostingsNotSeen(scanId);
   if (candidates.length === 0) return 0;
   onProgress?.({ kind: "recheck", total: candidates.length });
 
@@ -215,7 +217,9 @@ async function recheckLiveness(
     candidates.map((posting) =>
       limit(async () => {
         const signal = await fetchLivenessSignal(posting, { fetcher });
-        return detectLiveness(signal) === "expired" ? repo.markPostingExpired(posting.id) : false;
+        return detectLiveness(signal) === "expired"
+          ? await repo.markPostingExpired(posting.id)
+          : false;
       }),
     ),
   );

@@ -55,12 +55,15 @@ function fakeStore(): {
       newCompanies: [],
       removedCompanies: [],
     }),
-    savePosting: (posting) => saved.push(posting),
+    savePosting: (posting) => {
+      saved.push(posting);
+    },
     listLivePostingsNotSeen: () => [],
     markPostingExpired: () => false,
     expireStalePostings: () => 0,
-    finishScan: (_id, summary) =>
-      finished.push({ postingsSeen: summary.postingsSeen, companiesSeen: summary.companiesSeen }),
+    finishScan: (_id, summary) => {
+      finished.push({ postingsSeen: summary.postingsSeen, companiesSeen: summary.companiesSeen });
+    },
   };
   return { store, saved, finished };
 }
