@@ -77,8 +77,11 @@ export const remotiveSource = new RemotiveSource();
 export const LEAD_SOURCES: LeadSource[] = [airtableSource, remotiveSource];
 ```
 
-Order matters: Airtable is first so its richer `categories` win over an aggregator's on a
-normalized-URL collision (the dedup is first-wins, as today).
+Order matters only for which lead wins a normalized-URL collision (the dedup is first-wins, as
+today). Airtable is first because it's the canonical directory. Categories don't affect discovery —
+`airtableRowsToLeads` actually emits empty `categories` (categories are the matcher's job, not
+discovery's), so collision precedence is about nothing more than which `company` display name wins;
+the careers URL — the only field that drives fetching — is identical by definition of a collision.
 
 ### `AirtableSource` (`src/discovery/sources/airtable-source.ts`)
 
@@ -173,8 +176,8 @@ per-listing mapping. No code; it's the template for the next contributor.
 - `remotive.test.ts` — maps a `remotive-jobs.json` fixture to one lead per job (company/url/category);
   a malformed payload and a non-2xx both degrade to a warning, never throw.
 - `registry`/`collectLeads` — fan-out merges multiple sources, dedups by normalized URL with
-  first-wins precedence (Airtable categories win over Remotive on a collision), tracked companies
-  still merged, a failing source doesn't abort the others.
+  first-wins precedence (the earlier-registered source's lead wins a URL collision), tracked
+  companies still merged, a failing source doesn't abort the others.
 - `workable.test.ts` — maps a `workable.json` fixture (incl. the `shortcode`-only URL fallback and
   `joinLocation`); pagination follows `nextPage` across two fixture pages and stops at the cap; a
   page-fetch failure → `{ ok: false }`.
