@@ -186,9 +186,10 @@ job-hunter list                          # unchanged
 
 ## Follow-up goal: shared sourcing backend + expanded lead sources (PR #45)
 
-Captured per user request — to be worked AFTER this scan/score refactor lands. Source:
-[PR #45](https://github.com/jdelgadoperez/job-hunter/pull/45) (docs-only: `docs/career-page-resources.md`,
-`docs/sourcing-backend-exploration.md`).
+Captured per user request — to be worked AFTER this scan/score refactor lands. Source exploration docs
+are now merged to `main` via [PR #45](https://github.com/jdelgadoperez/job-hunter/pull/45)
+(`docs/career-page-resources.md`, `docs/sourcing-backend-exploration.md`); the follow-up is to
+*implement* what they describe, not the docs themselves.
 
 **Why it sequences after this refactor:** PR #45's central proposal — hosting the *sourcing* half of the
 pipeline centrally (crawl once for all users) while keeping *scoring* local — presupposes that scan and
