@@ -183,3 +183,34 @@ job-hunter list                          # unchanged
 - Repo tests for the new `scorer` column + `listPostingsForScoring`.
 - Cost estimator — pure, unit-tested directly.
 - Live LLM calls stay out of CI (`smoke:scorer` sibling note only).
+
+## Follow-up goal: shared sourcing backend + expanded lead sources (PR #45)
+
+Captured per user request — to be worked AFTER this scan/score refactor lands. Source:
+[PR #45](https://github.com/jdelgadoperez/job-hunter/pull/45) (docs-only: `docs/career-page-resources.md`,
+`docs/sourcing-backend-exploration.md`).
+
+**Why it sequences after this refactor:** PR #45's central proposal — hosting the *sourcing* half of the
+pipeline centrally (crawl once for all users) while keeping *scoring* local — presupposes that scan and
+score are decoupled. This refactor delivers exactly that decoupling, so it is the prerequisite. The
+heuristic-gated, budget-bounded scoring here is also a step toward the hosted vision (the expensive,
+personal LLM work stays client-side and cost-controlled).
+
+**Two threads in PR #45:**
+1. **Expanded discovery lead sources** — aggregator APIs (The Muse, Remotive, RemoteOK, HN "Who Is
+   Hiring", Adzuna, USAJobs), ATS directories (YC/Work at a Startup, layoffs.fyi, curated lists), and a
+   candidate **Workable** ATS connector. Maps onto the existing `CompanyLead`/connector seams.
+2. **Shared sourcing backend** — split the data model into public (`postings`/`companies`/`scans`) vs.
+   personal (`profiles`/`match_results`/`actions`); run the Playwright crawl in a container/cron worker
+   (not an Edge function); Supabase + container scanner + optional Vercel dashboard; phased migration;
+   privacy preserved by keeping scoring local.
+
+**Open questions to resolve before building (from the PR review):**
+- File a tracking issue for the Workable connector so it isn't lost.
+- Verify the lead-source "what to add for which goal" table against the current
+  `src/discovery/connectors/` registry (drop anything already implemented).
+- Define success criteria + a rough cost model for "when to move to a hosted backend."
+- Pick a container/cron host for Playwright (Fly.io / Railway / ECS) before referencing it in a plan.
+
+Next step when picked up: brainstorm + spec the *expanded lead sources* thread first (smaller, fits the
+existing seams, no infra), then spec the *hosted backend* as its own larger sub-project.
