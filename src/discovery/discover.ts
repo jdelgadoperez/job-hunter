@@ -78,7 +78,14 @@ async function collectLeads(
 
   const sourceLeads: CompanyLead[] = [];
   // Sources run in registry order so first-wins dedup is deterministic. Each degrades to warnings.
-  const results = await Promise.all(sources.map((source) => source.fetch(sourceDeps)));
+  const results = await Promise.all(
+    sources.map((source) =>
+      source.fetch(sourceDeps).catch((error) => ({
+        leads: [],
+        warnings: [{ source: source.name, message: errorMessage(error) }],
+      })),
+    ),
+  );
   for (const result of results) {
     sourceLeads.push(...result.leads);
     warnings.push(...result.warnings);

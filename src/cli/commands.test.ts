@@ -277,7 +277,7 @@ describe("runScan + listMatches", () => {
         sharedViewReader: new FakeSharedViewReader(airtableData(companies)),
         shareUrl: "https://airtable.com/appX/shrX/tblX",
         delayMs: 0,
-        settings: { getSetting: () => undefined as string | undefined },
+        settings: { getSetting: () => undefined },
         sources: [new AirtableSource()],
       },
     });

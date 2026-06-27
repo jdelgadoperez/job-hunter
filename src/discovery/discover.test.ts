@@ -407,4 +407,26 @@ describe("collectLeads fan-out", () => {
     expect(result.companies.map((c) => c.careersUrl)).toContain("https://x.test/globex");
     expect(result.warnings.some((w) => w.source === "bad" && w.message === "boom")).toBe(true);
   });
+
+  it("a source that throws degrades to a warning without aborting discovery", async () => {
+    const throwing: LeadSource = {
+      name: "throwing",
+      fetch: async () => {
+        throw new Error("kaboom");
+      },
+    };
+    const ok = staticSource("ok", [{ company: "Globex", careersUrl: "https://x.test/globex" }]);
+
+    const result = await discover({
+      ...baseDeps(),
+      sources: [throwing, ok],
+      trackedCompanies: [],
+    });
+
+    // The good source's lead still arrives; the throwing source becomes a warning, not a crash.
+    expect(result.companies.map((c) => c.careersUrl)).toContain("https://x.test/globex");
+    expect(
+      result.warnings.some((w) => w.source === "throwing" && w.message.includes("kaboom")),
+    ).toBe(true);
+  });
 });
