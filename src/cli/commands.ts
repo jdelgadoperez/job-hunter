@@ -1,6 +1,8 @@
 import { type DiscoverDeps, discover } from "@app/discovery/discover";
+import type { ScanStore } from "@app/discovery/scan-store";
+import type { CompanyLead } from "@app/discovery/sources/types";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
-import type { Scorer, SkillProfile, Warning } from "@app/domain/types";
+import type { JobPosting, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { detectLiveness } from "@app/freshness/detect-liveness";
 import { fetchLivenessSignal } from "@app/freshness/fetch-liveness";
 import type { ScoreOutcome } from "@app/matching/score-run";
@@ -85,12 +87,31 @@ export type ScanOutcome = {
   expired: number;
 };
 
+/** Dependencies for the sourcing-only pipeline — no scorer, no profile (the worker has neither). */
+export type SourcingDeps = {
+  repo: ScanStore;
+  discoverDeps: DiscoverDeps;
+  onProgress?: (event: ScanProgressEvent) => void;
+};
+
+/** Result of a sourcing run: the postings + companies seen, the directory diff, and expiry count. */
+export type SourcingOutcome = {
+  postings: JobPosting[];
+  companies: CompanyLead[];
+  warnings: Warning[];
+  newCompanies: CompanyRef[];
+  removedCompanies: CompanyRef[];
+  expired: number;
+};
+
 /**
- * Run a full scan as an incremental step: open a scan, snapshot+diff the directory, upsert and
- * score postings (stamping the scan), expire postings that have vanished, and record the outcome.
+ * The shared **sourcing** half of a scan: open a scan, snapshot+diff the directory, upsert postings
+ * (stamping the scan), re-check liveness, expire vanished postings, and record the outcome — with
+ * **no scoring**. Depends only on a `ScanStore`, so the same pipeline drives the local SQLite scan
+ * and the hosted Postgres scanner worker. Never logs; the caller decides how to surface the result.
  */
-export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome> {
-  const { onProgress, repo } = deps;
+export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> {
+  const { repo, onProgress } = deps;
   const scanId = repo.startScan();
 
   const {
@@ -103,19 +124,7 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
     companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
   );
 
-  onProgress?.({ kind: "scoring", total: postings.length });
   for (const posting of postings) repo.savePosting(posting, scanId);
-  // Score concurrently (bounded): each `score` is a network-bound LLM call, so a small cap turns a
-  // serial wait into parallel throughput without hammering the provider. SQLite writes are
-  // synchronous, so the `saveMatchResult` calls can't interleave mid-statement.
-  const scoreLimit = pLimit(SCORE_CONCURRENCY);
-  await Promise.all(
-    postings.map((posting) =>
-      scoreLimit(async () => {
-        repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
-      }),
-    ),
-  );
 
   // Precise liveness re-check: postings we didn't see this scan get their source re-fetched and are
   // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
@@ -134,17 +143,53 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
     ...diff,
   });
 
-  onProgress?.({ kind: "summary", count: postings.length });
-  log(style.success(`Scanned and scored ${postings.length} posting(s).`));
-  if (diff.newCompanies.length || diff.removedCompanies.length || expired) {
+  return { postings, companies, warnings, expired, ...diff };
+}
+
+/**
+ * Run a full local scan: source postings (`runSourcing`), then score every one with the injected
+ * scorer (the free heuristic in `scan`), and report the outcome. Scoring is the only thing this adds
+ * over `runSourcing`; everything sourcing-related lives there so the hosted worker can reuse it.
+ */
+export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome> {
+  const { onProgress, repo } = deps;
+
+  const sourced = await runSourcing({
+    repo,
+    discoverDeps: deps.discoverDeps,
+    onProgress,
+  });
+
+  onProgress?.({ kind: "scoring", total: sourced.postings.length });
+  // Score concurrently (bounded): each `score` is a network-bound LLM call, so a small cap turns a
+  // serial wait into parallel throughput without hammering the provider. SQLite writes are
+  // synchronous, so the `saveMatchResult` calls can't interleave mid-statement.
+  const scoreLimit = pLimit(SCORE_CONCURRENCY);
+  await Promise.all(
+    sourced.postings.map((posting) =>
+      scoreLimit(async () => {
+        repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
+      }),
+    ),
+  );
+
+  onProgress?.({ kind: "summary", count: sourced.postings.length });
+  log(style.success(`Scanned and scored ${sourced.postings.length} posting(s).`));
+  if (sourced.newCompanies.length || sourced.removedCompanies.length || sourced.expired) {
     log(
-      `  Directory: ${style.success(`+${diff.newCompanies.length} new`)}, ${style.warn(`-${diff.removedCompanies.length} gone`)}; expired ${expired} posting(s).`,
+      `  Directory: ${style.success(`+${sourced.newCompanies.length} new`)}, ${style.warn(`-${sourced.removedCompanies.length} gone`)}; expired ${sourced.expired} posting(s).`,
     );
   }
-  for (const warning of warnings) {
+  for (const warning of sourced.warnings) {
     log(style.warn(`  ! [${warning.source}] ${warning.message}`));
   }
-  return { count: postings.length, warnings, ...diff, expired };
+  return {
+    count: sourced.postings.length,
+    warnings: sourced.warnings,
+    newCompanies: sourced.newCompanies,
+    removedCompanies: sourced.removedCompanies,
+    expired: sourced.expired,
+  };
 }
 
 const SCORE_CONCURRENCY = 4;
@@ -156,7 +201,7 @@ const RECHECK_CONCURRENCY = 4;
  * for the consecutive-miss heuristic. Returns how many were expired.
  */
 async function recheckLiveness(
-  repo: Repository,
+  repo: ScanStore,
   scanId: number,
   fetcher: Fetcher,
   onProgress?: (event: ScanProgressEvent) => void,
