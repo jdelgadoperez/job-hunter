@@ -5,19 +5,11 @@ import { type CostEstimate, estimateCost } from "./cost-estimate";
 import type { LlmTriager } from "./llm-triager";
 import { isRemote } from "./remote-filter";
 import type { TriageItem } from "./triage-prompt";
+import { isUsageLimitError } from "./usage-limit-error";
+
+export { isUsageLimitError } from "./usage-limit-error";
 
 const WARNING_SOURCE = "score";
-
-/** A provider usage-limit / auth failure — the signal to stop making new LLM calls immediately. */
-export function isUsageLimitError(error: unknown): boolean {
-  const message = errorMessage(error).toLowerCase();
-  return (
-    message.includes("usage limit") ||
-    message.includes("usage limits") ||
-    message.includes("rate limit") ||
-    message.includes("authentication")
-  );
-}
 
 export type ScoreOptions = {
   minHeuristic: number;
@@ -111,13 +103,26 @@ export async function runScoreRun(deps: {
     return { counts, estimate, warnings, abortedOnLimit: false };
   }
 
-  // Stage 4 — batch title triage (fail-open inside the triager).
+  // Stage 4 — batch title triage (fail-open inside the triager for ordinary errors).
+  // A usage-limit error from triage propagates out of the triager (it does NOT fail-open those);
+  // catch it here so we can abort cleanly without entering the deep-score loop.
   const items: TriageItem[] = eligible.map((c) => ({
     id: c.posting.id,
     title: c.posting.title,
     ...(c.posting.location ? { location: c.posting.location } : {}),
   }));
-  const { keptIds } = await triager.triage(profile, items);
+
+  let keptIds: Set<string>;
+  try {
+    ({ keptIds } = await triager.triage(profile, items));
+  } catch (error) {
+    if (isUsageLimitError(error)) {
+      warn("hit the provider usage limit during triage; no postings were deep-scored");
+      return { counts, estimate, warnings, abortedOnLimit: true };
+    }
+    throw error; // unexpected: let it bubble (triager should not throw non-limit errors)
+  }
+
   const survivors = eligible.filter((c) => keptIds.has(c.posting.id));
 
   // Stage 5 — deep score, aborting on the first usage-limit error.

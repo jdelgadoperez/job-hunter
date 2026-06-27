@@ -183,6 +183,32 @@ describe("runScoreRun", () => {
     expect(outcome.estimate.totalUsd).toBeGreaterThan(0);
   });
 
+  it("aborts when the triager throws a usage-limit error (no deep scoring, no saves)", async () => {
+    const candidates = [candidate("a", "Engineer A", 80), candidate("b", "Engineer B", 70)];
+    const { repo, saved } = fakeRepo(candidates);
+    const warnings: Warning[] = [];
+    const usageLimitMessage =
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits."}}';
+    const triager = new LlmTriager(
+      new FakeTriageClient(new Error(usageLimitMessage)),
+      baseOptions.batchSize,
+    );
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager,
+      scorer: deepScorer,
+      options: baseOptions,
+      onWarning: (w) => warnings.push(w),
+    });
+
+    expect(outcome.abortedOnLimit).toBe(true);
+    expect(outcome.counts.deepScored).toBe(0);
+    expect(saved).toEqual([]);
+    expect(warnings.some((w) => /usage limit/i.test(w.message))).toBe(true);
+  });
+
   it("aborts deep-scoring on a usage-limit error and reports it", async () => {
     const candidates = [candidate("a", "Engineer A", 80), candidate("b", "Engineer B", 70)];
     const { repo, saved } = fakeRepo(candidates);

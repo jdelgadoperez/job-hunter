@@ -39,6 +39,19 @@ describe("LlmTriager", () => {
     expect(warnings.length).toBe(1);
   });
 
+  it("propagates a usage-limit error instead of fail-opening it", async () => {
+    const usageLimitError = new Error(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits."}}',
+    );
+    const client = new FakeTriageClient(usageLimitError);
+    const warnings: Warning[] = [];
+    const triager = new LlmTriager(client, 10, (w) => warnings.push(w));
+
+    await expect(triager.triage(profile, items(2))).rejects.toThrow(usageLimitError.message);
+    // Must NOT fail-open — no warning, no partial result.
+    expect(warnings).toEqual([]);
+  });
+
   it("fail-opens a batch whose payload omits some ids", async () => {
     const all = items(2);
     // Only decides the first id; the second is missing from the payload.

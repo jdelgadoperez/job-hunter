@@ -3,6 +3,7 @@ import { errorMessage } from "@app/net/error-message";
 import type { TriageClient } from "./triage-client";
 import { type TriageItem, buildTriagePrompt } from "./triage-prompt";
 import { TriagePayloadSchema } from "./triage-schema";
+import { isUsageLimitError } from "./usage-limit-error";
 
 const WARNING_SOURCE = "llm-triager";
 
@@ -12,7 +13,8 @@ export type TriageResult = { keptIds: Set<string> };
  * Batch keep/drop over job titles, backed by a `TriageClient`. Splits items into batches and
  * unions the kept ids. Fail-open: any batch that throws or returns a malformed / incomplete
  * payload keeps ALL of that batch's ids and emits a `Warning` — better to over-score a batch than
- * silently drop real matches. `triage` never rejects.
+ * silently drop real matches. Exception: a provider usage-limit error is re-thrown so callers can
+ * abort immediately rather than hammering a dead quota.
  */
 export class LlmTriager {
   constructor(
@@ -45,6 +47,7 @@ export class LlmTriager {
       }
       return batchIds.filter((id) => decided.get(id) === true);
     } catch (error) {
+      if (isUsageLimitError(error)) throw error; // hard limit: propagate, do not fail-open
       return this.failOpen(batchIds, `triage failed: ${errorMessage(error)}`);
     }
   }
