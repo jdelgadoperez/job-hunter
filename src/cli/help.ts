@@ -21,10 +21,39 @@ export const COMMANDS: CommandHelp[] = [
   {
     name: "scan",
     invocation: "scan",
-    summary: "Discover, score, and store new matches",
+    summary: "Discover and store new postings (free heuristic scoring)",
     details:
-      "Reads the public job directory plus any tracked companies, scores every posting against your profile, stores the matches, and expires roles that have gone offline.",
+      "Reads the public job directory plus any tracked companies, stores postings with a free heuristic score, and expires roles that have gone offline. Run `score` afterward for LLM scoring.",
     examples: ["job-hunter scan"],
+  },
+  {
+    name: "score",
+    invocation:
+      "score [--min-heuristic N] [--limit N] [--remote|--no-remote] [--rescore] [--dry-run]",
+    summary: "LLM-score the best postings from the last scan",
+    details:
+      "Ranks stored postings by their heuristic score, batch-triages titles with the LLM, then deep-scores the survivors. Bounded by --min-heuristic (floor) and --limit (cap). Use --dry-run to preview the plan and estimated cost without spending.",
+    options: [
+      [
+        "--min-heuristic N",
+        "Only consider postings scoring at least N heuristically (default 30).",
+      ],
+      ["--limit N", "Deep-score at most N postings (default 100)."],
+      ["--remote / --no-remote", "Override the saved remote-only filter for this run."],
+      ["--rescore", "Re-score postings already LLM-scored in a prior run."],
+      ["--dry-run", "Print the plan + estimated cost and exit without calling the LLM."],
+    ],
+    examples: ["job-hunter score --dry-run", "job-hunter score --limit 50 --remote"],
+  },
+  {
+    name: "config",
+    invocation: "config remote <on|off>",
+    summary: "Persist the remote-only filter setting",
+    details:
+      "Saves the remote-only preference applied by `score` (overridable per-run with --remote/--no-remote).",
+    optionsLabel: "SUBCOMMANDS",
+    options: [["remote <on|off>", "Enable or disable the remote-only filter."]],
+    examples: ["job-hunter config remote on"],
   },
   {
     name: "list",

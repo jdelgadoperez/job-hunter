@@ -3,7 +3,9 @@ import { COMMAND_NAMES } from "./help";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
 export const DEFAULT_MIN_SCORE = 50;
+/** Default heuristic-score floor for `score` gating when `--min-heuristic` is omitted. */
 export const DEFAULT_MIN_HEURISTIC = 30;
+/** Default cap on postings deep-scored by `score` when `--limit` is omitted. */
 export const DEFAULT_SCORE_LIMIT = 100;
 
 export type Command =
