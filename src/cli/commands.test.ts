@@ -1,5 +1,6 @@
 import type { PageRenderer } from "@app/discovery/connectors/browser";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
+import { AirtableSource } from "@app/discovery/sources/airtable-source";
 import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import type { ScoreOutcome } from "@app/matching/score-run";
@@ -172,6 +173,8 @@ describe("runScan + listMatches", () => {
           ),
           shareUrl: "https://airtable.com/appX/shrX/tblX",
           delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
         },
       },
       out.log,
@@ -227,6 +230,8 @@ describe("runScan + listMatches", () => {
           ),
           shareUrl: "https://airtable.com/appX/shrX/tblX",
           delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
         },
       },
       capture().log,
@@ -272,6 +277,8 @@ describe("runScan + listMatches", () => {
         sharedViewReader: new FakeSharedViewReader(airtableData(companies)),
         shareUrl: "https://airtable.com/appX/shrX/tblX",
         delayMs: 0,
+        settings: { getSetting: () => undefined as string | undefined },
+        sources: [new AirtableSource()],
       },
     });
 

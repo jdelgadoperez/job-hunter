@@ -4,6 +4,7 @@ import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
+import { settingsWithEnvKey } from "@app/matching/resolve-settings";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import type { Repository } from "@app/storage/repository";
@@ -40,6 +41,7 @@ export function createScanRunner(repo: Repository): ScanRunner {
           sharedViewReader: new PlaywrightSharedViewReader(),
           shareUrl: resolveShareUrl(),
           trackedCompanies: repo.listTrackedCompanies(),
+          settings: settingsWithEnvKey(repo),
         },
       },
       // Discovery warnings still reach the console for visibility.

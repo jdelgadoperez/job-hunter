@@ -1,14 +1,16 @@
 import { hostnameOf } from "@app/domain/normalize";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Warning } from "@app/domain/types";
+import type { SettingsReader } from "@app/matching/resolve-settings";
 import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
 import pLimit from "p-limit";
 import { BrowserConnector, type PageRenderer } from "./connectors/browser";
 import type { ConnectorResult } from "./connectors/types";
 import { resolveAts } from "./resolve-ats";
-import { type SharedViewReader, airtableRowsToLeads } from "./sources/airtable";
-import type { CompanyLead } from "./sources/types";
+import type { SharedViewReader } from "./sources/airtable";
+import { LEAD_SOURCES } from "./sources/registry";
+import type { CompanyLead, LeadSource } from "./sources/types";
 import { isUnscrapableHost } from "./unscrapable";
 
 export type DiscoverDeps = {
@@ -24,6 +26,10 @@ export type DiscoverDeps = {
   onProgress?: (event: ScanProgressEvent) => void;
   concurrency?: number;
   delayMs?: number;
+  /** Settings reader for key-gated lead sources (threaded to each source). */
+  settings: SettingsReader;
+  /** Lead sources to run; defaults to the production registry. Injected for tests. */
+  sources?: LeadSource[];
 };
 
 export type DiscoverResult = {
@@ -53,23 +59,29 @@ function normalizeUrl(url: string): string {
 }
 
 /**
- * Build the company lead list from the Airtable shared view + user-tracked companies, merged and
- * de-duplicated by normalized careers URL. An unreachable Airtable degrades to tracked-only plus a
- * `Warning` — never throws.
+ * Build the company lead list by fanning out over all registered lead sources plus user-tracked
+ * companies, merged and de-duplicated by normalized careers URL. Sources run in registry order so
+ * first-wins dedup is deterministic. Any source failure degrades to a `Warning` — never throws.
  */
 async function collectLeads(
   deps: DiscoverDeps,
 ): Promise<{ leads: CompanyLead[]; warnings: Warning[] }> {
   const warnings: Warning[] = [];
+  const sources = deps.sources ?? LEAD_SOURCES;
 
-  let airtableLeads: CompanyLead[] = [];
-  try {
-    const raw = await deps.sharedViewReader.read(deps.shareUrl);
-    const mapped = airtableRowsToLeads(raw);
-    airtableLeads = mapped.leads;
-    if (mapped.warning) warnings.push({ source: "airtable", message: mapped.warning });
-  } catch (error) {
-    warnings.push({ source: "airtable", message: errorMessage(error) });
+  const sourceDeps = {
+    fetcher: deps.fetcher,
+    settings: deps.settings,
+    sharedViewReader: deps.sharedViewReader,
+    shareUrl: deps.shareUrl,
+  };
+
+  const sourceLeads: CompanyLead[] = [];
+  // Sources run in registry order so first-wins dedup is deterministic. Each degrades to warnings.
+  const results = await Promise.all(sources.map((source) => source.fetch(sourceDeps)));
+  for (const result of results) {
+    sourceLeads.push(...result.leads);
+    warnings.push(...result.warnings);
   }
 
   const trackedLeads: CompanyLead[] = (deps.trackedCompanies ?? []).map((tracked) => ({
@@ -79,7 +91,7 @@ async function collectLeads(
   }));
 
   const byUrl = new Map<string, CompanyLead>();
-  for (const lead of [...airtableLeads, ...trackedLeads]) {
+  for (const lead of [...sourceLeads, ...trackedLeads]) {
     const key = normalizeUrl(lead.careersUrl);
     if (!byUrl.has(key)) byUrl.set(key, lead);
   }
