@@ -47,9 +47,9 @@ const HOST_FINGERPRINTS: HostFingerprint[] = [
     connectorSource: "smartrecruiters",
     hosts: ["smartrecruiters.com"],
   },
+  { platform: "workable", connectorSource: "workable", hosts: ["workable.com"] },
 
   // Known platforms we do NOT yet have a connector for — sizing the "new platform" bucket.
-  { platform: "workable", connectorSource: null, hosts: ["workable.com"] },
   { platform: "icims", connectorSource: null, hosts: ["icims.com"] },
   { platform: "jobvite", connectorSource: null, hosts: ["jobvite.com"] },
   { platform: "taleo", connectorSource: null, hosts: ["taleo.net"] },

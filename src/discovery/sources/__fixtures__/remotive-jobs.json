@@ -1,0 +1,18 @@
+{
+  "jobs": [
+    {
+      "id": 1,
+      "company_name": "Acme",
+      "url": "https://boards.greenhouse.io/acme/jobs/123",
+      "category": "Software Development",
+      "candidate_required_location": "Worldwide"
+    },
+    {
+      "id": 2,
+      "company_name": "Globex",
+      "url": "https://apply.workable.com/globex/j/ABCDEF/",
+      "category": "Product",
+      "candidate_required_location": "USA"
+    }
+  ]
+}

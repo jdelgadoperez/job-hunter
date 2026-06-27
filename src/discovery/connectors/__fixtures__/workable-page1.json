@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "title": "Senior Backend Engineer",
+      "shortcode": "ABC123",
+      "url": "https://apply.workable.com/acme/j/ABC123/",
+      "description": "Build APIs.",
+      "location": { "city": "Berlin", "country": "Germany" }
+    },
+    {
+      "title": "Product Designer",
+      "shortcode": "DEF456",
+      "description": "Design things."
+    }
+  ],
+  "nextPage": "https://apply.workable.com/api/v3/accounts/acme/jobs?page=2"
+}

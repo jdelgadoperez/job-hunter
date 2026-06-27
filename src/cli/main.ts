@@ -75,6 +75,7 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
         sharedViewReader: new PlaywrightSharedViewReader(),
         shareUrl: resolveShareUrl(),
         trackedCompanies: repo.listTrackedCompanies(),
+        settings: settingsWithEnvKey(repo),
       },
     },
     // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.

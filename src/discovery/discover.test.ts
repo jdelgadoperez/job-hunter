@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { PageRenderer } from "./connectors/browser";
 import { discover } from "./discover";
 import { FakeSharedViewReader } from "./sources/airtable";
+import { AirtableSource } from "./sources/airtable-source";
+import type { LeadSource } from "./sources/types";
 
 const SHARE_URL = "https://airtable.com/appX/shrX/tblX";
 
@@ -124,6 +126,8 @@ describe("discover", () => {
       shareUrl: SHARE_URL,
       concurrency: 2,
       delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
     });
 
     const titles = postings.map((p) => p.title).sort();
@@ -166,6 +170,8 @@ describe("discover", () => {
       sharedViewReader: reader,
       shareUrl: SHARE_URL,
       delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
     });
 
     // The LinkedIn company is never rendered; the real company site still is.
@@ -202,6 +208,8 @@ describe("discover", () => {
         { careersUrl: "https://boards.greenhouse.io/acme/" },
       ],
       delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
     });
 
     expect(postings.map((p) => p.title).sort()).toEqual(["Engineer at acme", "Engineer at zeta"]);
@@ -224,6 +232,8 @@ describe("discover", () => {
       shareUrl: SHARE_URL,
       trackedCompanies: [{ careersUrl: "https://boards.greenhouse.io/zeta", name: "Zeta" }],
       delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
     });
 
     expect(postings.map((p) => p.title)).toEqual(["Engineer at zeta"]);
@@ -254,6 +264,8 @@ describe("discover", () => {
       sharedViewReader: reader,
       shareUrl: SHARE_URL,
       delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
     });
     expect(postings.map((p) => p.title)).toEqual(["Engineer at acme"]);
     expect(warnings.some((w) => w.source === "Failco")).toBe(true);
@@ -283,6 +295,8 @@ describe("discover", () => {
       shareUrl: SHARE_URL,
       delayMs: 0,
       onProgress: (e) => events.push(e),
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
     });
 
     expect(events[0]).toEqual({ kind: "directory" });
@@ -318,8 +332,101 @@ describe("discover", () => {
       shareUrl: SHARE_URL,
       concurrency: 0,
       delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
     });
     expect(postings.length).toBeGreaterThan(0);
     expect(gauge.max).toBe(1);
+  });
+});
+
+/** Minimal deps for the fan-out tests — no real network/browser needed. */
+function baseDeps() {
+  const fetcher: Fetcher = {
+    async fetch(url) {
+      return { statusCode: 404, finalUrl: url, bodyText: "" };
+    },
+  };
+  const renderer: PageRenderer = {
+    async render() {
+      return "";
+    },
+  };
+  return {
+    fetcher,
+    renderer,
+    sharedViewReader: new FakeSharedViewReader({}),
+    shareUrl: "",
+    settings: { getSetting: () => undefined as string | undefined },
+  };
+}
+
+/** A source returning fixed leads (and optional warnings), for fan-out tests. */
+function staticSource(name: string, leads: { company: string; careersUrl: string }[]): LeadSource {
+  return {
+    name,
+    fetch: async () => ({
+      leads: leads.map((l) => ({ ...l, categories: [] })),
+      warnings: [],
+    }),
+  };
+}
+
+describe("collectLeads fan-out", () => {
+  it("merges leads from all sources and dedups by normalized careers URL (first wins)", async () => {
+    const a = staticSource("a", [{ company: "Acme-A", careersUrl: "https://x.test/acme" }]);
+    const b = staticSource("b", [
+      { company: "Acme-B", careersUrl: "https://x.test/acme/" }, // same URL, trailing slash
+      { company: "Globex", careersUrl: "https://x.test/globex" },
+    ]);
+
+    const result = await discover({
+      ...baseDeps(),
+      sources: [a, b],
+      trackedCompanies: [],
+    });
+
+    const urls = result.companies.map((c) => c.careersUrl);
+    expect(urls).toContain("https://x.test/acme"); // a's lead wins the collision
+    expect(urls).not.toContain("https://x.test/acme/");
+    expect(result.companies.find((c) => c.careersUrl === "https://x.test/acme")?.company).toBe(
+      "Acme-A",
+    );
+    expect(urls).toContain("https://x.test/globex");
+  });
+
+  it("a failing source contributes a warning but does not abort the others", async () => {
+    const ok = staticSource("ok", [{ company: "Globex", careersUrl: "https://x.test/globex" }]);
+    const bad: LeadSource = {
+      name: "bad",
+      fetch: async () => ({ leads: [], warnings: [{ source: "bad", message: "boom" }] }),
+    };
+
+    const result = await discover({ ...baseDeps(), sources: [bad, ok], trackedCompanies: [] });
+
+    expect(result.companies.map((c) => c.careersUrl)).toContain("https://x.test/globex");
+    expect(result.warnings.some((w) => w.source === "bad" && w.message === "boom")).toBe(true);
+  });
+
+  it("a source that throws degrades to a warning without aborting discovery", async () => {
+    const throwing: LeadSource = {
+      name: "throwing",
+      fetch: async () => {
+        throw new Error("kaboom");
+      },
+    };
+    const ok = staticSource("ok", [{ company: "Globex", careersUrl: "https://x.test/globex" }]);
+
+    const result = await discover({
+      ...baseDeps(),
+      sources: [throwing, ok],
+      trackedCompanies: [],
+    });
+
+    // The good source's lead still arrives; the throwing source becomes a warning, not a crash.
+    expect(result.companies.map((c) => c.careersUrl)).toContain("https://x.test/globex");
+    expect(
+      result.warnings.some((w) => w.source === "throwing" && w.message.includes("kaboom")),
+    ).toBe(true);
   });
 });
