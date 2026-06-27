@@ -16,6 +16,7 @@ import {
 } from "@app/matching/resolve-settings";
 import { buildScorePrompt, toMatchResult } from "@app/matching/score-prompt";
 import { isUsageLimitError, runScoreRun } from "@app/matching/score-run";
+import { REMOTE_ONLY_SETTING } from "@app/matching/settings-keys";
 import { AnthropicTriageClient } from "@app/matching/triage-client";
 import { errorMessage } from "@app/net/error-message";
 import { HttpFetcher } from "@app/net/fetcher";
@@ -112,6 +113,7 @@ export async function runScoreCommand(
   const model = resolveScorerModel(settings, provider);
   const dictionary = repo.getSkillDictionary();
   const warnings: Warning[] = [];
+  const remoteOnly = resolveRemoteOnly(settings, options.remoteOnly);
 
   // Deep-score against the raw provider client. We do NOT reuse `LlmScorer` here because it
   // degrades EVERY failure (including a usage-limit error) into the heuristic fallback, which
@@ -151,7 +153,7 @@ export async function runScoreCommand(
     options: {
       minHeuristic: options.minHeuristic,
       limit: options.limit,
-      remoteOnly: resolveRemoteOnly(settings, options.remoteOnly),
+      remoteOnly,
       rescore: options.rescore,
       dryRun: options.dryRun,
       batchSize: TRIAGE_BATCH_SIZE,
@@ -162,7 +164,7 @@ export async function runScoreCommand(
 
   log(
     formatScorePlan(outcome, {
-      remoteOnly: resolveRemoteOnly(settings, options.remoteOnly),
+      remoteOnly,
       limit: options.limit,
       dryRun: options.dryRun,
     }),
@@ -220,6 +222,23 @@ export async function main(): Promise<void> {
         break;
       case "scan":
         await runScanCommand(repo, log);
+        break;
+      case "score":
+        await runScoreCommand(
+          repo,
+          {
+            minHeuristic: command.minHeuristic,
+            limit: command.limit,
+            ...(command.remoteOnly !== undefined ? { remoteOnly: command.remoteOnly } : {}),
+            rescore: command.rescore,
+            dryRun: command.dryRun,
+          },
+          log,
+        );
+        break;
+      case "config-remote":
+        repo.setSetting(REMOTE_ONLY_SETTING, command.on ? "true" : "false");
+        log(style.success(`Remote-only filter ${command.on ? "enabled" : "disabled"}.`));
         break;
     }
   } finally {
