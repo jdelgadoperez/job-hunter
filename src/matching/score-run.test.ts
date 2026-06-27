@@ -234,4 +234,34 @@ describe("runScoreRun", () => {
     expect(saved.length).toBe(0);
     expect(warnings.some((w) => /usage limit|abort/i.test(w.message))).toBe(true);
   });
+
+  it("deep-scores survivors concurrently (more than one in flight at once)", async () => {
+    const candidates = Array.from({ length: 4 }, (_, i) => candidate(`c${i}`, `Engineer ${i}`, 90));
+    const { repo, saved } = fakeRepo(candidates);
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const slowScorer = {
+      score: async (_p: SkillProfile, p: JobPosting): Promise<MatchResult> => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return { score: p.title.length, matchedSkills: [], missingSkills: [], rationale: "deep" };
+      },
+    };
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: slowScorer,
+      options: { ...baseOptions, limit: candidates.length },
+    });
+
+    expect(outcome.counts.deepScored).toBe(candidates.length);
+    expect(saved.length).toBe(candidates.length);
+    // The serial implementation would peak at 1; the bounded-concurrent one overlaps work.
+    expect(maxInFlight).toBeGreaterThan(1);
+  });
 });

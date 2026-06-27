@@ -1,0 +1,12 @@
+{
+  "page": 1,
+  "page_count": 2,
+  "results": [
+    {
+      "name": "Staff Engineer",
+      "company": { "name": "Initech" },
+      "refs": { "landing_page": "https://jobs.lever.co/initech/789" },
+      "categories": [{ "name": "Software Engineering" }]
+    }
+  ]
+}

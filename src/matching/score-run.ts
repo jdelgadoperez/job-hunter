@@ -1,6 +1,7 @@
 import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { errorMessage } from "@app/net/error-message";
 import type { ScoringCandidate } from "@app/storage/repository";
+import pLimit from "p-limit";
 import { type CostEstimate, estimateCost } from "./cost-estimate";
 import type { LlmTriager } from "./llm-triager";
 import { isRemote } from "./remote-filter";
@@ -10,6 +11,10 @@ import { isUsageLimitError } from "./usage-limit-error";
 export { isUsageLimitError } from "./usage-limit-error";
 
 const WARNING_SOURCE = "score";
+
+// Deep scores are independent network-bound LLM calls, so a small concurrency cap turns the serial
+// wait into parallel throughput without hammering the provider (mirrors runScan's SCORE_CONCURRENCY).
+const DEEP_SCORE_CONCURRENCY = 4;
 
 export type ScoreOptions = {
   minHeuristic: number;
@@ -125,24 +130,35 @@ export async function runScoreRun(deps: {
 
   const survivors = eligible.filter((c) => keptIds.has(c.posting.id));
 
-  // Stage 5 — deep score, aborting on the first usage-limit error.
+  // Stage 5 — deep score concurrently (bounded). Once a usage-limit error surfaces we stop launching
+  // new work; scores already in flight are allowed to finish (no point discarding completed work).
+  // JS is single-threaded, so the `counts.deepScored += 1` and synchronous `saveMatchResult` after
+  // each await can't interleave mid-statement.
+  const limit = pLimit(DEEP_SCORE_CONCURRENCY);
   let abortedOnLimit = false;
-  for (const candidate of survivors) {
-    try {
-      const result = await scoreOne(scorer, profile, candidate.posting);
-      repo.saveMatchResult(candidate.posting.id, result, "llm");
-      counts.deepScored += 1;
-    } catch (error) {
-      if (isUsageLimitError(error)) {
-        abortedOnLimit = true;
-        warn(
-          `hit the provider usage limit after ${counts.deepScored} deep score(s); ` +
-            `${survivors.length - counts.deepScored} remaining were not scored`,
-        );
-        break;
-      }
-      warn(`deep score failed for ${candidate.posting.title}: ${errorMessage(error)}`);
-    }
+  await Promise.all(
+    survivors.map((candidate) =>
+      limit(async () => {
+        if (abortedOnLimit) return; // a prior task hit the hard limit — don't start new ones.
+        try {
+          const result = await scoreOne(scorer, profile, candidate.posting);
+          repo.saveMatchResult(candidate.posting.id, result, "llm");
+          counts.deepScored += 1;
+        } catch (error) {
+          if (isUsageLimitError(error)) {
+            abortedOnLimit = true;
+            return;
+          }
+          warn(`deep score failed for ${candidate.posting.title}: ${errorMessage(error)}`);
+        }
+      }),
+    ),
+  );
+  if (abortedOnLimit) {
+    warn(
+      `hit the provider usage limit after ${counts.deepScored} deep score(s); ` +
+        `${survivors.length - counts.deepScored} remaining were not scored`,
+    );
   }
 
   return { counts, estimate, warnings, abortedOnLimit };

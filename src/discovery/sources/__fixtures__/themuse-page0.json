@@ -1,0 +1,25 @@
+{
+  "page": 0,
+  "page_count": 2,
+  "results": [
+    {
+      "name": "Backend Engineer",
+      "company": { "name": "Acme" },
+      "refs": { "landing_page": "https://boards.greenhouse.io/acme/jobs/123" },
+      "categories": [{ "name": "Software Engineering" }, { "name": "Engineering" }],
+      "levels": [{ "name": "Senior Level" }]
+    },
+    {
+      "name": "Product Manager",
+      "company": { "name": "Globex" },
+      "refs": { "landing_page": "https://apply.workable.com/globex/j/ABCDEF/" },
+      "categories": [{ "name": "Product" }]
+    },
+    {
+      "name": "Listing with no landing page",
+      "company": { "name": "Hooli" },
+      "refs": { "landing_page": "" },
+      "categories": [{ "name": "Data Science" }]
+    }
+  ]
+}

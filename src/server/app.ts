@@ -5,6 +5,7 @@ import {
   ANTHROPIC_KEY_SETTING,
   MODEL_SETTING,
   PROVIDER_SETTING,
+  THE_MUSE_KEY_SETTING,
 } from "@app/matching/settings-keys";
 import { errorMessage } from "@app/net/error-message";
 import { readResumeBuffer } from "@app/profile/read-resume";
@@ -14,21 +15,24 @@ import type { ServerDeps } from "./types";
 // The Airtable directory URL is a fixed community resource (see `resolveShareUrl`), not user
 // config, so it's intentionally absent from the settings API.
 
-/** Settings shape returned to clients — the API key is never echoed back, only its presence. */
+/** Settings shape returned to clients — secret keys are never echoed back, only their presence. */
 function readSettings(repo: ServerDeps["repo"]) {
   return {
     hasAnthropicKey: Boolean(repo.getSetting(ANTHROPIC_KEY_SETTING)?.trim()),
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
+    hasTheMuseKey: Boolean(repo.getSetting(THE_MUSE_KEY_SETTING)?.trim()),
   };
 }
 
-// Writable settings keys, mapped from request-body field → settings key. The API key is
-// included here (write-only); reads go through `readSettings`, which masks it.
+// Writable settings keys, mapped from request-body field → settings key. Secret keys (the LLM API
+// key, The Muse lead-source key) are included here write-only; reads go through `readSettings`,
+// which masks them and reports only their presence.
 const WRITABLE_SETTINGS: Record<string, string> = {
   anthropicApiKey: ANTHROPIC_KEY_SETTING,
   scorerModel: MODEL_SETTING,
   scorerProvider: PROVIDER_SETTING,
+  theMuseApiKey: THE_MUSE_KEY_SETTING,
 };
 
 // The server binds to loopback and has no authentication, so it trusts that every request

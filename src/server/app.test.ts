@@ -235,8 +235,22 @@ describe("settings", () => {
       hasAnthropicKey: true,
       scorerModel: null,
       scorerProvider: null,
+      hasTheMuseKey: false,
     });
     expect(JSON.stringify(body)).not.toContain("sk-secret");
+  });
+
+  it("writes the (write-only) Muse key and reports presence without echoing it", async () => {
+    const res = await makeApp().request("/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ theMuseApiKey: "muse-secret" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await json<{ hasTheMuseKey: boolean }>(res);
+    expect(body.hasTheMuseKey).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("muse-secret");
+    expect(repo.getSetting("theMuseApiKey")).toBe("muse-secret");
   });
 
   it("writes provided settings and never echoes the key back", async () => {
