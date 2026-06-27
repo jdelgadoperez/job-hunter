@@ -241,3 +241,31 @@ const BreezyJob = z
 
 export const BreezyFeed = z.array(BreezyJob);
 export type BreezyFeed = z.infer<typeof BreezyFeed>;
+
+// Workable — GET https://apply.workable.com/api/v3/accounts/{token}/jobs (cursor-paginated via nextPage)
+// The list carries a description; `location` is a structured object; `url` may be absent (synthesize
+// from `shortcode`). `nextPage` is an opaque next-page URL/cursor when more results remain.
+const WorkableJob = z
+  .object({
+    title: z.string(),
+    shortcode: z.string(),
+    url: z.string().optional(),
+    description: z.string().optional(),
+    location: z
+      .object({
+        city: z.string().nullish(),
+        region: z.string().nullish(),
+        country: z.string().nullish(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+export const WorkableFeed = z
+  .object({
+    results: z.array(WorkableJob),
+    nextPage: z.string().nullish(),
+  })
+  .passthrough();
+export type WorkableFeed = z.infer<typeof WorkableFeed>;
