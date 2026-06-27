@@ -1,0 +1,24 @@
+[
+  {
+    "id": "greenhouse:acme:1",
+    "company": "acme",
+    "title": "Senior TypeScript Engineer",
+    "url": "https://boards.greenhouse.io/acme/jobs/1",
+    "source": "greenhouse",
+    "description": "Build APIs in TypeScript.",
+    "location": "Remote - US",
+    "posted_at": "2026-06-20T00:00:00+00:00",
+    "fetched_at": "2026-06-26T12:00:00+00:00"
+  },
+  {
+    "id": "lever:globex:2",
+    "company": "globex",
+    "title": "Staff Backend Engineer",
+    "url": "https://jobs.lever.co/globex/2",
+    "source": "lever",
+    "description": "Distributed systems.",
+    "location": null,
+    "posted_at": null,
+    "fetched_at": "2026-06-26T11:00:00+00:00"
+  }
+]
