@@ -8,6 +8,7 @@ import {
   ripplingConnector,
   smartRecruitersConnector,
   ukgConnector,
+  workableConnector,
   workdayConnector,
 } from "./connectors/registry";
 import type { AtsConnector } from "./connectors/types";
@@ -87,6 +88,9 @@ export function resolveAts(careersUrl: string): ResolvedAts | null {
   }
   if (host === "careers.smartrecruiters.com") {
     return { connector: smartRecruitersConnector, boardToken: token };
+  }
+  if (host === "apply.workable.com") {
+    return { connector: workableConnector, boardToken: token };
   }
 
   return null;

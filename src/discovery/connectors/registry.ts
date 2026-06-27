@@ -8,6 +8,7 @@ import { RipplingConnector } from "./rippling";
 import { SmartRecruitersConnector } from "./smartrecruiters";
 import type { AtsConnector } from "./types";
 import { UkgConnector } from "./ukg";
+import { WorkableConnector } from "./workable";
 import { WorkdayConnector } from "./workday";
 
 // Connectors are stateless, so a single shared instance each is enough — used by both URL
@@ -23,6 +24,7 @@ export const smartRecruitersConnector = new SmartRecruitersConnector();
 export const bambooHrConnector = new BambooHrConnector();
 export const ukgConnector = new UkgConnector();
 export const breezyConnector = new BreezyConnector();
+export const workableConnector = new WorkableConnector();
 
 /**
  * ATS connectors keyed by their `source`, for liveness re-checks that re-fetch a board feed.
@@ -41,5 +43,6 @@ export const connectorBySource: Record<string, AtsConnector> = Object.fromEntrie
     smartRecruitersConnector,
     bambooHrConnector,
     breezyConnector,
+    workableConnector,
   ].map((connector) => [connector.source, connector]),
 );

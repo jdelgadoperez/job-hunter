@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { workableConnector } from "./connectors/registry";
 import { resolveAts } from "./resolve-ats";
 
 describe("resolveAts", () => {
@@ -87,5 +88,13 @@ describe("resolveAts", () => {
 
   it("returns null for a non-url", () => {
     expect(resolveAts("not a url")).toBeNull();
+  });
+
+  describe("Workable resolution", () => {
+    it("resolves an apply.workable.com URL to the Workable connector with the account token", () => {
+      const resolved = resolveAts("https://apply.workable.com/acme/j/ABC123/");
+      expect(resolved?.connector).toBe(workableConnector);
+      expect(resolved?.boardToken).toBe("acme");
+    });
   });
 });

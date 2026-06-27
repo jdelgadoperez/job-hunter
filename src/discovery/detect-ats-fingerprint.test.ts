@@ -90,21 +90,24 @@ describe("detectAtsFingerprint", () => {
   });
 
   describe("known platforms without an existing connector", () => {
-    it("detects Workable (no connector yet) and reports a null connectorSource", () => {
-      const html = `<html><body>
-        <script src="https://www.workable.com/assets/embed.js"></script>
-        <div data-careers-url="https://apply.workable.com/acme"></div>
-      </body></html>`;
-      const match = detectAtsFingerprint("https://careers.acme.com", html);
-      expect(match).toEqual({ platform: "workable", connectorSource: null, signal: "embed" });
-    });
-
     it("detects iCIMS (no connector yet) from an embedded careers-icims host", () => {
       const html = `<html><body>
         <iframe src="https://careers-acme.icims.com/jobs/search"></iframe>
       </body></html>`;
       const match = detectAtsFingerprint("https://careers.acme.com", html);
       expect(match).toEqual({ platform: "icims", connectorSource: null, signal: "embed" });
+    });
+  });
+
+  describe("Workable connector", () => {
+    it("reports a workable.com embed as connector-backed", () => {
+      const match = detectAtsFingerprint(
+        "https://careers.acme.test",
+        '<script src="https://apply.workable.com/embed.js"></script>',
+      );
+      expect(match?.platform).toBe("workable");
+      expect(match?.connectorSource).toBe("workable");
+      expect(match?.signal).toBe("embed");
     });
   });
 
