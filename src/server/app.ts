@@ -3,6 +3,8 @@ import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
 import {
   ANTHROPIC_KEY_SETTING,
+  FEED_KEY_SETTING,
+  FEED_URL_SETTING,
   MODEL_SETTING,
   PROVIDER_SETTING,
   THE_MUSE_KEY_SETTING,
@@ -22,6 +24,9 @@ function readSettings(repo: ServerDeps["repo"]) {
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
     hasTheMuseKey: Boolean(repo.getSetting(THE_MUSE_KEY_SETTING)?.trim()),
+    // Remote feed: the URL is shown back (not secret); the anon key is write-only (presence only).
+    feedUrl: repo.getSetting(FEED_URL_SETTING) ?? null,
+    hasFeedKey: Boolean(repo.getSetting(FEED_KEY_SETTING)?.trim()),
   };
 }
 
@@ -33,6 +38,8 @@ const WRITABLE_SETTINGS: Record<string, string> = {
   scorerModel: MODEL_SETTING,
   scorerProvider: PROVIDER_SETTING,
   theMuseApiKey: THE_MUSE_KEY_SETTING,
+  feedUrl: FEED_URL_SETTING,
+  feedKey: FEED_KEY_SETTING,
 };
 
 // The server binds to loopback and has no authentication, so it trusts that every request

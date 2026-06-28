@@ -236,8 +236,24 @@ describe("settings", () => {
       scorerModel: null,
       scorerProvider: null,
       hasTheMuseKey: false,
+      feedUrl: null,
+      hasFeedKey: false,
     });
     expect(JSON.stringify(body)).not.toContain("sk-secret");
+  });
+
+  it("stores the feed URL (shown back) and the feed key (write-only, presence only)", async () => {
+    const res = await makeApp().request("/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ feedUrl: "https://proj.supabase.co", feedKey: "anon-secret" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await json<{ feedUrl: string | null; hasFeedKey: boolean }>(res);
+    expect(body.feedUrl).toBe("https://proj.supabase.co");
+    expect(body.hasFeedKey).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("anon-secret");
+    expect(repo.getSetting("feedKey")).toBe("anon-secret");
   });
 
   it("writes the (write-only) Muse key and reports presence without echoing it", async () => {
