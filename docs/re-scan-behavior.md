@@ -2,12 +2,13 @@
 
 The first `scan` populates an empty database. Every scan after that is a **re-scan**: it runs against
 a baseline of companies, postings, and scores from prior runs. This guide explains what a re-scan
-does differently, how postings move through their lifecycle (new → scored → expired → revived), and
-where those changes surface to you in the CLI and the dashboard.
+does differently, how postings move through their lifecycle (new → heuristic-scored → expired →
+revived), and where those changes surface to you in the CLI and the dashboard.
 
 For everyday usage, see the [getting-started guide](https://github.com/jdelgadoperez/job-hunter/wiki/Getting-Started). This doc is for understanding the *behavior*
-— useful if you're wondering "why did that posting disappear?" or "does a re-scan re-charge my LLM
-budget?".
+— useful if you're wondering "why did that posting disappear?". Note that **`scan` only ever applies
+the free heuristic score**; LLM deep-scoring is a separate, budget-aware `score` step (see below), so
+re-scanning never re-charges your API budget.
 
 ## The short version
 
@@ -16,8 +17,9 @@ budget?".
 - A scan is recorded as an **incremental unit** (a row in the `scans` table). Each posting and
   company remembers the scan that last saw it, which is how the tool computes "new", "gone", and
   "stale".
-- **Every live posting is re-scored on every scan.** There is no "already scored, skip it" cache —
-  so a re-scan with LLM scoring enabled re-incurs scoring cost for everything currently open.
+- **Every live posting is heuristic-re-scored on every scan** — the free offline scorer, so a re-scan
+  costs only CPU. LLM scoring is **not** part of `scan`; it's the separate `score` command, which
+  skips postings it already LLM-scored (unless `--rescore`), so it never silently re-charges.
 - Postings that **weren't seen this run** are re-checked for liveness and expired — immediately if
   confirmed gone, otherwise after they've been missing for two or more scans.
 - A posting that **reappears after being expired is revived** automatically.
@@ -75,15 +77,17 @@ On save:
 The prior **score is not preserved** — it's overwritten in the very next step, because scoring always
 re-runs (see below).
 
-## Scoring on a re-scan — no cache
+## Scoring on a re-scan
 
-Every posting discovered this run is **unconditionally re-scored**. There is no "this was scored last
-week, skip it" short-circuit and no score history — the latest score overwrites the previous one.
+`scan` **unconditionally re-applies the heuristic score** to every posting discovered this run — the
+latest heuristic score overwrites the previous one. There's no per-posting heuristic cache, but the
+heuristic is free, so re-scan cost is just CPU.
 
-Practical implication: **with LLM scoring enabled, each re-scan re-charges the scoring cost for every
-currently-open posting**, not just the new ones. If that matters for your API budget, scan
-deliberately rather than on a tight auto-refresh schedule. (Without an API key, scoring is the free
-offline heuristic, so re-scan cost is just CPU.)
+LLM deep-scoring is the separate **`score`** command, and it *does* cache: it ranks stored postings by
+heuristic score, caps how many it deep-scores (`--limit`), and **skips postings already LLM-scored**
+unless you pass `--rescore`. So running `scan` on a tight auto-refresh schedule never re-charges your
+API budget — only an explicit `score` spends, and only on postings it hasn't scored before. Preview
+the cost first with `score --dry-run`.
 
 ## The posting lifecycle
 

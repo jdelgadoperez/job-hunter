@@ -1,11 +1,13 @@
 # Exploration: a shared sourcing backend (Vercel / Supabase)
 
-> **Status: exploration, not a commitment.** This sketches what it would look like to move the
-> *sourcing* half of job-hunter — discovery, the posting store, and a read API — into a hosted
-> backend (Supabase and/or Vercel) so the expensive crawl runs **once for everyone** instead of
-> once per user. It maps the idea onto the current code, weighs Supabase vs. Vercel, calls out the
-> one real gotcha (Playwright doesn't fit serverless), and proposes a phased path that preserves the
-> local-first privacy story.
+> **Status: largely built (Phases 0.5–2 shipped).** This started as an exploration; the
+> shared-read-feed v1 has since been implemented per
+> [`docs/superpowers/plans/2026-06-27-hosted-scan-backend.md`](superpowers/plans/2026-06-27-hosted-scan-backend.md):
+> the `runSourcing`/`ScanStore` split, the Supabase schema + RLS (live), `PostgresScanStore`, the
+> `PostingFeed` client, hybrid remote mode, and the scanner worker are all on `main`. What remains is
+> **operational** (scheduling the worker) and **Phase 3** (hosted multi-user). The original analysis
+> below is kept for context — it maps the idea onto the code, weighs Supabase vs. Vercel, calls out
+> the one real gotcha (Playwright doesn't fit serverless), and lays out the phased path.
 
 ## The redundancy we're trying to remove
 
@@ -168,21 +170,20 @@ preserve:
 ## A phased path
 
 - **Phase 0 — today.** Local-first SQLite; each client crawls independently.
-- **Phase 0.5 — decouple `scan` from `score` (in flight, separate thread).** Split the single
-  interleaved pass so `scan` writes postings to the store and `score` reads them back independently.
-  This is local-only and ships value on its own (re-score without re-crawling), but it's also the
-  precondition that turns Phases 1–2 into a source swap rather than a redesign.
-- **Phase 1 — shared store + scheduled scanner.** Stand up Supabase Postgres; run `discover()` in a
-  container/cron worker on a schedule; write the de-duplicated posting feed. Expose a **read-only**
-  feed (PostgREST or a small Hono endpoint). No client changes yet — validate the feed in isolation.
-- **Phase 2 — client reads the feed.** Add a "remote source" mode: the client pulls postings from the
-  feed instead of crawling, keeps SQLite as a local cache, and **scores locally**. Keep the local
-  crawl as a fallback and for tracked companies not in the shared set. *This is where users feel the
-  scan-time drop.*
-- **Phase 3 — optional hosted multi-user.** Accounts; move `profiles`/`match_results`/`user_actions`
-  into Postgres behind RLS; optional server-side scoring. Only if a hosted product is the goal.
+- ✅ **Phase 0.5 — decouple `scan` from `score`.** Done (free `scan` + budget-aware `score`). The
+  precondition that turned Phases 1–2 into a source swap rather than a redesign.
+- ✅ **Phase 1 — shared store + scheduled scanner.** Done: Supabase Postgres + RLS (live), the
+  `PostgresScanStore`, the read-only PostgREST feed, and the `scan:worker` entrypoint + runbook.
+- ✅ **Phase 2 — client reads the feed.** Done as **hybrid remote mode**: with `feedUrl`/`feedKey`
+  set, the client pulls the feed instead of crawling the directory **and** still crawls its own
+  tracked companies, scoring locally. (Tracked companies are kept local — option A — rather than
+  dropped; submitting them to the cloud is the separate option B.)
+- ⬜ **Phase 3 — optional hosted multi-user.** Accounts; move `profiles`/`match_results`/`user_actions`
+  into Postgres behind RLS; optional server-side scoring. Only if a hosted product is the goal — not
+  started.
 
-Phases 1–2 deliver the entire speed + redundancy win; Phase 3 is a separate product decision.
+Phases 0.5–2 (the entire speed + redundancy win) are shipped; what remains is **operational**
+(scheduling the worker so the feed populates) and Phase 3, a separate product decision.
 
 ## Tradeoffs & risks
 

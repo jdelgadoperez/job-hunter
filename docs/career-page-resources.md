@@ -5,17 +5,19 @@ URL — and resolving each one to an ATS connector (or a browser fallback). Toda
 directory source plus your own tracked companies. This doc catalogues **other resources you could
 add** to widen the funnel, and explains how each fits the existing architecture.
 
-It's a reference, not a roadmap — nothing here is wired up yet. The goal is to make the tradeoffs
-explicit so adding a source is a small, well-understood change.
+Some of these are now wired up — the **Remotive** and (key-gated) **The Muse** lead sources and a
+**Workable** connector all shipped (called out below). The rest remain a reference: the goal is to
+make the tradeoffs explicit so adding a source stays a small, well-understood change.
 
 ## How a lead enters the pipeline today
 
 Discovery is a two-step seam (`src/discovery/`):
 
 1. **Sources** produce `CompanyLead`s — `{ company, careersUrl, categories }` (see
-   `src/discovery/sources/types.ts`). The only production source is `airtable.ts`, which reads the
-   community **stillhiring.today** directory (a public Airtable shared view). User-tracked companies
-   are merged in by `discover.ts` (`collectLeads`), de-duplicated by normalized careers URL.
+   `src/discovery/sources/types.ts`). Production sources today: `airtable.ts` (the community
+   **stillhiring.today** directory, a public Airtable shared view), `remotive.ts`, and the key-gated
+   `themuse.ts` — each a `LeadSource` run by `discover.ts` (`collectLeads`). User-tracked companies
+   are merged in too, de-duplicated by normalized careers URL.
 2. **Connectors** resolve each lead's careers URL to a known ATS and fetch its postings
    (`resolve-ats.ts` → `connectors/`), falling back to a headless browser render, and skipping hosts
    we don't scrape (`unscrapable.ts`).
@@ -26,8 +28,8 @@ fingerprint detection for free — a new source only has to produce `{ company, 
 understand ATS platforms.
 
 Connectors currently implemented: Greenhouse, Lever, Ashby, Workday, Rippling, Recruitee,
-SmartRecruiters, BambooHR, UKG, Breezy (`connectors/registry.ts`), plus a JSON-LD/`schema.org`
-JobPosting fallback and host-fingerprint detection (`detect-ats-fingerprint.ts`).
+SmartRecruiters, BambooHR, UKG, Breezy, Workable (`connectors/registry.ts`), plus a
+JSON-LD/`schema.org` JobPosting fallback and host-fingerprint detection (`detect-ats-fingerprint.ts`).
 
 ---
 
@@ -47,11 +49,11 @@ slug) but no directory listing it.
 | Recruitee | `https://{company}.recruitee.com/api/offers/` | yes |
 | BambooHR | `https://{company}.bamboohr.com/careers/list` | yes |
 | Breezy | `https://{company}.breezy.hr/json` | yes |
-| Workable | `https://apply.workable.com/api/v3/accounts/{token}/jobs` | **no — candidate connector** |
+| Workable | `https://apply.workable.com/api/v3/accounts/{token}/jobs` | yes |
 
 **Fit:** these aren't directory sources on their own (they need a token); pair them with an
-enumeration technique (§4) or a curated token list (§3). Workable is the one notable platform with no
-connector yet — a clean addition modeled on the existing ones.
+enumeration technique (§4) or a curated token list (§3). Every platform in this table now has a
+connector (Workable was the last, added via the expandable-lead-sources work).
 
 ---
 
@@ -64,8 +66,8 @@ anti-bot and against ToS — keep those on the `unscrapable` list). Each is a ne
 
 | Source | Endpoint | Notes |
 | --- | --- | --- |
-| **The Muse** | `https://api-v2.themuse.com/jobs` | Free API key; companies + listings, paginated, category/level filters. |
-| **Remotive** | `https://remotive.com/api/remote-jobs` | Free, no auth; remote roles with company name + URL. |
+| **The Muse** | `https://api-v2.themuse.com/jobs` | Free API key; companies + listings, paginated. **✅ shipped** (`themuse.ts`). |
+| **Remotive** | `https://remotive.com/api/remote-jobs` | Free, no auth; remote roles with company name + URL. **✅ shipped** (`remotive.ts`). |
 | **RemoteOK** | `https://remoteok.com/api` | Free JSON; first element is metadata. Attribution required. |
 | **Arbeitnow** | `https://www.arbeitnow.com/api/job-board-api` | Free, no auth; EU-heavy. |
 | **Jobicy** | `https://jobicy.com/api/v2/remote-jobs` | Free remote-jobs API. |
@@ -74,12 +76,16 @@ anti-bot and against ToS — keep those on the `unscrapable` list). Each is a ne
 | **Adzuna** | `https://api.adzuna.com/v1/api/jobs/...` | Free tier, needs app id/key. |
 | **USAJobs** | `https://data.usajobs.gov/api/search` | US federal; free, needs a key + email header. |
 
-**Recommendation:** start with **The Muse + Remotive + HN Who-is-Hiring**. The first two are
-clean structured feeds; HN is noisier but yields lots of direct ATS board links that your resolver
-will pick up automatically. A useful pattern: have these sources emit a careers URL and let
-`resolve-ats` + `detect-ats-fingerprint` decide whether it's a known ATS — the source stays dumb.
+**Status / recommendation:** **The Muse** and **Remotive** are now shipped (the recommended starting
+pair — clean structured feeds). The next candidate is **HN "Who is Hiring"** — noisier, but it yields
+lots of direct ATS board links the resolver picks up automatically. The pattern that worked: each
+source emits a careers URL and lets `resolve-ats` + `detect-ats-fingerprint` classify it — the source
+stays dumb.
 
 ### Worked example: a key-gated source (The Muse)
+
+> **Now implemented** in `src/discovery/sources/themuse.ts` exactly along these lines — kept here as
+> the reference template for the next key-gated source (Adzuna, USAJobs).
 
 Sources that need an API key follow the same `LeadSource` contract as Remotive, plus a self-skip when
 the key is unset — mirroring the LLM scorer's no-key fallback. The shape:
