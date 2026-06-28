@@ -20,6 +20,9 @@ export default defineConfig({
         // Live Postgres (service-role) store for the hosted worker — smoke-only via
         // `npm run smoke:postgres`. The pure row mappers it uses ARE unit-tested.
         "src/backend/postgres-scan-store.ts",
+        // Worker entrypoint: real browser + live Postgres, run via `npm run scan:worker`.
+        // The orchestration (`runScannerOnce`) IS unit-tested.
+        "src/backend/scanner/main.ts",
         // Shells out to git + network for the update check; pure logic lives in version.ts.
         "src/runtime/update-check.ts",
         // Server listener + real scan pipeline: bind a port / launch a browser / hit the
