@@ -1,5 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { type LlmUsage, toLlmUsage } from "./llm-usage";
 import type { LlmTriageRequest } from "./triage-prompt";
 import { type LlmTriagePayload, TriagePayloadSchema } from "./triage-schema";
 
@@ -18,10 +19,12 @@ const MAX_TOKENS = 4096;
 export class AnthropicTriageClient implements TriageClient {
   private readonly client: Anthropic;
   private readonly model: string;
+  private readonly onUsage?: (usage: LlmUsage) => void;
 
-  constructor(opts: { apiKey: string; model: string }) {
+  constructor(opts: { apiKey: string; model: string; onUsage?: (usage: LlmUsage) => void }) {
     this.client = new Anthropic({ apiKey: opts.apiKey });
     this.model = opts.model;
+    this.onUsage = opts.onUsage;
   }
 
   async triage(request: LlmTriageRequest): Promise<LlmTriagePayload> {
@@ -36,6 +39,9 @@ export class AnthropicTriageClient implements TriageClient {
       system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: request.user }],
     });
+
+    // Surface cache hit/miss so the caller can confirm the system prefix actually cached.
+    this.onUsage?.(toLlmUsage(response.usage));
 
     if (response.parsed_output === null) {
       throw new Error(`Triage returned no parseable output (stop_reason: ${response.stop_reason})`);

@@ -8,6 +8,7 @@ import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@ap
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import { MatchPayloadSchema } from "@app/matching/llm-schema";
 import { LlmTriager } from "@app/matching/llm-triager";
+import { UsageAccumulator, formatUsageSummary } from "@app/matching/llm-usage";
 import { resolveRemoteOnly } from "@app/matching/resolve-remote";
 import {
   resolveApiKey,
@@ -126,8 +127,13 @@ export async function runScoreCommand(
   // degrades EVERY failure (including a usage-limit error) into the heuristic fallback, which
   // would hide the very signal `score-run` needs to abort the run. Instead this scorer degrades
   // ordinary failures to the heuristic but re-throws usage-limit errors so `runScoreRun` can stop.
+  // Accumulate per-call usage from both LLM steps so the summary can report whether the cached
+  // system prefix actually engaged (a sub-threshold prefix caches nothing — see docs/prompt-caching.md).
+  const usage = new UsageAccumulator();
+  const onUsage = (u: Parameters<typeof usage.add>[0]) => usage.add(u);
+
   const heuristic = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
-  const rawClient = provider.createClient({ apiKey, model });
+  const rawClient = provider.createClient({ apiKey, model, onUsage });
   const abortingScorer: Scorer = {
     score: async (profileArg: SkillProfile, posting: JobPosting): Promise<MatchResult> => {
       try {
@@ -147,7 +153,7 @@ export async function runScoreCommand(
   };
 
   const triager = new LlmTriager(
-    new AnthropicTriageClient({ apiKey, model }),
+    new AnthropicTriageClient({ apiKey, model, onUsage }),
     TRIAGE_BATCH_SIZE,
     (warning) => warnings.push(warning),
   );
@@ -176,6 +182,8 @@ export async function runScoreCommand(
       dryRun: options.dryRun,
     }),
   );
+  const usageSummary = formatUsageSummary(usage);
+  if (usageSummary) log(style.dim(usageSummary));
   for (const warning of warnings) {
     log(style.warn(`  ! [${warning.source}] ${warning.message}`));
   }
