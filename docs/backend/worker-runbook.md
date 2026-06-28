@@ -26,33 +26,23 @@ The worker never needs the anon key or any per-user data.
 
 ## Deploy options
 
-### A. Scheduled GitHub Action (simplest)
+### A. Scheduled GitHub Action (simplest) — shipped
 
-A workflow on a cron that checks out the repo, installs deps + Chromium, and runs the worker:
+This is the committed default: [`.github/workflows/scan-worker.yml`](../../.github/workflows/scan-worker.yml)
+runs the worker on a cron (every 6h at :17) and on manual `workflow_dispatch`. It checks out the
+repo, installs deps + Chromium, and runs `npm run scan:worker`, with a `concurrency` guard so two
+crawls never overlap.
 
-```yaml
-# .github/workflows/scan-worker.yml
-name: scan-worker
-on:
-  schedule: [{ cron: "17 */6 * * *" }]   # every 6h, off-:00
-  workflow_dispatch: {}
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version-file: ".nvmrc" }
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run scan:worker
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JOB_HUNTER_THE_MUSE_API_KEY: ${{ secrets.THE_MUSE_API_KEY }}
-```
+**To turn it on, add the repo Actions secrets** (Settings → Secrets and variables → Actions):
 
-Put `DATABASE_URL` (and optionally the Muse key) in the repo's Actions secrets. No always-on infra.
+| Secret | Required | Value |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | Service-role Postgres connection string (Supabase → Project Settings → Database). |
+| `THE_MUSE_API_KEY` | no | The Muse API key, to enable that lead source. |
+
+Until `DATABASE_URL` is set the scheduled run exits 1 with a clear message (it does nothing
+destructive). Trigger a first run by hand from the Actions tab (`Run workflow`) once the secret is in
+place; validate the store first with `npm run smoke:postgres` (see below). No always-on infra.
 
 ### B. Container on Fly.io / Railway with a cron
 
