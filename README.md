@@ -5,17 +5,20 @@
 # job-hunter
 
 A local-first job-search engine. It discovers open roles from the
-[stillhiring.today](https://stillhiring.today) company directory plus any companies you choose to
-track, scores each posting against your resume (using Claude, with a free offline fallback), and
-saves ranked matches to a local database — all on your own machine.
+[stillhiring.today](https://stillhiring.today) company directory, free remote-job feeds, and any
+companies you choose to track; ranks every posting against your resume with a **free offline
+heuristic**; and can then **deep-score** the best matches with Claude. Ranked matches save to a
+local database — all on your own machine.
 
-It runs as both a command-line tool (`job-hunter scan`) and a local web dashboard (`job-hunter
-serve`) — a React app with light and dark themes, served over a small local HTTP API. Both work
-against the same local database.
+Scanning is split into two steps: a free **`scan`** (discover + heuristic score) and an optional,
+budget-aware **`score`** (LLM triage → deep score of the strongest postings). It runs as both a
+command-line tool and a local web dashboard (`job-hunter serve`) — a React app with light and dark
+themes, served over a small local HTTP API. Both work against the same local database.
 
-> **Privacy:** everything runs locally. Your resume and matches live in a SQLite file on your
-> machine; nothing is uploaded anywhere except the job postings you scan and (if you enable LLM
-> scoring) the prompts sent to Anthropic's API.
+> **Privacy:** everything runs locally by default. Your resume and matches live in a SQLite file on
+> your machine; nothing is uploaded except the job postings you scan and (if you run `score`) the
+> prompts sent to Anthropic's API. An **optional** hosted feed (off unless you configure it) only
+> exchanges public job-posting data — your resume and scores never leave your machine.
 
 ---
 
@@ -57,16 +60,26 @@ updating, non-interactive/env-var usage, the manual (do-it-by-hand) path, and tr
 Run commands with `npm run cli -- <command>` (the `--` passes flags through):
 
 ```bash
-npm run cli -- scan                       # discover, score, and store matches (live status)
-npm run cli -- serve                       # start the web dashboard (--port N, --no-open, --refresh-hours N)
+npm run cli -- scan                       # discover + free heuristic score, store matches (live status)
+npm run cli -- score --dry-run            # preview the LLM deep-score plan + estimated cost (no spend)
+npm run cli -- score --limit 50           # LLM triage + deep-score the best postings from the last scan
 npm run cli -- list --min-score 70        # show matches scoring 70+
+npm run cli -- serve                       # start the web dashboard (--port N, --no-open, --refresh-hours N)
 npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
 npm run cli -- track list
 npm run cli -- track remove https://boards.greenhouse.io/acme
+npm run cli -- config remote on           # only LLM-score remote roles (persisted; --remote/--no-remote overrides per run)
 npm run cli -- --help                      # full command reference (also `<command> --help`)
 npm run cli -- --version
 ```
+
+**Two-step scanning.** `scan` is free — it discovers postings and scores them with the offline
+heuristic. `score` then spends LLM budget only on the best of those: it ranks by heuristic score,
+batch-triages titles, deep-scores the survivors (bounded by `--min-heuristic` and `--limit`), skips
+postings already LLM-scored (unless `--rescore`), and aborts cleanly if it hits your provider usage
+limit. `score --dry-run` prints the plan and estimated cost without calling the LLM. LLM scoring is
+**CLI-only** today — the dashboard shows heuristic scores until you run `score`.
 
 ### Web dashboard
 
@@ -76,21 +89,23 @@ and opens a React dashboard in your browser:
 
 - **Overview** — upload your resume and run a scan. Scans run as a **background job** with live
   status — an elapsed timer plus a rolling list of the companies being visited (reading directory →
-  per-company → scoring) — so you can switch tabs or close the page and it keeps going. The server
-  also **auto-refreshes** on a schedule (default every 6h; tune with `--refresh-hours N`, or
+  per-company → heuristic scoring) — so you can switch tabs or close the page and it keeps going. The
+  server also **auto-refreshes** on a schedule (default every 6h; tune with `--refresh-hours N`, or
   `--refresh-hours 0` to disable).
-- **Matches** — ranked postings filtered by a minimum-score slider (default **50**), with the LLM
-  rationale and matched/missing skills. **Save** or **dismiss** any match (dismissed ones hide by
-  default; toggles reveal expired/dismissed). Scans are **incremental**: postings that vanish from
-  their board across consecutive scans are auto-expired and drop off the list, and the **Last scan**
-  panel lists the directory delta (companies that appeared / are no longer listed).
+- **Matches** — ranked postings filtered by a minimum-score slider (default **50**), with matched/
+  missing skills and (once you've run the CLI `score`) the LLM rationale. **Save** or **dismiss** any
+  match (dismissed ones hide by default; toggles reveal expired/dismissed). Scans are **incremental**:
+  postings that vanish from their board across consecutive scans are auto-expired and drop off the
+  list, and the **Last scan** panel lists the directory delta (companies that appeared / are no
+  longer listed).
 - **Skills** — edit the skills on your profile (search the dictionary or add new ones) and manage
   the skill **dictionary** the resume parser recognizes (a broad ~340-term default ships out of the
   box)
 - **Companies** — add/remove the companies you track by careers-page URL (scanned alongside the
-  public directory)
-- **Settings** — Anthropic API key (write-only — never sent back to the browser) and scorer model
-  (the company directory is fixed, so it isn't configurable)
+  public directory and free remote-job feeds)
+- **Settings** — Anthropic API key and scorer model; optionally a [The Muse](https://www.themuse.com)
+  API key (extra lead source) and a remote **feed URL + key** (the hosted shared feed). All secret
+  keys are write-only — stored but never sent back to the browser.
 
 The dashboard is a static build (Vite + React + Tailwind + TanStack Query) that the server serves
 itself; it's produced by `npm run build:web` (which `npm run setup` runs for you). Everything it
@@ -99,12 +114,15 @@ shows comes from the same local HTTP API:
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/matches?minScore=` | ranked matches |
+| `PUT\|DELETE /api/matches/:id/action` | save / dismiss a match (or clear the action) |
 | `GET\|POST /api/companies` · `DELETE /api/companies?url=` | tracked companies (add/remove) |
+| `GET /api/companies/manual-review` | directory companies on hosts we don't auto-scan (LinkedIn/Indeed/…) |
 | `GET /api/profile` · `PUT /api/profile/skills` | profile, and direct edits to its skill list |
 | `GET\|POST /api/skills` · `DELETE /api/skills/:name` | the skill dictionary |
-| `GET\|PUT /api/settings` | settings (the API key is write-only) |
+| `GET\|PUT /api/settings` | settings (secret keys are write-only) |
 | `POST /api/profile` | upload a resume (`.txt`/`.md`/`.pdf`/`.docx`) or post `{ "resumeText": … }` |
 | `POST /api/scan` · `GET /api/scan/status` | start a background scan, then poll its live status |
+| `GET /api/scans/latest` | the most recent scan's summary (directory delta, counts) |
 
 A typical first run:
 
@@ -130,14 +148,26 @@ Override the location with the `JOB_HUNTER_HOME` environment variable.
 
 ## Status & roadmap
 
-**Shipped:** the CLI (`scan`, `list`, `profile`, `track`, with colored output and per-command
-help) and the web dashboard (resume upload, one-click background scans, ranked match browsing with
-save/dismiss, in-app skill/dictionary and company editing, and light/dark themes) — plus
-incremental scans with directory diffing and posting expiry, per-posting liveness re-checks, and
-smooth in-place updates.
+**Shipped:** the CLI (`scan`, `score`, `config`, `list`, `profile`, `track`, with colored output and
+per-command help) and the web dashboard (resume upload, one-click background scans, ranked match
+browsing with save/dismiss, in-app skill/dictionary and company editing, and light/dark themes) —
+plus incremental scans with directory diffing and posting expiry, per-posting liveness re-checks, and
+smooth in-place updates. Scanning is split into a free `scan` and a budget-aware `score` (heuristic
+gate → batch LLM triage → concurrent deep score). Discovery fans out over multiple lead sources
+(stillhiring.today, Remotive, and the key-gated The Muse) and resolves 11 ATS platforms (Greenhouse,
+Lever, Ashby, Workday, Rippling, Recruitee, SmartRecruiters, BambooHR, UKG, Breezy, Workable) with a
+JSON-LD / browser fallback.
 
-**Possible next steps:** richer match filtering (freshness, skills), tighter SSRF hardening of the
-discovery fetch, concurrent posting scoring, and packaging `serve` as a one-command launcher.
+**Hosted feed (optional, experimental):** a shared sourcing backend (Supabase Postgres + a scheduled
+worker) can run the crawl once for everyone and serve a deduplicated posting feed; a client with a
+`feedUrl`/`feedKey` configured pulls the feed **and** still crawls its own tracked companies, scoring
+locally. See [`docs/sourcing-backend-exploration.md`](docs/sourcing-backend-exploration.md) and
+[`docs/backend/`](docs/backend/). Not wired to run automatically yet.
+
+**Possible next steps:** scheduling/operating the hosted worker; cloud company submission
+([planned](docs/superpowers/plans/2026-06-27-cloud-company-submission.md)); richer match filtering
+(freshness, skills); more lead sources (Adzuna, USAJobs, HN "Who is Hiring"); and packaging `serve`
+as a one-command launcher.
 
 ## Development
 
@@ -157,6 +187,9 @@ Opt-in, network-bound checks (excluded from CI):
 npm run smoke:airtable    # read the live Airtable share (WRITE_FIXTURE=1 to refresh the fixture)
 npm run smoke:scorer      # exercise the live LLM scorer (needs ANTHROPIC_API_KEY)
 npm run smoke:scan        # a full live scan against a throwaway database
+npm run smoke:postgres    # exercise the hosted Postgres store (needs DATABASE_URL)
 ```
 
-The architecture and design decisions are documented in `docs/superpowers/`.
+The hosted scanner worker runs via `npm run scan:worker` (needs `DATABASE_URL`); see
+[`docs/backend/worker-runbook.md`](docs/backend/worker-runbook.md). The architecture and design
+decisions are documented in `docs/superpowers/`.
