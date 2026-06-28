@@ -1,0 +1,47 @@
+name: scan-worker
+
+# Runs the shared sourcing crawl centrally and writes deduplicated postings to Postgres, which
+# local clients read as a feed (hybrid remote mode). The worker runs once and exits, so this cron
+# is what makes the hosted feed populate on its own. It does NO scoring and touches only public data.
+# See docs/backend/worker-runbook.md.
+#
+# Requires the repo Actions secret DATABASE_URL (service-role Postgres connection). Without it the
+# worker exits 1 with a clear message. THE_MUSE_API_KEY is optional (enables The Muse lead source).
+
+on:
+  schedule:
+    # Every 6h at :17 (off the :00 stampede); matches the local default refresh cadence.
+    - cron: "17 */6 * * *"
+  workflow_dispatch: {}
+
+# A crawl can outlast the 6h gap on a slow run; never let two overlap (the store is idempotent, but
+# two concurrent crawls waste runner time and double the load on the ATS boards).
+concurrency:
+  group: scan-worker
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        # The crawl drives a real browser (Airtable directory read + browser-fallback connector),
+        # so unlike the CI workflow we DO need Chromium here.
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the scanner worker
+        run: npm run scan:worker
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JOB_HUNTER_THE_MUSE_API_KEY: ${{ secrets.THE_MUSE_API_KEY }}

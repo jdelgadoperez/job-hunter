@@ -5,7 +5,8 @@
 > [`docs/superpowers/plans/2026-06-27-hosted-scan-backend.md`](superpowers/plans/2026-06-27-hosted-scan-backend.md):
 > the `runSourcing`/`ScanStore` split, the Supabase schema + RLS (live), `PostgresScanStore`, the
 > `PostingFeed` client, hybrid remote mode, and the scanner worker are all on `main`. What remains is
-> **operational** (scheduling the worker) and **Phase 3** (hosted multi-user). The original analysis
+> **operational** (the worker is scheduled via `.github/workflows/scan-worker.yml`; what's left is
+> setting the `DATABASE_URL` secret + a first live run) and **Phase 3** (hosted multi-user). The original analysis
 > below is kept for context — it maps the idea onto the code, weighs Supabase vs. Vercel, calls out
 > the one real gotcha (Playwright doesn't fit serverless), and lays out the phased path.
 
@@ -182,8 +183,9 @@ preserve:
   into Postgres behind RLS; optional server-side scoring. Only if a hosted product is the goal — not
   started.
 
-Phases 0.5–2 (the entire speed + redundancy win) are shipped; what remains is **operational**
-(scheduling the worker so the feed populates) and Phase 3, a separate product decision.
+Phases 0.5–2 (the entire speed + redundancy win) are shipped; what remains is **operational** (the
+worker is scheduled via `.github/workflows/scan-worker.yml`; setting the `DATABASE_URL` secret and a
+first live run is all that's left to populate the feed) and Phase 3, a separate product decision.
 
 ## Tradeoffs & risks
 

@@ -162,9 +162,12 @@ JSON-LD / browser fallback.
 worker) can run the crawl once for everyone and serve a deduplicated posting feed; a client with a
 `feedUrl`/`feedKey` configured pulls the feed **and** still crawls its own tracked companies, scoring
 locally. See [`docs/sourcing-backend-exploration.md`](docs/sourcing-backend-exploration.md) and
-[`docs/backend/`](docs/backend/). Not wired to run automatically yet.
+[`docs/backend/`](docs/backend/). A scheduled GitHub Action
+([`.github/workflows/scan-worker.yml`](.github/workflows/scan-worker.yml)) runs the crawl on a 6h
+cron; it stays dormant until a `DATABASE_URL` Actions secret is configured.
 
-**Possible next steps:** scheduling/operating the hosted worker; cloud company submission
+**Possible next steps:** operating/monitoring the hosted worker (it's scheduled but unproven live);
+cloud company submission
 ([planned](docs/superpowers/plans/2026-06-27-cloud-company-submission.md)); richer match filtering
 (freshness, skills); more lead sources (Adzuna, USAJobs, HN "Who is Hiring"); and packaging `serve`
 as a one-command launcher.
