@@ -1,6 +1,7 @@
 import { Anthropic } from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { type LlmMatchPayload, MatchPayloadSchema } from "./llm-schema";
+import { type LlmUsage, toLlmUsage } from "./llm-usage";
 
 export type LlmScoreRequest = {
   /** Stable, cacheable prefix: scoring instructions + the serialized profile. */
@@ -29,10 +30,12 @@ const MAX_TOKENS = 2048;
 export class AnthropicLlmClient implements LlmClient {
   private readonly client: Anthropic;
   private readonly model: string;
+  private readonly onUsage?: (usage: LlmUsage) => void;
 
-  constructor(opts: { apiKey: string; model: string }) {
+  constructor(opts: { apiKey: string; model: string; onUsage?: (usage: LlmUsage) => void }) {
     this.client = new Anthropic({ apiKey: opts.apiKey });
     this.model = opts.model;
+    this.onUsage = opts.onUsage;
   }
 
   async score(request: LlmScoreRequest): Promise<LlmMatchPayload> {
@@ -49,6 +52,9 @@ export class AnthropicLlmClient implements LlmClient {
       system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: request.user }],
     });
+
+    // Surface cache hit/miss so the caller can confirm the system prefix actually cached.
+    this.onUsage?.(toLlmUsage(response.usage));
 
     if (response.parsed_output === null) {
       throw new Error(`LLM returned no parseable output (stop_reason: ${response.stop_reason})`);

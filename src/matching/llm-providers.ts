@@ -1,4 +1,5 @@
 import { AnthropicLlmClient, type LlmClient } from "./llm-client";
+import type { LlmUsage } from "./llm-usage";
 import { ANTHROPIC_KEY_SETTING } from "./settings-keys";
 
 /** String-literal union of supported engines. Grows as a sibling client is added. */
@@ -12,7 +13,11 @@ export interface LlmProviderConfig {
   defaultModel: string;
   /** Rough per-call USD rates used only for the `score --dry-run` cost preview (not billing). */
   cost: { perTriageTitleUsd: number; perDeepScoreUsd: number };
-  createClient(opts: { apiKey: string; model: string }): LlmClient;
+  createClient(opts: {
+    apiKey: string;
+    model: string;
+    onUsage?: (usage: LlmUsage) => void;
+  }): LlmClient;
 }
 
 /**
