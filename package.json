@@ -23,6 +23,7 @@
     "smoke:airtable": "node --import tsx scripts/smoke-airtable.ts",
     "smoke:postgres": "node --import tsx scripts/smoke-postgres.ts",
     "smoke:scan": "node --import tsx scripts/smoke-scan.ts",
+    "scan:worker": "node --import tsx src/backend/scanner/main.ts",
     "analyze:directory": "node --import tsx scripts/analyze-directory.ts",
     "analyze:custom-domains": "node --import tsx scripts/probe-custom-domains.ts",
     "build:skill-seed": "node --import tsx scripts/build-skill-seed.ts"
