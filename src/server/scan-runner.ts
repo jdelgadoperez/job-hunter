@@ -1,5 +1,6 @@
 import { runScan } from "@app/cli/commands";
 import { style } from "@app/cli/style";
+import { resolvePostingFeed } from "@app/discovery/feed/resolve-feed";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
@@ -24,11 +25,16 @@ export function createScanRunner(repo: Repository): ScanRunner {
     const dictionary = repo.getSkillDictionary();
     const scorer = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
 
+    const fetcher = new HttpFetcher();
+    // Hybrid remote mode when a feed is configured (mirrors the CLI scan wiring).
+    const feed = resolvePostingFeed(repo, fetcher);
+
     const result = await runScan(
       {
         repo,
         profile,
         scorer,
+        ...(feed ? { feed } : {}),
         // Update the job status snapshot AND echo each step to the server console, so progress is
         // followable in the `serve`/`dev` terminal (not just the dashboard).
         onProgress: (event) => {
@@ -36,7 +42,7 @@ export function createScanRunner(repo: Repository): ScanRunner {
           console.log(`${style.dim("[scan]")} ${formatProgress(event)}`);
         },
         discoverDeps: {
-          fetcher: new HttpFetcher(),
+          fetcher,
           renderer: new PlaywrightRenderer(),
           sharedViewReader: new PlaywrightSharedViewReader(),
           shareUrl: resolveShareUrl(),

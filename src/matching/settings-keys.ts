@@ -4,3 +4,7 @@ export const MODEL_SETTING = "scorerModel";
 export const PROVIDER_SETTING = "scorerProvider";
 export const REMOTE_ONLY_SETTING = "remoteOnly";
 export const THE_MUSE_KEY_SETTING = "theMuseApiKey";
+// Remote shared feed (hosted scan backend). When `feedUrl` is set, a scan runs in hybrid remote
+// mode: pull the cloud feed + crawl only tracked companies. `feedKey` is the Supabase anon key.
+export const FEED_URL_SETTING = "feedUrl";
+export const FEED_KEY_SETTING = "feedKey";

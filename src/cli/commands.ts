@@ -1,4 +1,5 @@
 import { type DiscoverDeps, discover } from "@app/discovery/discover";
+import type { PostingFeed } from "@app/discovery/feed/posting-feed";
 import type { ScanStore } from "@app/discovery/scan-store";
 import type { CompanyLead } from "@app/discovery/sources/types";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
@@ -73,6 +74,8 @@ export type ScanDeps = {
   profile: SkillProfile;
   scorer: Scorer;
   discoverDeps: DiscoverDeps;
+  /** Optional remote feed; when set, the scan sources in hybrid remote mode (see `runSourcing`). */
+  feed?: PostingFeed;
   /** Optional structured progress (directory read, per-company, scoring, summary). */
   onProgress?: (event: ScanProgressEvent) => void;
 };
@@ -91,6 +94,12 @@ export type ScanOutcome = {
 export type SourcingDeps = {
   repo: ScanStore;
   discoverDeps: DiscoverDeps;
+  /**
+   * Optional remote feed. When set, the scan runs in **hybrid remote mode**: pull the shared feed
+   * AND locally crawl only the user's tracked companies (the cloud worker already covers the shared
+   * directory). When absent, run the full local crawl.
+   */
+  feed?: PostingFeed;
   onProgress?: (event: ScanProgressEvent) => void;
 };
 
@@ -111,16 +120,17 @@ export type SourcingOutcome = {
  * and the hosted Postgres scanner worker. Never logs; the caller decides how to surface the result.
  */
 export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> {
-  const { repo, onProgress } = deps;
+  const { repo, feed, onProgress } = deps;
   // `await` every store call: a no-op for the synchronous SQLite Repository, but required for an
   // async Postgres-backed store (both satisfy the ScanStore seam).
   const scanId = await repo.startScan();
 
-  const {
-    postings,
-    warnings,
-    companies = [],
-  } = await discover({ ...deps.discoverDeps, onProgress });
+  // Remote mode (feed set): pull the shared feed AND crawl only tracked companies locally. Otherwise
+  // run the full local crawl. Both yield postings + the companies to snapshot + any warnings.
+  const { postings, companies, warnings } = feed
+    ? await sourceFromFeedAndTracked(feed, deps.discoverDeps, onProgress)
+    : await sourceFromFullCrawl(deps.discoverDeps, onProgress);
+
   const diff = await repo.recordDirectory(
     scanId,
     companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
@@ -148,6 +158,39 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
   return { postings, companies, warnings, expired, ...diff };
 }
 
+type SourceResult = { postings: JobPosting[]; companies: CompanyLead[]; warnings: Warning[] };
+
+/** Full local crawl: the directory sources + tracked companies (today's default behavior). */
+async function sourceFromFullCrawl(
+  discoverDeps: DiscoverDeps,
+  onProgress?: (event: ScanProgressEvent) => void,
+): Promise<SourceResult> {
+  const { postings, warnings, companies = [] } = await discover({ ...discoverDeps, onProgress });
+  return { postings, companies, warnings };
+}
+
+/**
+ * Hybrid remote mode: the shared feed plus a local crawl of ONLY the user's tracked companies.
+ * `sources: []` makes `collectLeads` contribute just the tracked companies, so the client skips the
+ * shared directory the cloud worker already crawls. Feed + local postings merge by id (a posting in
+ * both — e.g. a tracked company also in the feed — collapses to one).
+ */
+async function sourceFromFeedAndTracked(
+  feed: PostingFeed,
+  discoverDeps: DiscoverDeps,
+  onProgress?: (event: ScanProgressEvent) => void,
+): Promise<SourceResult> {
+  const feedResult = await feed.fetch();
+  const local = await discover({ ...discoverDeps, sources: [], onProgress });
+  const byId = new Map<string, JobPosting>();
+  for (const posting of [...feedResult.postings, ...local.postings]) byId.set(posting.id, posting);
+  return {
+    postings: [...byId.values()],
+    companies: local.companies ?? [],
+    warnings: [...feedResult.warnings, ...local.warnings],
+  };
+}
+
 /**
  * Run a full local scan: source postings (`runSourcing`), then score every one with the injected
  * scorer (the free heuristic in `scan`), and report the outcome. Scoring is the only thing this adds
@@ -159,6 +202,7 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
   const sourced = await runSourcing({
     repo,
     discoverDeps: deps.discoverDeps,
+    ...(deps.feed ? { feed: deps.feed } : {}),
     onProgress,
   });
 

@@ -1,4 +1,5 @@
 import type { PageRenderer } from "@app/discovery/connectors/browser";
+import { FakePostingFeed } from "@app/discovery/feed/posting-feed";
 import type { ScanStore } from "@app/discovery/scan-store";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
@@ -112,6 +113,55 @@ describe("runSourcing", () => {
     // ...and the fake store — which has NO saveMatchResult — is a complete dependency, proving
     // sourcing never scores. (If it scored, this would not typecheck / would throw.)
     expect(outcome.expired).toBe(0);
+  });
+
+  it("hybrid remote mode merges the feed with a local crawl of tracked companies only", async () => {
+    const feedPosting: JobPosting = {
+      id: "feed:1",
+      company: "FeedCo",
+      title: "Remote Platform Engineer",
+      url: "https://example.test/feed/1",
+      source: "greenhouse",
+      description: "from the shared feed",
+      fetchedAt: new Date("2026-06-26T00:00:00Z"),
+    };
+    const feed = new FakePostingFeed({ postings: [feedPosting], warnings: [] });
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Backend Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "TypeScript and React.",
+        },
+      ],
+    });
+    const { store, saved } = fakeStore();
+
+    const outcome = await runSourcing({
+      repo: store,
+      feed,
+      discoverDeps: {
+        fetcher: new RouteFetcher({
+          "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+        }),
+        renderer: new NullRenderer(),
+        // Not consulted in remote mode (sources is forced to [] so only tracked companies crawl).
+        sharedViewReader: new FakeSharedViewReader({}),
+        shareUrl: "",
+        settings: { getSetting: () => undefined },
+        trackedCompanies: [{ careersUrl: "https://boards.greenhouse.io/acme", name: "Acme" }],
+        delayMs: 0,
+      },
+    });
+
+    // Feed posting + the one tracked-company crawl posting, merged and persisted.
+    expect(outcome.postings.map((p) => p.id)).toContain("feed:1");
+    expect(outcome.postings).toHaveLength(2);
+    expect(saved.map((p) => p.id).sort()).toEqual(outcome.postings.map((p) => p.id).sort());
+    // The companies snapshot is just the tracked company — the shared directory is the cloud's job.
+    expect(outcome.companies.map((c) => c.careersUrl)).toEqual([
+      "https://boards.greenhouse.io/acme",
+    ]);
   });
 });
 
