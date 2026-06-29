@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { type UpdateStatus, getVersion, toUpdateStatus } from "./version";
+import { getVersion, toUpdateStatus, type UpdateStatus } from "./version";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const exec = promisify(execFile);

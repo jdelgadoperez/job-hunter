@@ -2,7 +2,7 @@ import type { JobPosting, MatchResult, SkillProfile, Warning } from "@app/domain
 import type { ScoringCandidate } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
 import { LlmTriager } from "./llm-triager";
-import { type ScoreOptions, type ScoreRepo, runScoreRun } from "./score-run";
+import { runScoreRun, type ScoreOptions, type ScoreRepo } from "./score-run";
 import { FakeTriageClient } from "./triage-client";
 
 const profile: SkillProfile = { skills: ["ts"], roleKeywords: [], categories: [] };

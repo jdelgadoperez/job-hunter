@@ -4,10 +4,10 @@ import type { LlmClient } from "./llm-client";
 import type { LlmProviderConfig } from "./llm-providers";
 import { LlmScorer } from "./llm-scorer";
 import {
-  type SettingsReader,
   resolveApiKey,
   resolveProvider,
   resolveScorerModel,
+  type SettingsReader,
 } from "./resolve-settings";
 
 const WARNING_SOURCE = "llm-scorer";

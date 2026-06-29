@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type ScanProgressEvent, formatProgress } from "./scan-progress";
+import { formatProgress, type ScanProgressEvent } from "./scan-progress";
 
 describe("formatProgress", () => {
   const cases: [ScanProgressEvent, string][] = [

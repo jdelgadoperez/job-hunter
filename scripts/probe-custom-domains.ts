@@ -6,6 +6,7 @@ import { PlaywrightSharedViewReader } from "../src/discovery/sources/airtable-pl
 import { isUnscrapableHost } from "../src/discovery/unscrapable";
 import { hostnameOf } from "../src/domain/normalize";
 import { HttpFetcher } from "../src/net/fetcher";
+
 /**
  * Opt-in diagnostic (issue #39): for every custom/vanity careers domain that a scan would currently
  * send to the slow Playwright browser fallback, live-fetch the page and fingerprint which ATS (if

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { FakeFetcher } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
 import { makePostingId } from "../posting-id";
-import { UkgConnector, parseUkgUrl } from "./ukg";
+import { parseUkgUrl, UkgConnector } from "./ukg";
 
 const CAREERS =
   "https://recruiting2.ultipro.com/SUP1002SPRM/JobBoard/7f7ebf9e-d3a1-4d1a-83da-0de093cee244/?q=&o=postedDateDesc";

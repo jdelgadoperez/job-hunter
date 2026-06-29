@@ -1,5 +1,5 @@
 import { errorMessage } from "@app/net/error-message";
-import type { FetchInit, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchInit } from "@app/net/fetcher";
 import type { ZodType } from "zod";
 
 export type FeedResult<T> = { ok: true; data: T } | { ok: false; warning: string };

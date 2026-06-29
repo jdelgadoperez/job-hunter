@@ -65,7 +65,6 @@ describe("RipplingConnector", () => {
   it("pages through multiple list pages and handles a job with no locations", async () => {
     const page = (n: number) =>
       `https://ats.rippling.com/api/v2/board/${SLUG}/jobs?page=${n}&pageSize=50`;
-    const detailUrl = (id: string) => `https://ats.rippling.com/api/v2/board/${SLUG}/jobs/${id}`;
     const job = (id: string, name: string, locations: { name: string }[]) => ({
       id,
       name,

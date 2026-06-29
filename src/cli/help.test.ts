@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COMMANDS, COMMAND_NAMES, renderHelp } from "./help";
+import { COMMAND_NAMES, COMMANDS, renderHelp } from "./help";
 
 describe("renderHelp", () => {
   it("renders the global overview with every command listed", () => {

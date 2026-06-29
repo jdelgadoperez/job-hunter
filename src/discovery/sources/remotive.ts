@@ -1,7 +1,6 @@
 import { fetchFeed } from "@app/discovery/connectors/fetch-feed";
 import { z } from "zod";
-import type { CompanyLead } from "./types";
-import type { LeadSource, LeadSourceDeps, LeadSourceResult } from "./types";
+import type { CompanyLead, LeadSource, LeadSourceDeps, LeadSourceResult } from "./types";
 
 const SOURCE = "remotive";
 const URL = "https://remotive.com/api/remote-jobs";

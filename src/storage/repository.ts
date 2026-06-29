@@ -171,7 +171,7 @@ export class Repository {
          LEFT JOIN user_actions ua ON ua.posting_id = p.id
          WHERE m.score >= ?${opts.includeExpired ? "" : " AND p.expired_at IS NULL"}${
            opts.includeDismissed ? "" : " AND (ua.action IS NULL OR ua.action != 'dismissed')"
-         }
+}
          ORDER BY m.score DESC, p.title`,
       )
       .all(minScore) as {

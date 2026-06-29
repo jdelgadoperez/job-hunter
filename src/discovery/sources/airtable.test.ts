@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fixture from "./__fixtures__/airtable-shared-view.json";
 import {
+  airtableRowsToLeads,
   COMMUNITY_SHARE_URL,
   FakeSharedViewReader,
-  airtableRowsToLeads,
   resolveShareUrl,
 } from "./airtable";
 

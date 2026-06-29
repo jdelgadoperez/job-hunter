@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type MatchFilters, type SettingsUpdate, type UserAction, api } from "./api";
+import { api, type MatchFilters, type SettingsUpdate, type UserAction } from "./api";
 
 export function useMatches(minScore: number, filters: MatchFilters = {}) {
   return useQuery({

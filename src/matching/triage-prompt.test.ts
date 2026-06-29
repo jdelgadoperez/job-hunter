@@ -1,6 +1,6 @@
 import type { SkillProfile } from "@app/domain/types";
 import { describe, expect, it } from "vitest";
-import { type TriageItem, buildTriagePrompt } from "./triage-prompt";
+import { buildTriagePrompt, type TriageItem } from "./triage-prompt";
 
 const profile: SkillProfile = {
   skills: ["typescript", "node"],

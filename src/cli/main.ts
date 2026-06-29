@@ -8,7 +8,7 @@ import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@ap
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import { MatchPayloadSchema } from "@app/matching/llm-schema";
 import { LlmTriager } from "@app/matching/llm-triager";
-import { UsageAccumulator, formatUsageSummary } from "@app/matching/llm-usage";
+import { formatUsageSummary, UsageAccumulator } from "@app/matching/llm-usage";
 import { resolveRemoteOnly } from "@app/matching/resolve-remote";
 import {
   resolveApiKey,
@@ -29,8 +29,8 @@ import { getVersion } from "@app/runtime/version";
 import { startServer } from "@app/server/serve";
 import { Repository } from "@app/storage/repository";
 import {
-  type Logger,
   formatScorePlan,
+  type Logger,
   listMatches,
   runProfile,
   runScan,

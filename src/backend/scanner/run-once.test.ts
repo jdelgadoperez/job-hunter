@@ -3,7 +3,7 @@ import type { ScanStore } from "@app/discovery/scan-store";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
 import type { JobPosting } from "@app/domain/types";
-import type { FetchResponse, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import type { CompanyRef } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
 import { runScannerOnce } from "./run-once";
