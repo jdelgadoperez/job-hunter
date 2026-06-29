@@ -52,9 +52,37 @@ env vars via the platform's secrets.
 
 ## Cadence & safety
 
-- **Interval:** ~6h matches the local default refresh; tune to how fresh the feed must be vs. load on
-  the ATS boards. One central crawler is far gentler than N independent clients.
+- **Interval:** the committed workflow runs **once a day** (09:17 UTC); tune to how fresh the feed
+  must be vs. load on the ATS boards. One central crawler is far gentler than N independent clients.
+- **Run length:** a full crawl takes ~25 min (the `timeout-minutes: 30` cap leaves headroom). Most of
+  the tail is browser-fallback render timeouts on slow non-ATS careers pages — see "Warnings" below.
 - **Idempotent:** each run upserts postings and reconciles liveness/expiry incrementally, so overlap
   or a missed run is harmless.
 - **Validate first:** `npm run smoke:postgres` (with `DATABASE_URL`) confirms the store works against
   the database before scheduling the full crawl.
+- **Run summary:** a final workflow step writes a one-line verdict (the `[scanner] done:` line) plus a
+  collapsible warning list to the run's GitHub summary page, so you don't have to expand the raw logs.
+
+## Warnings you can expect
+
+The worker fails open on per-company errors — the scan still completes and writes everything it got.
+Common, benign warnings:
+
+- **`Render <url> timed out after 30000ms`** — a careers page with no known ATS and no JSON feed fell
+  back to a headless render that didn't finish in 30s (heavy SPA, slow host). That company yields
+  nothing this run; it's retried next run. The bulk of the tail is these.
+- **`Skipped N companies on sites we don't scrape (LinkedIn/Indeed)`** — directory entries on
+  anti-bot hosts on the `unscrapable` list; expected, review them manually.
+- **`unexpected status NNN` / `Download is starting`** — a host returned an error or served a download
+  instead of a page; skipped for this run.
+
+## Idea: a private run-history admin view (not built)
+
+Today run visibility is per-run: the GitHub summary page for the latest run, plus whatever's in the
+raw logs. A lightweight future enhancement would be a **simple, owner-only admin page** that lists the
+last several scans (e.g. ~5) — each with its timestamp, posting count, directory diff, expiries, and
+warning count — so runs can be reviewed at a glance without opening GitHub. The data already exists:
+each run writes a row to the `scans` table via `PostgresScanStore`, so this is mostly a read-only query
++ a small page, not new plumbing. It should load **separately from the main dashboard** (its own
+route/build, gated to the operator) since it's an admin concern, not a user-facing feature, and must
+stay read-only over public scan metadata. Captured here as a note, not a committed plan.

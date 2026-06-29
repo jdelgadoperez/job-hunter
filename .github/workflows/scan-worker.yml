@@ -10,12 +10,12 @@ name: scan-worker
 
 on:
   schedule:
-    # Every 6h at :17 (off the :00 stampede); matches the local default refresh cadence.
-    - cron: "17 */6 * * *"
+    # Once a day at 09:17 UTC (off the :00 stampede). GitHub cron is always UTC.
+    - cron: "17 9 * * *"
   workflow_dispatch: {}
 
-# A crawl can outlast the 6h gap on a slow run; never let two overlap (the store is idempotent, but
-# two concurrent crawls waste runner time and double the load on the ATS boards).
+# A crawl can run ~25 min; never let two overlap (the store is idempotent, but two concurrent crawls
+# waste runner time and double the load on the ATS boards).
 concurrency:
   group: scan-worker
   cancel-in-progress: false
@@ -41,7 +41,42 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run the scanner worker
-        run: npm run scan:worker
+        # Tee the worker output to a file so the next step can build a run summary from it. The
+        # default shell runs with `set -eo pipefail`, so a worker failure still fails the step.
+        run: npm run scan:worker 2>&1 | tee scan.log
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           JOB_HUNTER_THE_MUSE_API_KEY: ${{ secrets.THE_MUSE_API_KEY }}
+
+      - name: Run summary
+        # Render a quick, human-readable summary on the run's page (no log-digging). Runs even on
+        # failure so a failed run still gets a one-line verdict instead of a silent red X.
+        if: always()
+        run: |
+          {
+            echo "## 🛰️ scan-worker"
+            echo
+            if [ ! -f scan.log ]; then
+              echo "Worker produced no output (failed before logging) — see job logs."
+              exit 0
+            fi
+            done_line=$(grep -E '^\[scanner\] done:' scan.log | tail -n1 || true)
+            if [ -n "$done_line" ]; then
+              echo "✅ **${done_line#"[scanner] "}**"
+            else
+              echo "❌ Worker did not finish — see job logs."
+            fi
+            echo
+            warn_count=$(grep -cE '^\[scanner\] ! ' scan.log || true)
+            echo "**Warnings:** ${warn_count:-0}"
+            if [ "${warn_count:-0}" -gt 0 ]; then
+              echo
+              echo "<details><summary>Show warnings</summary>"
+              echo
+              echo '```'
+              grep -E '^\[scanner\] ! ' scan.log
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
