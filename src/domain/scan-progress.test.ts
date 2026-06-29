@@ -7,6 +7,10 @@ describe("formatProgress", () => {
     [{ kind: "leads", total: 1 }, "Found 1 company to scan"],
     [{ kind: "leads", total: 42 }, "Found 42 companies to scan"],
     [{ kind: "company", name: "Acme", index: 3, total: 10 }, "[3/10] Acme"],
+    [
+      { kind: "company", name: "LawnStarter", host: "boards.greenhouse.io", index: 3, total: 10 },
+      "[3/10] LawnStarter (boards.greenhouse.io)",
+    ],
     [{ kind: "scoring", total: 1 }, "Scoring 1 posting…"],
     [{ kind: "scoring", total: 5 }, "Scoring 5 postings…"],
     [{ kind: "persisting", total: 1 }, "Saving 1 posting…"],
