@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { FetchResponse, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
 import { HttpPostingFeed } from "./posting-feed";
 

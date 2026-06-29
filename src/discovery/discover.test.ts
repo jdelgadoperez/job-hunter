@@ -1,5 +1,5 @@
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
-import type { FetchResponse, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
 import type { PageRenderer } from "./connectors/browser";
 import { discover } from "./discover";

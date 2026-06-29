@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   MODEL_SETTING,
   PROVIDER_SETTING,
-  type SettingsReader,
   resolveApiKey,
   resolveProvider,
   resolveScorerModel,
+  type SettingsReader,
 } from "./resolve-settings";
 
 function reader(values: Record<string, string>): SettingsReader {

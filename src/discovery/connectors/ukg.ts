@@ -1,5 +1,5 @@
 import type { JobPosting } from "@app/domain/types";
-import type { FetchInit, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchInit } from "@app/net/fetcher";
 import { makePostingId } from "../posting-id";
 import { fetchFeed } from "./fetch-feed";
 import { UkgFeed } from "./schemas";
@@ -24,7 +24,7 @@ export function parseUkgUrl(careersUrl: string): UkgBoard | null {
   }
   if (!url.hostname.endsWith(".ultipro.com")) return null;
   const segments = url.pathname.split("/").filter(Boolean);
-  const boardIndex = segments.findIndex((segment) => segment === "JobBoard");
+  const boardIndex = segments.indexOf("JobBoard");
   const tenant = segments[0];
   const jobBoardId = segments[boardIndex + 1];
   if (boardIndex <= 0 || !tenant || !jobBoardId) return null;

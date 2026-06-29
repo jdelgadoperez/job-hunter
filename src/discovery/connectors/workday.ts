@@ -1,5 +1,5 @@
 import type { JobPosting } from "@app/domain/types";
-import type { FetchInit, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchInit } from "@app/net/fetcher";
 import pLimit from "p-limit";
 import { makePostingId } from "../posting-id";
 import { fetchFeed } from "./fetch-feed";

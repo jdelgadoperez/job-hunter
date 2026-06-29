@@ -4,7 +4,7 @@ import { AirtableSource } from "@app/discovery/sources/airtable-source";
 import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import type { ScoreOutcome } from "@app/matching/score-run";
-import type { FetchResponse, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import { Repository } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
 import {

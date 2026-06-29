@@ -1,7 +1,7 @@
 import { FakeFetcher } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
 import { makePostingId } from "../posting-id";
-import { WorkdayConnector, parseWorkdayUrl } from "./workday";
+import { parseWorkdayUrl, WorkdayConnector } from "./workday";
 
 const CAREERS = "https://genesys.wd1.myworkdayjobs.com/Genesys";
 const API = "https://genesys.wd1.myworkdayjobs.com/wday/cxs/genesys/Genesys/jobs";

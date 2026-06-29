@@ -1,4 +1,4 @@
-import { type ScanProgressEvent, formatProgress } from "@app/domain/scan-progress";
+import { formatProgress, type ScanProgressEvent } from "@app/domain/scan-progress";
 import type { Warning } from "@app/domain/types";
 import { errorMessage } from "@app/net/error-message";
 import type { ScanRunner } from "./types";

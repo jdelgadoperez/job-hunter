@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BlockedUrlError, assertAllowedUrl, isBlockedAddress } from "./ssrf-guard";
+import { assertAllowedUrl, BlockedUrlError, isBlockedAddress } from "./ssrf-guard";
 
 describe("isBlockedAddress", () => {
   it("blocks loopback, private, link-local, and reserved IPv4", () => {

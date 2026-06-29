@@ -1,4 +1,4 @@
-import { type SourcingOutcome, runSourcing } from "@app/cli/commands";
+import { runSourcing, type SourcingOutcome } from "@app/cli/commands";
 import type { DiscoverDeps } from "@app/discovery/discover";
 import type { ScanStore } from "@app/discovery/scan-store";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UsageAccumulator, formatUsageSummary, toLlmUsage } from "./llm-usage";
+import { formatUsageSummary, toLlmUsage, UsageAccumulator } from "./llm-usage";
 
 describe("toLlmUsage", () => {
   it("maps the SDK wire fields into a dense LlmUsage", () => {

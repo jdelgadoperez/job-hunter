@@ -1,7 +1,7 @@
 import type { SkillProfile, Warning } from "@app/domain/types";
 import { errorMessage } from "@app/net/error-message";
 import type { TriageClient } from "./triage-client";
-import { type TriageItem, buildTriagePrompt } from "./triage-prompt";
+import { buildTriagePrompt, type TriageItem } from "./triage-prompt";
 import { TriagePayloadSchema } from "./triage-schema";
 import { isUsageLimitError } from "./usage-limit-error";
 

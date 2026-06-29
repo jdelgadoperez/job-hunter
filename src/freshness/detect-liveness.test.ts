@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import expiredMarkers from "./data/expired-markers.json";
-import { type LivenessSignal, detectLiveness } from "./detect-liveness";
+import { detectLiveness, type LivenessSignal } from "./detect-liveness";
 
 function http(overrides: Partial<Extract<LivenessSignal, { kind: "http" }>>): LivenessSignal {
   return {

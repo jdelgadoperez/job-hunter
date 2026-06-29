@@ -5,7 +5,7 @@ import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting } from "@app/domain/types";
-import type { FetchResponse, Fetcher } from "@app/net/fetcher";
+import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import type { CompanyRef, Repository } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
 import { runSourcing } from "./commands";
