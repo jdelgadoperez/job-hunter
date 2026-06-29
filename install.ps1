@@ -25,9 +25,14 @@ npm install
 Write-Host "Running setup..."
 npm run setup
 
-$reply = Read-Host "Keep the dashboard running in the background (start at logon)? [y/N]"
-if ($reply -match '^[yY]') {
-    & "$PSScriptRoot\service-install.ps1"
+# Only prompt in an interactive session; a non-interactive run has no console to read from.
+if ([Environment]::UserInteractive) {
+    $reply = Read-Host "Keep the dashboard running in the background (start at logon)? [y/N]"
+    if ($reply -match '^[yY]') {
+        & "$PSScriptRoot\service-install.ps1"
+    } else {
+        Write-Host "Skipped. You can enable it later with ./service-install.ps1"
+    }
 } else {
-    Write-Host "Skipped. You can enable it later with ./service-install.ps1"
+    Write-Host "To keep the dashboard running in the background, run ./service-install.ps1"
 }

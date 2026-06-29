@@ -25,6 +25,9 @@ $cmdArgs = "/c `"`"$node`" --import tsx `"$entry`" serve --no-open >> `"$log`" 2
 $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument $cmdArgs -WorkingDirectory $repo
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings | Out-Null
+# Run at the user's normal (limited) rights regardless of account type, so an admin account doesn't
+# silently get an elevated dashboard. Without an explicit principal the task defaults to HighestAvailable.
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 Write-Host "Dashboard will start automatically at logon. Open http://localhost:4317"

@@ -8,7 +8,11 @@ if (-not $task) {
     Write-Host "Not installed."
     exit 0
 }
-if ($task.State -eq "Running") {
+# A logon-triggered task returns to "Ready" once it has spawned its process, so $task.State is not a
+# liveness signal for a long-running dashboard. Check whether something is actually listening on the
+# port instead — the Windows analog of the macOS `launchctl print` liveness check.
+$listening = Get-NetTCPConnection -LocalPort 4317 -State Listen -ErrorAction SilentlyContinue
+if ($listening) {
     Write-Host "Running. Dashboard at http://localhost:4317"
 } else {
     Write-Host "Installed but not running. Run ./service-start.ps1"
