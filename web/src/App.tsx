@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useVersion } from "./hooks";
 import { useTheme } from "./theme";
 import { Companies } from "./views/Companies";
@@ -10,10 +10,29 @@ import { Skills } from "./views/Skills";
 const TABS = ["Overview", "Matches", "Skills", "Companies", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 
+/** Map the URL hash (e.g. `#companies`) to a tab, falling back to Overview. Case-insensitive. */
+function tabFromHash(): Tab {
+  const raw = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+  return TABS.find((t) => t.toLowerCase() === raw) ?? "Overview";
+}
+
 export function App() {
-  const [tab, setTab] = useState<Tab>("Overview");
+  // The active tab lives in the URL hash so tabs are deep-linkable and the browser back/forward
+  // buttons move between them. We sync React state ↔ hash rather than add a router dependency.
+  const [tab, setTab] = useState<Tab>(tabFromHash);
   const version = useVersion();
   const { theme, toggle } = useTheme();
+
+  useEffect(() => {
+    const onHashChange = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Updating the hash fires `hashchange`, which sets the tab — keeping one source of truth.
+  const selectTab = (t: Tab) => {
+    window.location.hash = t.toLowerCase();
+  };
 
   return (
     <div className="min-h-screen bg-canvas text-fg">
@@ -39,7 +58,7 @@ export function App() {
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setTab(t)}
+                  onClick={() => selectTab(t)}
                   aria-current={tab === t ? "page" : undefined}
                   className={`rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     tab === t
