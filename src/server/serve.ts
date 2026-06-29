@@ -11,6 +11,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Hono } from "hono";
 import { createApp } from "./app";
+import { classifyListenError } from "./listen-error";
 import { ScanJobManager } from "./scan-job";
 import { createScanRunner } from "./scan-runner";
 import type { ScanRunner } from "./types";
@@ -109,11 +110,21 @@ export function startServer(opts: ServeOptions = {}): void {
   const port = opts.port ?? DEFAULT_PORT;
   // Bind to loopback only: this is an unauthenticated local-first dashboard, so it must not be
   // reachable from other machines on the network. (Omitting the host binds all interfaces.)
-  serve({ fetch: app.fetch, port, hostname: LOOPBACK_HOST }, (info) => {
+  const server = serve({ fetch: app.fetch, port, hostname: LOOPBACK_HOST }, (info) => {
     const url = `http://localhost:${info.port}`;
     console.log(`job-hunter dashboard running at ${url}`);
     console.log("Press Ctrl+C to stop.");
     if (opts.open !== false) openBrowser(url);
+  });
+
+  // A listen failure (e.g. the port is taken) surfaces on the server's "error" event. Log a
+  // human-readable line and exit non-zero so the OS-level service restarts us — this is what makes
+  // the background service self-heal once the conflict clears.
+  server.on("error", (error: unknown) => {
+    const verdict = classifyListenError(error, port);
+    console.error(verdict.message);
+    process.exitCode = 1;
+    server.close();
   });
 }
 

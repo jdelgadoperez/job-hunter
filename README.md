@@ -107,6 +107,32 @@ and opens a React dashboard in your browser:
   API key (extra lead source) and a remote **feed URL + key** (the hosted shared feed). All secret
   keys are write-only — stored but never sent back to the browser.
 
+### Keep the dashboard always running (optional)
+
+To have the dashboard start automatically every time you log in — no terminal
+needed — install it as a background service. Same commands on macOS and Windows:
+
+```bash
+./service-install.sh     # macOS/Linux   (or  ./service-install.ps1  on Windows)
+```
+
+The dashboard will be at <http://localhost:4317> after every login. Manage it with:
+
+| Command | What it does |
+| --- | --- |
+| `service-install` | Start at login, from now on |
+| `service-start` / `service-stop` | Start or stop it now |
+| `service-status` | Is it running? (shows recent log) |
+| `service-uninstall` | Stop starting it at login |
+
+(On Windows, run the `.ps1` form, e.g. `./service-start.ps1`. If PowerShell
+blocks the script, run it as `powershell -ExecutionPolicy Bypass -File ./service-start.ps1`.)
+
+Running `./update.sh` (or `./update.ps1`) automatically restarts the service so
+you get the new version with no extra steps. Logs are at
+`~/.job-hunter/logs/dashboard.log` (macOS) or
+`%APPDATA%\job-hunter\logs\dashboard.log` (Windows).
+
 The dashboard is a static build (Vite + React + Tailwind + TanStack Query) that the server serves
 itself; it's produced by `npm run build:web` (which `npm run setup` runs for you). Everything it
 shows comes from the same local HTTP API:
