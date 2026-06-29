@@ -5,10 +5,10 @@ import postgres from "postgres";
  *   DATABASE_URL="postgres://...service-role-conn..." npm run smoke:postgres
  *
  * Runs a tiny real sourcing cycle against a Postgres database that has the schema applied
- * (src/backend/schema.sql): startScan → savePosting → finishScan → listLivePostingsNotSeen →
- * markPostingExpired → expireStalePostings, printing each result. Use a THROWAWAY project/database —
- * it writes (and expires) a probe posting. Requires the `DATABASE_URL` to be a service-role
- * connection (writes bypass RLS).
+ * (src/backend/schema.sql): startScan → savePosting → savePostings (batch) → finishScan →
+ * listLivePostingsNotSeen → markPostingExpired → expireStalePostings, printing each result. Use a
+ * THROWAWAY project/database — it writes (and expires) probe postings. Requires the `DATABASE_URL` to
+ * be a service-role connection (writes bypass RLS).
  */
 import { PostgresScanStore } from "../src/backend/postgres-scan-store";
 import type { JobPosting } from "../src/domain/types";
@@ -40,16 +40,32 @@ async function main(): Promise<void> {
     await store.savePosting(probe, scanId);
     console.log(`savePosting → wrote ${probe.id}`);
 
-    const diff = await store.recordDirectory(scanId, [
+    // Exercise the bulk path the worker actually uses (multi-row INSERT … ON CONFLICT).
+    const batch: JobPosting[] = [1, 2].map((n) => ({
+      id: `smoke:${scanId}:batch:${n}`,
+      company: "smoke-co",
+      title: `Batch Smoke Engineer ${n}`,
+      url: `https://example.test/smoke/batch/${n}`,
+      source: "smoke",
+      description: "A throwaway batched posting written by smoke:postgres.",
+      fetchedAt: new Date(),
+    }));
+    await store.savePostings(batch, scanId);
+    console.log(`savePostings → wrote ${batch.length} posting(s) in one batch`);
+
+    // Two companies so the batched (multi-row) company upsert is exercised, not just one row.
+    const companies = [
       { careersUrl: "https://example.test/smoke", name: "smoke-co" },
-    ]);
+      { careersUrl: "https://example.test/smoke-2", name: "smoke-co-2" },
+    ];
+    const diff = await store.recordDirectory(scanId, companies);
     console.log(
       `recordDirectory → +${diff.newCompanies.length} / -${diff.removedCompanies.length}`,
     );
 
     await store.finishScan(scanId, {
-      postingsSeen: 1,
-      companiesSeen: 1,
+      postingsSeen: 1 + batch.length,
+      companiesSeen: companies.length,
       ...diff,
     });
     console.log("finishScan → ok");

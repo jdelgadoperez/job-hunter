@@ -9,6 +9,8 @@ describe("formatProgress", () => {
     [{ kind: "company", name: "Acme", index: 3, total: 10 }, "[3/10] Acme"],
     [{ kind: "scoring", total: 1 }, "Scoring 1 posting…"],
     [{ kind: "scoring", total: 5 }, "Scoring 5 postings…"],
+    [{ kind: "persisting", total: 1 }, "Saving 1 posting…"],
+    [{ kind: "persisting", total: 12000 }, "Saving 12000 postings…"],
     [{ kind: "recheck", total: 1 }, "Re-checking 1 open role…"],
     [{ kind: "recheck", total: 3 }, "Re-checking 3 open roles…"],
     [{ kind: "summary", count: 0 }, "Scanned and scored 0 postings"],
