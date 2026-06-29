@@ -3,6 +3,7 @@ import { FakePostingFeed } from "@app/discovery/feed/posting-feed";
 import type { ScanStore } from "@app/discovery/scan-store";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
+import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting } from "@app/domain/types";
 import type { FetchResponse, Fetcher } from "@app/net/fetcher";
 import type { CompanyRef, Repository } from "@app/storage/repository";
@@ -42,13 +43,19 @@ function airtableData(companies: { name: string; url: string }[]): unknown {
   };
 }
 
-/** A ScanStore with no real DB — captures what sourcing writes. Crucially has NO saveMatchResult. */
-function fakeStore(): {
+/**
+ * A ScanStore with no real DB — captures what sourcing writes. Crucially has NO saveMatchResult.
+ * `batched: true` adds the optional `savePostings` so sourcing takes the bulk-write path; `batchCalls`
+ * records each batch (so a test can assert one call per chunk rather than one per posting).
+ */
+function fakeStore(opts: { batched?: boolean } = {}): {
   store: ScanStore;
   saved: JobPosting[];
+  batchCalls: JobPosting[][];
   finished: { postingsSeen: number; companiesSeen: number }[];
 } {
   const saved: JobPosting[] = [];
+  const batchCalls: JobPosting[][] = [];
   const finished: { postingsSeen: number; companiesSeen: number }[] = [];
   const store: ScanStore = {
     startScan: () => 1,
@@ -66,7 +73,13 @@ function fakeStore(): {
       finished.push({ postingsSeen: summary.postingsSeen, companiesSeen: summary.companiesSeen });
     },
   };
-  return { store, saved, finished };
+  if (opts.batched) {
+    store.savePostings = (postings) => {
+      batchCalls.push([...postings]);
+      saved.push(...postings);
+    };
+  }
+  return { store, saved, batchCalls, finished };
 }
 
 function discoverDeps(routes: Record<string, string>, companies: { name: string; url: string }[]) {
@@ -162,6 +175,62 @@ describe("runSourcing", () => {
     expect(outcome.companies.map((c) => c.careersUrl)).toEqual([
       "https://boards.greenhouse.io/acme",
     ]);
+  });
+
+  it("persists postings in one batch call when the store supports savePostings", async () => {
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "TypeScript and React.",
+        },
+        {
+          title: "Staff Backend Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/2",
+          content: "TypeScript and Node.",
+        },
+      ],
+    });
+    const { store, saved, batchCalls } = fakeStore({ batched: true });
+
+    const outcome = await runSourcing({
+      repo: store,
+      discoverDeps: discoverDeps(
+        { "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse },
+        [{ name: "Acme", url: "https://boards.greenhouse.io/acme" }],
+      ),
+    });
+
+    // Two postings written as a single batch round-trip, not two serial savePosting calls.
+    expect(outcome.postings).toHaveLength(2);
+    expect(batchCalls).toHaveLength(1);
+    expect(batchCalls[0]?.map((p) => p.id).sort()).toEqual(saved.map((p) => p.id).sort());
+  });
+
+  it("emits a persisting progress event with the posting total before the write phase", async () => {
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "TypeScript and React.",
+        },
+      ],
+    });
+    const { store } = fakeStore();
+    const events: ScanProgressEvent[] = [];
+
+    const outcome = await runSourcing({
+      repo: store,
+      onProgress: (event) => events.push(event),
+      discoverDeps: discoverDeps(
+        { "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse },
+        [{ name: "Acme", url: "https://boards.greenhouse.io/acme" }],
+      ),
+    });
+
+    expect(events).toContainEqual({ kind: "persisting", total: outcome.postings.length });
   });
 });
 

@@ -5,6 +5,20 @@ import type { Sql } from "postgres";
 import { type PostingRow, postingToRow, rowToPosting } from "./postgres-mappers";
 
 /**
+ * Rows per multi-row INSERT. Postgres caps a statement at 65,535 bind parameters; the widest insert
+ * here is postings (10 columns), so 1,000 rows = 10k params — a comfortable margin that still cuts
+ * a ~12k-posting crawl from ~12k round-trips to ~12.
+ */
+const INSERT_CHUNK_SIZE = 1000;
+
+/** Split an array into consecutive chunks of at most `size` (the last may be smaller). */
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+/**
  * The hosted scanner worker's `ScanStore`, backed by Postgres (Supabase) via `postgres` (porsager).
  * Mirrors the local SQLite `Repository`'s sourcing methods one-for-one — same upsert/revival/expiry
  * semantics — so the shared `runSourcing` pipeline behaves identically whether it writes locally or
@@ -45,14 +59,24 @@ export class PostgresScanStore implements ScanStore {
             .filter((e) => Number(e.last_seen_scan) === prevScan && !currentUrls.has(e.careers_url))
             .map((e) => ({ careersUrl: e.careers_url, ...(e.name ? { name: e.name } : {}) }));
 
-    for (const c of companies) {
+    // Bulk-upsert all companies in chunked multi-row INSERTs (one round-trip per chunk) rather than
+    // one round-trip per company — the directory is ~1k+ leads, so the serial form dominated runtime.
+    // `last_seen_at` is omitted from the column list so new rows take the column's `default now()`;
+    // the conflict branch refreshes it explicitly.
+    const companyRows = companies.map((c) => ({
+      careers_url: c.careersUrl,
+      name: c.name ?? null,
+      first_seen_scan: scanId,
+      last_seen_scan: scanId,
+    }));
+    const companyColumns = ["careers_url", "name", "first_seen_scan", "last_seen_scan"] as const;
+    for (const batch of chunk(companyRows, INSERT_CHUNK_SIZE)) {
       await this.sql`
-        INSERT INTO companies (careers_url, name, first_seen_scan, last_seen_scan, last_seen_at)
-        VALUES (${c.careersUrl}, ${c.name ?? null}, ${scanId}, ${scanId}, now())
+        INSERT INTO companies ${this.sql(batch, ...companyColumns)}
         ON CONFLICT (careers_url) DO UPDATE SET
           name = excluded.name,
           last_seen_scan = excluded.last_seen_scan,
-          last_seen_at = excluded.last_seen_at`;
+          last_seen_at = now()`;
     }
 
     return { newCompanies, removedCompanies };
@@ -78,6 +102,46 @@ export class PostgresScanStore implements ScanStore {
         last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
         -- Revive a reappeared posting only when this save belongs to a scan.
         expired_at = CASE WHEN excluded.last_seen_scan IS NULL THEN postings.expired_at ELSE NULL END`;
+  }
+
+  /**
+   * Bulk version of `savePosting`: upsert many postings in chunked multi-row INSERTs (one round-trip
+   * per chunk) rather than one per posting. A crawl writes ~12k postings, so the serial form was the
+   * dominant cost of the post-crawl write phase (and pushed the worker past its CI timeout). Same
+   * upsert/revival semantics as `savePosting`; chunked to stay well under Postgres's bind-parameter
+   * cap. `scanId` is the scan these saves belong to (always set on the worker path).
+   */
+  async savePostings(postings: JobPosting[], scanId: number | null = null): Promise<void> {
+    if (postings.length === 0) return;
+    const rows = postings.map((p) => ({ ...postingToRow(p), last_seen_scan: scanId }));
+    const columns = [
+      "id",
+      "company",
+      "title",
+      "url",
+      "source",
+      "description",
+      "location",
+      "posted_at",
+      "fetched_at",
+      "last_seen_scan",
+    ] as const;
+    for (const batch of chunk(rows, INSERT_CHUNK_SIZE)) {
+      await this.sql`
+        INSERT INTO postings ${this.sql(batch, ...columns)}
+        ON CONFLICT (id) DO UPDATE SET
+          company = excluded.company,
+          title = excluded.title,
+          url = excluded.url,
+          source = excluded.source,
+          description = excluded.description,
+          location = excluded.location,
+          posted_at = excluded.posted_at,
+          fetched_at = excluded.fetched_at,
+          last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
+          -- Revive a reappeared posting only when this save belongs to a scan.
+          expired_at = CASE WHEN excluded.last_seen_scan IS NULL THEN postings.expired_at ELSE NULL END`;
+    }
   }
 
   async listLivePostingsNotSeen(scanId: number): Promise<JobPosting[]> {

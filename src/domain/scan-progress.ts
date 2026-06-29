@@ -4,6 +4,7 @@ export type ScanProgressEvent =
   | { kind: "leads"; total: number }
   | { kind: "company"; name: string; index: number; total: number }
   | { kind: "scoring"; total: number }
+  | { kind: "persisting"; total: number }
   | { kind: "recheck"; total: number }
   | { kind: "summary"; count: number };
 
@@ -22,6 +23,8 @@ export function formatProgress(event: ScanProgressEvent): string {
       return `[${event.index}/${event.total}] ${event.name}`;
     case "scoring":
       return `Scoring ${plural(event.total, "posting")}…`;
+    case "persisting":
+      return `Saving ${plural(event.total, "posting")}…`;
     case "recheck":
       return `Re-checking ${plural(event.total, "open role")}…`;
     case "summary":

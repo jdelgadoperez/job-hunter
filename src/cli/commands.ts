@@ -136,7 +136,13 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
     companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
   );
 
-  for (const posting of postings) await repo.savePosting(posting, scanId);
+  // The write phase is silent and, for a network-backed store, the slowest part of a crawl — emit a
+  // progress event so a stall here is visible rather than looking frozen after the last company.
+  onProgress?.({ kind: "persisting", total: postings.length });
+  // Prefer one bulk round-trip when the store offers it (the Postgres worker); fall back to the
+  // serial upsert for the synchronous SQLite Repository, which has no per-row round-trip cost.
+  if (repo.savePostings) await repo.savePostings(postings, scanId);
+  else for (const posting of postings) await repo.savePosting(posting, scanId);
 
   // Precise liveness re-check: postings we didn't see this scan get their source re-fetched and are
   // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
