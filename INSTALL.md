@@ -115,6 +115,22 @@ npm run cli -- scan
 npm run cli -- list --min-score 70
 ```
 
+### Keep the dashboard always running (optional)
+
+To have the dashboard start automatically at every login — no terminal needed —
+install it as a per-user background service (no admin required). Same commands on
+macOS and Windows:
+
+```bash
+./service-install.sh     # macOS/Linux   (or  ./service-install.ps1  on Windows)
+```
+
+Manage it with `service-start`, `service-stop`, `service-status`, and
+`service-uninstall` (the `.ps1` form on Windows). `./update.sh` / `./update.ps1`
+restart the service automatically so updates go live with no extra steps. See the
+[README](README.md#keep-the-dashboard-always-running-optional) for the full table
+and log locations.
+
 See the **[user guide](https://github.com/jdelgadoperez/job-hunter/wiki)** for the full walkthrough and **[README](README.md)** for an
 overview.
 
