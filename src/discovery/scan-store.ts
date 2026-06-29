@@ -20,6 +20,14 @@ export interface ScanStore {
   startScan(): number | Promise<number>;
   recordDirectory(scanId: number, companies: CompanyRef[]): DirectoryDiff | Promise<DirectoryDiff>;
   savePosting(posting: JobPosting, scanId?: number | null): void | Promise<void>;
+  /**
+   * Optional bulk upsert of many postings in one round-trip — the same semantics as calling
+   * `savePosting` for each, but a store backed by a network DB can collapse thousands of serial
+   * round-trips into a handful of multi-row statements. `runSourcing` uses this when present and
+   * falls back to the `savePosting` loop otherwise, so the synchronous SQLite `Repository` (which
+   * has no round-trip cost) need not implement it.
+   */
+  savePostings?(postings: JobPosting[], scanId?: number | null): void | Promise<void>;
   listLivePostingsNotSeen(scanId: number): JobPosting[] | Promise<JobPosting[]>;
   markPostingExpired(postingId: string): boolean | Promise<boolean>;
   expireStalePostings(scanId: number, staleAfter?: number): number | Promise<number>;
