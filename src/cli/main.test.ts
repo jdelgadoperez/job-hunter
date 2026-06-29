@@ -66,7 +66,7 @@ let errSpy: ReturnType<typeof vi.spyOn>;
 let tmp: string;
 
 function logged(): string {
-  return logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+  return logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
 }
 
 beforeEach(() => {
@@ -104,7 +104,7 @@ describe("main dispatch", () => {
 
   it("prints the parse error and exits 1 for an unknown command", async () => {
     await runCli("bogus");
-    expect(errSpy.mock.calls.map((c) => String(c[0])).join("\n")).toContain("Error:");
+    expect(errSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n")).toContain("Error:");
     expect(process.exitCode).toBe(1);
   });
 

@@ -33,8 +33,11 @@ export default defineConfig({
       reporter: ["text", "html"],
       // Floor for the gate, a few points below current coverage so honest churn
       // doesn't fail CI but a real regression does. Raise as coverage climbs.
+      // Statements floor dropped 93→92 with the Vitest 4 / coverage-v8 4 upgrade:
+      // v4's AST-aware statement remapping recounts statements (1486/1601 = 92.81%)
+      // vs v3's metric, with no change to tests (all 406 still pass) or source.
       thresholds: {
-        statements: 93,
+        statements: 92,
         branches: 85,
         functions: 90,
         lines: 93,
