@@ -2,7 +2,7 @@
 export type ScanProgressEvent =
   | { kind: "directory" }
   | { kind: "leads"; total: number }
-  | { kind: "company"; name: string; index: number; total: number }
+  | { kind: "company"; name: string; host?: string; index: number; total: number }
   | { kind: "scoring"; total: number }
   | { kind: "persisting"; total: number }
   | { kind: "recheck"; total: number }
@@ -20,7 +20,7 @@ export function formatProgress(event: ScanProgressEvent): string {
     case "leads":
       return `Found ${plural(event.total, "company", "companies")} to scan`;
     case "company":
-      return `[${event.index}/${event.total}] ${event.name}`;
+      return `[${event.index}/${event.total}] ${event.name}${event.host ? ` (${event.host})` : ""}`;
     case "scoring":
       return `Scoring ${plural(event.total, "posting")}…`;
     case "persisting":
