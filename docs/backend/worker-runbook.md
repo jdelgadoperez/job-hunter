@@ -52,9 +52,26 @@ env vars via the platform's secrets.
 
 ## Cadence & safety
 
-- **Interval:** ~6h matches the local default refresh; tune to how fresh the feed must be vs. load on
-  the ATS boards. One central crawler is far gentler than N independent clients.
+- **Interval:** the committed workflow runs **once a day** (09:17 UTC); tune to how fresh the feed
+  must be vs. load on the ATS boards. One central crawler is far gentler than N independent clients.
+- **Run length:** a full crawl takes ~25 min (the `timeout-minutes: 30` cap leaves headroom). Most of
+  the tail is browser-fallback render timeouts on slow non-ATS careers pages — see "Warnings" below.
 - **Idempotent:** each run upserts postings and reconciles liveness/expiry incrementally, so overlap
   or a missed run is harmless.
 - **Validate first:** `npm run smoke:postgres` (with `DATABASE_URL`) confirms the store works against
   the database before scheduling the full crawl.
+- **Run summary:** a final workflow step writes a one-line verdict (the `[scanner] done:` line) plus a
+  collapsible warning list to the run's GitHub summary page, so you don't have to expand the raw logs.
+
+## Warnings you can expect
+
+The worker fails open on per-company errors — the scan still completes and writes everything it got.
+Common, benign warnings:
+
+- **`Render <url> timed out after 30000ms`** — a careers page with no known ATS and no JSON feed fell
+  back to a headless render that didn't finish in 30s (heavy SPA, slow host). That company yields
+  nothing this run; it's retried next run. The bulk of the tail is these.
+- **`Skipped N companies on sites we don't scrape (LinkedIn/Indeed)`** — directory entries on
+  anti-bot hosts on the `unscrapable` list; expected, review them manually.
+- **`unexpected status NNN` / `Download is starting`** — a host returned an error or served a download
+  instead of a page; skipped for this run.
