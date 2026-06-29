@@ -162,6 +162,9 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         deps.onProgress?.({
           kind: "company",
           name: lead.company,
+          // Same-named employers can appear under several distinct boards; the host disambiguates
+          // them in the progress line (e.g. "LawnStarter (boards.greenhouse.io)").
+          host: hostnameOf(lead.careersUrl),
           index: started,
           total: leads.length,
         });
