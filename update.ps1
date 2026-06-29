@@ -20,4 +20,9 @@ npm install
 Write-Host "Re-running setup..."
 npm run setup -- --yes
 
+if (Get-ScheduledTask -TaskName "JobHunterDashboard" -ErrorAction SilentlyContinue) {
+    Write-Host "Restarting the background service to pick up the update..."
+    & "$PSScriptRoot\service-stop.ps1"
+    & "$PSScriptRoot\service-start.ps1"
+}
 Write-Host "Update complete. If 'npm run serve' is running, restart it to pick up the changes."

@@ -25,3 +25,10 @@ npm install
 
 echo "Running setup…"
 npm run setup
+
+echo
+read -r -p "Keep the dashboard running in the background (start at login)? [y/N] " reply
+case "$reply" in
+  [yY]*) ./service-install.sh ;;
+  *) echo "Skipped. You can enable it later with ./service-install.sh" ;;
+esac

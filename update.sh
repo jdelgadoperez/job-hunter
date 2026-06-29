@@ -21,4 +21,9 @@ npm install
 echo "Re-running setup…"
 npm run setup -- --yes
 
+if [ -f "$HOME/Library/LaunchAgents/com.job-hunter.dashboard.plist" ]; then
+  echo "Restarting the background service to pick up the update…"
+  ./service-stop.sh || true
+  ./service-start.sh || true
+fi
 echo "✓ Update complete. If 'npm run serve' is running, restart it to pick up the changes."
