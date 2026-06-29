@@ -75,3 +75,14 @@ Common, benign warnings:
   anti-bot hosts on the `unscrapable` list; expected, review them manually.
 - **`unexpected status NNN` / `Download is starting`** — a host returned an error or served a download
   instead of a page; skipped for this run.
+
+## Idea: a private run-history admin view (not built)
+
+Today run visibility is per-run: the GitHub summary page for the latest run, plus whatever's in the
+raw logs. A lightweight future enhancement would be a **simple, owner-only admin page** that lists the
+last several scans (e.g. ~5) — each with its timestamp, posting count, directory diff, expiries, and
+warning count — so runs can be reviewed at a glance without opening GitHub. The data already exists:
+each run writes a row to the `scans` table via `PostgresScanStore`, so this is mostly a read-only query
++ a small page, not new plumbing. It should load **separately from the main dashboard** (its own
+route/build, gated to the operator) since it's an admin concern, not a user-facing feature, and must
+stay read-only over public scan metadata. Captured here as a note, not a committed plan.
