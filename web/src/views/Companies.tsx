@@ -1,6 +1,15 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
 import { useAddCompany, useCompanies, useManualReviewCompanies, useRemoveCompany } from "../hooks";
+
+type CompanyEntry = { careersUrl: string; name?: string };
+
+/** The label a company is shown under — and what we sort by. */
+const label = (c: CompanyEntry) => c.name ?? c.careersUrl;
+
+/** Sort companies by display label, case-insensitively (locale-aware). */
+const byLabel = (a: CompanyEntry, b: CompanyEntry) =>
+  label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
 
 export function Companies() {
   const companies = useCompanies();
@@ -9,6 +18,15 @@ export function Companies() {
   const removeCompany = useRemoveCompany();
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+
+  const sortedCompanies = useMemo(
+    () => (companies.data ? [...companies.data].sort(byLabel) : []),
+    [companies.data],
+  );
+  const sortedManualReview = useMemo(
+    () => (manualReview.data ? [...manualReview.data].sort(byLabel) : []),
+    [manualReview.data],
+  );
 
   function add(e: FormEvent) {
     e.preventDefault();
@@ -61,7 +79,7 @@ export function Companies() {
         <Empty>No tracked companies yet.</Empty>
       ) : (
         <div className="space-y-2">
-          {companies.data.map((c) => (
+          {sortedCompanies.map((c) => (
             <Card key={c.careersUrl} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate font-medium text-fg">{c.name ?? c.careersUrl}</p>
@@ -94,7 +112,7 @@ export function Companies() {
             to check their roles yourself.
           </p>
           <ul className="mt-3 space-y-1">
-            {manualReview.data.map((c) => (
+            {sortedManualReview.map((c) => (
               <li key={c.careersUrl} className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="truncate text-fg">{c.name ?? c.careersUrl}</span>
                 <a
