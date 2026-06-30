@@ -141,6 +141,8 @@ export class PostgresScanStore implements ScanStore {
           source = excluded.source,
           description = excluded.description,
           location = excluded.location,
+          remote = excluded.remote,
+          country = excluded.country,
           posted_at = excluded.posted_at,
           fetched_at = excluded.fetched_at,
           last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
