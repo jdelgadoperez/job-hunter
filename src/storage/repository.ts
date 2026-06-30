@@ -25,7 +25,6 @@ export type ListMatchesOptions = {
   country?: string;
 };
 
-/** A posting eligible for LLM scoring: its heuristic score plus whether the LLM already scored it. */
 /**
  * How a stored match score was produced. `heuristic-remote-penalized` marks a heuristic score that
  * already had the remote penalty applied, so a later remote-only run skips it instead of penalizing
@@ -33,6 +32,7 @@ export type ListMatchesOptions = {
  */
 export type ScorerTag = "heuristic" | "llm" | "heuristic-remote-penalized";
 
+/** A posting eligible for LLM scoring: its heuristic score plus whether the LLM already scored it. */
 export type ScoringCandidate = {
   posting: JobPosting;
   /** The current stored MatchResult for this posting (score + skills + rationale + how it was scored). */
@@ -161,11 +161,7 @@ export class Repository {
       });
   }
 
-  saveMatchResult(
-    postingId: string,
-    result: MatchResult,
-    scorer: ScorerTag = "heuristic",
-  ): void {
+  saveMatchResult(postingId: string, result: MatchResult, scorer: ScorerTag = "heuristic"): void {
     this.db
       .prepare(
         `INSERT INTO match_results (posting_id, score, matched_skills, missing_skills, rationale, scorer)

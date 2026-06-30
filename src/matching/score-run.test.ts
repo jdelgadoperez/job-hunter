@@ -36,7 +36,10 @@ function candidate(
 ): ScoringCandidate {
   const scorer = opts.scorer ?? (opts.alreadyLlmScored ? "llm" : "heuristic");
   return {
-    posting: { ...posting(id, title, opts.location), ...(opts.remote !== undefined ? { remote: opts.remote } : {}) },
+    posting: {
+      ...posting(id, title, opts.location),
+      ...(opts.remote !== undefined ? { remote: opts.remote } : {}),
+    },
     current: {
       score: heuristicScore,
       matchedSkills: opts.matchedSkills ?? [],
