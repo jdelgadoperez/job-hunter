@@ -154,6 +154,67 @@ describe("GET /api/matches", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("remoteOnly=true returns only resolved-remote postings", async () => {
+    repo.savePosting({
+      id: "rem1",
+      company: "Co",
+      title: "Remote Job",
+      url: "https://co.com/rem1",
+      source: "lever",
+      description: "desc",
+      remote: true,
+      fetchedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    repo.savePosting({
+      id: "ons1",
+      company: "Co",
+      title: "Office Job",
+      url: "https://co.com/ons1",
+      source: "lever",
+      description: "desc",
+      remote: false,
+      fetchedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    repo.saveMatchResult("rem1", { score: 80, matchedSkills: [], missingSkills: [] });
+    repo.saveMatchResult("ons1", { score: 70, matchedSkills: [], missingSkills: [] });
+
+    const res = await makeApp().request("/api/matches?remoteOnly=true");
+    const body = await json<{ posting: { id: string; remote: boolean } }[]>(res);
+    expect(body.map((s) => s.posting.id)).toEqual(["rem1"]);
+    expect(body[0]?.posting.remote).toBe(true);
+  });
+
+  it("remoteOnly absent or non-true returns all postings", async () => {
+    repo.savePosting({
+      id: "mx1",
+      company: "Co",
+      title: "Job",
+      url: "https://co.com/mx1",
+      source: "lever",
+      description: "desc",
+      remote: true,
+      fetchedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    repo.savePosting({
+      id: "mx2",
+      company: "Co",
+      title: "Job 2",
+      url: "https://co.com/mx2",
+      source: "lever",
+      description: "desc",
+      remote: false,
+      fetchedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    repo.saveMatchResult("mx1", { score: 80, matchedSkills: [], missingSkills: [] });
+    repo.saveMatchResult("mx2", { score: 70, matchedSkills: [], missingSkills: [] });
+
+    const noParam = await json<unknown[]>(await makeApp().request("/api/matches"));
+    expect(noParam).toHaveLength(2);
+
+    const nonTrue = await json<unknown[]>(await makeApp().request("/api/matches?remoteOnly=yes"));
+    expect(nonTrue).toHaveLength(2);
+  });
 });
 
 describe("companies", () => {

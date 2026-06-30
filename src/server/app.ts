@@ -83,6 +83,7 @@ export function createApp(deps: ServerDeps): Hono {
       repo.listScoredPostings(minScore, {
         includeExpired: c.req.query("includeExpired") === "true",
         includeDismissed: c.req.query("includeDismissed") === "true",
+        remoteOnly: c.req.query("remoteOnly") === "true",
       }),
     );
   });
