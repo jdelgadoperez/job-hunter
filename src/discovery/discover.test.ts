@@ -142,6 +142,37 @@ describe("discover", () => {
     expect(gauge.max).toBeGreaterThan(1);
   });
 
+  it("disposes the renderer once after the run, even when a render throws", async () => {
+    let disposeCount = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") throw new Error("render crashed");
+        return JSONLD_HTML;
+      },
+      async dispose() {
+        disposeCount += 1;
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Initech", url: "https://initech.com/careers" },
+        { name: "Boom", url: "https://boom.com/careers" },
+      ]),
+    );
+
+    await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    expect(disposeCount).toBe(1);
+  });
+
   it("skips un-scrapable hosts (LinkedIn) without rendering, and surfaces them for review", async () => {
     const rendered: string[] = [];
     const renderer: PageRenderer = {
