@@ -86,6 +86,8 @@ export function createApp(deps: ServerDeps): Hono {
         includeDismissed: c.req.query("includeDismissed") === "true",
         remoteOnly: c.req.query("remoteOnly") === "true",
         country,
+        includeApplied: c.req.query("includeApplied") === "true",
+        onlyApplied: c.req.query("onlyApplied") === "true",
       }),
     );
   });
@@ -93,8 +95,8 @@ export function createApp(deps: ServerDeps): Hono {
   // Save or dismiss a match; DELETE clears the action. The id is the posting id.
   app.put("/api/matches/:id/action", async (c) => {
     const body = (await c.req.json().catch(() => null)) as { action?: unknown } | null;
-    if (body?.action !== "saved" && body?.action !== "dismissed") {
-      return c.json({ error: 'expected { "action": "saved" | "dismissed" }' }, 400);
+    if (body?.action !== "saved" && body?.action !== "dismissed" && body?.action !== "applied") {
+      return c.json({ error: 'expected { "action": "saved" | "dismissed" | "applied" }' }, 400);
     }
     repo.setUserAction(c.req.param("id"), body.action);
     return c.json({ ok: true });
