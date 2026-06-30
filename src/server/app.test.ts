@@ -439,6 +439,26 @@ describe("POST /api/profile", () => {
     const res = await makeApp().request("/api/profile", { method: "POST", body: form });
     expect(res.status).toBe(400);
   });
+
+  it("rejects an upload whose declared Content-Length exceeds the limit", async () => {
+    const res = await makeApp().request("/api/profile", {
+      method: "POST",
+      headers: {
+        "content-type": "multipart/form-data; boundary=x",
+        "content-length": String(11 * 1024 * 1024),
+      },
+      body: "ignored — rejected before the body is read",
+    });
+    expect(res.status).toBe(413);
+  });
+
+  it("rejects an oversized file even when Content-Length is absent", async () => {
+    const oversized = "a".repeat(11 * 1024 * 1024);
+    const form = new FormData();
+    form.set("file", new File([oversized], "cv.txt", { type: "text/plain" }));
+    const res = await makeApp().request("/api/profile", { method: "POST", body: form });
+    expect(res.status).toBe(413);
+  });
 });
 
 describe("PUT /api/profile/skills", () => {

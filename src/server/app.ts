@@ -42,6 +42,11 @@ const WRITABLE_SETTINGS: Record<string, string> = {
   feedKey: FEED_KEY_SETTING,
 };
 
+// Cap resume uploads so a runaway or malicious request can't read an unbounded file into memory
+// and OOM the process. 10MB is generous for any real resume (PDF/docx). Enforced both via the
+// declared Content-Length (cheap, pre-read) and the actual decoded file size (the spoof-proof check).
+const MAX_RESUME_BYTES = 10 * 1024 * 1024;
+
 // The server binds to loopback and has no authentication, so it trusts that every request
 // originates from this machine. A `Host` header naming anything other than loopback means the
 // request was routed here under a different name — the signature of a DNS-rebinding attack, where
@@ -176,12 +181,20 @@ export function createApp(deps: ServerDeps): Hono {
   app.post("/api/profile", async (c) => {
     let resumeText: string;
     const contentType = c.req.header("content-type") ?? "";
+    // Reject early on the declared size before reading the body into memory.
+    const declaredLength = Number(c.req.header("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_RESUME_BYTES) {
+      return c.json({ error: "resume exceeds the 10MB limit" }, 413);
+    }
     try {
       if (contentType.includes("multipart/form-data")) {
         const body = await c.req.parseBody();
         const file = body.file;
         if (!(file instanceof File)) {
           return c.json({ error: 'expected a "file" upload field' }, 400);
+        }
+        if (file.size > MAX_RESUME_BYTES) {
+          return c.json({ error: "resume exceeds the 10MB limit" }, 413);
         }
         const ext = `.${file.name.split(".").pop()?.toLowerCase() ?? ""}`;
         resumeText = await readResumeBuffer(new Uint8Array(await file.arrayBuffer()), ext);
