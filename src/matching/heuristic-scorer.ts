@@ -4,6 +4,25 @@ import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/
 const SKILL_WEIGHT = 0.8;
 const TITLE_WEIGHT = 0.2;
 
+/**
+ * The multiplier applied to a non-remote posting's heuristic score when the user prefers remote.
+ * A 40% reduction keeps a strong on-site match ranked above a weak one, but below remote matches.
+ * Named constant — never an inline literal.
+ */
+export const REMOTE_PENALTY_FACTOR = 0.6;
+
+/**
+ * Apply the remote penalty to a heuristic MatchResult. Pure: returns a new object with the
+ * score scaled by REMOTE_PENALTY_FACTOR and clamped to ≥ 0. Only called by score-run.ts
+ * for non-remote postings when the user prefers remote-only.
+ */
+export function applyRemotePenalty(result: MatchResult): MatchResult {
+  return {
+    ...result,
+    score: Math.max(0, Math.round(result.score * REMOTE_PENALTY_FACTOR)),
+  };
+}
+
 export class HeuristicScorer implements Scorer {
   constructor(private readonly dictionary?: string[]) {}
 

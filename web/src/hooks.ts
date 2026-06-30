@@ -8,6 +8,8 @@ export function useMatches(minScore: number, filters: MatchFilters = {}) {
       minScore,
       filters.includeExpired ?? false,
       filters.includeDismissed ?? false,
+      filters.remoteOnly ?? false,
+      filters.country ?? "",
     ],
     queryFn: () => api.getMatches(minScore, filters),
   });

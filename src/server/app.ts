@@ -79,10 +79,13 @@ export function createApp(deps: ServerDeps): Hono {
     const raw = c.req.query("minScore");
     const parsed = raw === undefined ? 0 : Number(raw);
     const minScore = Number.isFinite(parsed) ? parsed : 0;
+    const country = c.req.query("country") || undefined;
     return c.json(
       repo.listScoredPostings(minScore, {
         includeExpired: c.req.query("includeExpired") === "true",
         includeDismissed: c.req.query("includeDismissed") === "true",
+        remoteOnly: c.req.query("remoteOnly") === "true",
+        country,
       }),
     );
   });

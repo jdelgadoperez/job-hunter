@@ -1,10 +1,11 @@
 import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { errorMessage } from "@app/net/error-message";
-import type { ScoringCandidate } from "@app/storage/repository";
+import type { ScorerTag, ScoringCandidate } from "@app/storage/repository";
 import pLimit from "p-limit";
 import { type CostEstimate, estimateCost } from "./cost-estimate";
+import { applyRemotePenalty } from "./heuristic-scorer";
 import type { LlmTriager } from "./llm-triager";
-import { isRemote } from "./remote-filter";
+import { resolvePostingRemote } from "./remote-filter";
 import type { TriageItem } from "./triage-prompt";
 import { isUsageLimitError } from "./usage-limit-error";
 
@@ -34,6 +35,8 @@ export type ScoreStageCounts = {
   alreadyScoredSkipped: number;
   triageTitles: number;
   deepScored: number;
+  /** Non-remote postings saved a penalized heuristic score this run (only under remoteOnly). */
+  remotePenalized: number;
 };
 
 export type ScoreOutcome = {
@@ -47,7 +50,7 @@ export type ScoreOutcome = {
 export type ScoreRepo = {
   countLivePostings(): number;
   listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[];
-  saveMatchResult(id: string, result: MatchResult, scorer: "heuristic" | "llm"): void;
+  saveMatchResult(id: string, result: MatchResult, scorer: ScorerTag): void;
 };
 
 /**
@@ -78,14 +81,38 @@ export async function runScoreRun(deps: {
   // Heuristic gate is applied by the query (score >= minHeuristic).
   const gated = repo.listPostingsForScoring({ minHeuristic: options.minHeuristic });
 
-  const afterRemote = options.remoteOnly
-    ? gated.filter((c) => isRemote(c.posting.location))
-    : gated;
+  // When remoteOnly is on, partition rather than filter:
+  //   - Remote candidates proceed through the full pipeline (triage → LLM deep-score).
+  //   - Non-remote candidates skip the LLM but are saved with a penalized heuristic score,
+  //     so they appear in Matches ranked low rather than being absent.
+  // When remoteOnly is off, no partition and no penalty — same pipeline as before.
+  let afterRemote: ScoringCandidate[];
+  let nonRemotePenalized: ScoringCandidate[];
+
+  if (options.remoteOnly) {
+    afterRemote = gated.filter((c) => resolvePostingRemote(c.posting));
+    nonRemotePenalized = gated.filter((c) => !resolvePostingRemote(c.posting));
+  } else {
+    afterRemote = gated;
+    nonRemotePenalized = [];
+  }
 
   const capped = afterRemote.slice(0, options.limit);
 
   const eligible = options.rescore ? capped : capped.filter((c) => !c.alreadyLlmScored);
   const alreadyScoredSkipped = capped.length - eligible.length;
+
+  // Determine which non-remote postings get a penalized heuristic score (the actual save happens
+  // after the dry-run gate). These never reach the triager or LLM, so there's no cost and no
+  // usage-limit risk. The penalty is applied to the posting's EXISTING result — preserving its
+  // matched/missing skills and rationale — and exactly ONCE: a row already tagged
+  // `heuristic-remote-penalized` is skipped so repeated remote-only runs don't compound the penalty.
+  // Already-LLM-scored rows are skipped too (unless --rescore), matching the remote path. The cap is
+  // respected so a remote-only run doesn't do unbounded writes.
+  const nonRemoteToPenalize = nonRemotePenalized
+    .filter((c) => c.scorer !== "heuristic-remote-penalized")
+    .filter((c) => options.rescore || !c.alreadyLlmScored)
+    .slice(0, options.limit);
 
   const counts: ScoreStageCounts = {
     inDb,
@@ -95,6 +122,7 @@ export async function runScoreRun(deps: {
     alreadyScoredSkipped,
     triageTitles: eligible.length,
     deepScored: 0,
+    remotePenalized: nonRemoteToPenalize.length,
   };
 
   const estimate = estimateCost({
@@ -106,6 +134,10 @@ export async function runScoreRun(deps: {
 
   if (options.dryRun) {
     return { counts, estimate, warnings, abortedOnLimit: false };
+  }
+
+  for (const c of nonRemoteToPenalize) {
+    repo.saveMatchResult(c.posting.id, applyRemotePenalty(c.current), "heuristic-remote-penalized");
   }
 
   // Stage 4 — batch title triage (fail-open inside the triager for ordinary errors).

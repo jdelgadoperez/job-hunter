@@ -45,6 +45,29 @@ describe("buildScorePrompt", () => {
   });
 });
 
+describe("buildScorePrompt — remoteOnly note", () => {
+  it("appends a remote-preference note to system when remoteOnly=true", () => {
+    const { system } = buildScorePrompt(profile, posting(), true);
+    expect(system).toContain("remote");
+  });
+
+  it("does not append the note when remoteOnly=false", () => {
+    const withFlag = buildScorePrompt(profile, posting(), true).system;
+    const withoutFlag = buildScorePrompt(profile, posting(), false).system;
+    expect(withFlag).not.toBe(withoutFlag);
+    // The base (no-flag) system string is cache-stable across postings.
+    expect(withoutFlag).toBe(
+      buildScorePrompt(profile, posting({ description: "other" }), false).system,
+    );
+  });
+
+  it("omitting the flag produces the same system as remoteOnly=false (backward-compatible)", () => {
+    const omitted = buildScorePrompt(profile, posting()).system;
+    const explicit = buildScorePrompt(profile, posting(), false).system;
+    expect(omitted).toBe(explicit);
+  });
+});
+
 describe("toMatchResult", () => {
   const base: LlmMatchPayload = {
     score: 73,

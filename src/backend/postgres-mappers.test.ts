@@ -50,11 +50,43 @@ describe("postgres mappers", () => {
       source: "s",
       description: "d",
       location: null,
+      remote: null,
+      country: null,
       posted_at: new Date("2026-06-20T00:00:00.000Z"),
       fetched_at: fetchedAt,
     };
     const restored = rowToPosting(row);
     expect(restored.fetchedAt.getTime()).toBe(fetchedAt.getTime());
     expect(restored.postedAt?.toISOString()).toBe("2026-06-20T00:00:00.000Z");
+  });
+});
+
+describe("remote and country round-trip", () => {
+  it("round-trips remote=true and country through postingToRow / rowToPosting", () => {
+    const original = posting({ remote: true, country: "US" });
+    const row = postingToRow(original);
+    expect(row.remote).toBe(true);
+    expect(row.country).toBe("US");
+    const restored = rowToPosting(row as PostingRow);
+    expect(restored.remote).toBe(true);
+    expect(restored.country).toBe("US");
+  });
+
+  it("round-trips remote=false", () => {
+    const original = posting({ remote: false, country: "Germany" });
+    const row = postingToRow(original);
+    expect(row.remote).toBe(false);
+    const restored = rowToPosting(row as PostingRow);
+    expect(restored.remote).toBe(false);
+  });
+
+  it("maps undefined remote/country to null in the row and omits them on restore", () => {
+    const original = posting({ location: undefined, postedAt: undefined });
+    const row = postingToRow(original);
+    expect(row.remote).toBeNull();
+    expect(row.country).toBeNull();
+    const restored = rowToPosting(row as PostingRow);
+    expect("remote" in restored).toBe(false);
+    expect("country" in restored).toBe(false);
   });
 });

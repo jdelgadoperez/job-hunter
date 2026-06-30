@@ -34,6 +34,8 @@ create table if not exists postings (
   source text not null,
   description text not null,
   location text,
+  remote boolean,
+  country text,
   posted_at timestamptz,
   fetched_at timestamptz not null,
   -- Incremental-scan bookkeeping: the scan that last saw this posting, and when it was judged gone.
@@ -59,3 +61,7 @@ create policy "anon reads live postings" on postings for select to anon using (t
 
 drop policy if exists "anon reads companies" on companies;
 create policy "anon reads companies" on companies for select to anon using (true);
+
+-- Idempotent column additions for databases that predate these columns.
+alter table postings add column if not exists remote boolean;
+alter table postings add column if not exists country text;

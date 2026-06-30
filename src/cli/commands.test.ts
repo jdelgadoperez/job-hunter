@@ -74,6 +74,7 @@ function outcome(overrides: Partial<ScoreOutcome["counts"]> = {}): ScoreOutcome 
     alreadyScoredSkipped: 18,
     triageTitles: 82,
     deepScored: 0,
+    remotePenalized: 0,
     ...overrides,
   };
   return {
@@ -108,6 +109,25 @@ describe("formatScorePlan", () => {
       dryRun: false,
     });
     expect(text).toContain("80");
+  });
+
+  it("reports the non-remote penalized count when remote-only penalizes postings", () => {
+    const text = formatScorePlan(outcome({ remotePenalized: 25 }), {
+      remoteOnly: true,
+      limit: 100,
+      dryRun: false,
+    });
+    expect(text).toContain("25");
+    expect(text).toMatch(/non-remote/i);
+  });
+
+  it("omits the non-remote line when nothing was penalized", () => {
+    const text = formatScorePlan(outcome({ remotePenalized: 0 }), {
+      remoteOnly: false,
+      limit: 100,
+      dryRun: false,
+    });
+    expect(text).not.toMatch(/non-remote/i);
   });
 });
 
@@ -250,6 +270,128 @@ describe("runScan + listMatches", () => {
     const out = capture();
     listMatches(repo, 0, out.log);
     expect(out.lines[0]).toContain("No matches yet");
+    repo.close();
+  });
+
+  it("enriches a posting with country when the location is parseable", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Software Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/2",
+          content: "TypeScript and React.",
+          location: { name: "San Francisco, CA" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const [match] = repo.listScoredPostings(0);
+    expect(match?.posting.country).toBe("US");
+    repo.close();
+  });
+
+  it("omits country when the location is unparseable", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Software Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/3",
+          content: "TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const [match] = repo.listScoredPostings(0);
+    expect(match?.posting.country).toBeUndefined();
+    repo.close();
+  });
+
+  it("does not overwrite a country a feed posting already carries", async () => {
+    const repo = newRepo();
+    // A feed posting that arrives with an authoritative country AND a location string that would
+    // parse to a different country. The scan must keep the feed's value, not re-derive from location.
+    const feedPosting: JobPosting = {
+      id: "feed-1",
+      company: "Acme",
+      title: "Software Engineer",
+      url: "https://acme.example/jobs/1",
+      source: "feed",
+      description: "TypeScript and React.",
+      location: "Berlin, Germany",
+      country: "US",
+      fetchedAt: new Date(),
+    };
+    const feed = { fetch: async () => ({ postings: [feedPosting], warnings: [] }) };
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        feed,
+        discoverDeps: {
+          fetcher: new RouteFetcher({}),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(airtableData([])),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const match = repo.listScoredPostings(0).find((s) => s.posting.id === "feed-1");
+    // Feed's authoritative "US" is preserved, NOT overwritten by parseCountry("Berlin, Germany").
+    expect(match?.posting.country).toBe("US");
     repo.close();
   });
 

@@ -113,3 +113,95 @@ describe("RipplingConnector", () => {
     expect((await new RipplingConnector().fetchPostings(SLUG, fetcher)).ok).toBe(false);
   });
 });
+
+describe("RipplingConnector — remote field", () => {
+  it("sets remote=true when any location has workplaceType REMOTE", async () => {
+    const listBody = JSON.stringify({
+      items: [
+        {
+          id: "r1",
+          name: "Remote Job",
+          url: "https://ats.rippling.com/slug/jobs/r1",
+          locations: [{ name: "Remote (US)", workplaceType: "REMOTE" }],
+        },
+      ],
+      page: 0,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    const fetcher = new FakeFetcher({
+      [LIST]: { statusCode: 200, finalUrl: LIST, bodyText: listBody },
+    });
+    const result = await new RipplingConnector().fetchPostings(SLUG, fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(true);
+  });
+
+  it("sets remote=false when locations are present and none are REMOTE", async () => {
+    const listBody = JSON.stringify({
+      items: [
+        {
+          id: "o1",
+          name: "Office Job",
+          url: "https://ats.rippling.com/slug/jobs/o1",
+          locations: [{ name: "San Francisco, CA", workplaceType: "ON_SITE" }],
+        },
+      ],
+      page: 0,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    const fetcher = new FakeFetcher({
+      [LIST]: { statusCode: 200, finalUrl: LIST, bodyText: listBody },
+    });
+    const result = await new RipplingConnector().fetchPostings(SLUG, fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(false);
+  });
+
+  it("leaves remote undefined when locations array is absent", async () => {
+    const listBody = JSON.stringify({
+      items: [
+        {
+          id: "n1",
+          name: "Unknown Location",
+          url: "https://ats.rippling.com/slug/jobs/n1",
+        },
+      ],
+      page: 0,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    const fetcher = new FakeFetcher({
+      [LIST]: { statusCode: 200, finalUrl: LIST, bodyText: listBody },
+    });
+    const result = await new RipplingConnector().fetchPostings(SLUG, fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBeUndefined();
+  });
+
+  it("leaves remote undefined when some locations lack workplaceType and none are REMOTE", async () => {
+    const listBody = JSON.stringify({
+      items: [
+        {
+          id: "p1",
+          name: "Partial Location",
+          url: "https://ats.rippling.com/slug/jobs/p1",
+          locations: [
+            { name: "San Francisco, CA", workplaceType: "ON_SITE" },
+            { name: "Austin, TX" },
+          ],
+        },
+      ],
+      page: 0,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    const fetcher = new FakeFetcher({
+      [LIST]: { statusCode: 200, finalUrl: LIST, bodyText: listBody },
+    });
+    const result = await new RipplingConnector().fetchPostings(SLUG, fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBeUndefined();
+  });
+});

@@ -3,9 +3,18 @@ import type { ScoredPosting } from "../api";
 import { Button, Card, Empty, ErrorNote, Loading, ScorePill } from "../components/ui";
 import { useMatchAction, useMatches } from "../hooks";
 
-function MatchCard({ posting, result, action, expired }: ScoredPosting) {
+function MatchCard({
+  posting,
+  result,
+  action,
+  expired,
+  countryFilterActive,
+}: ScoredPosting & { countryFilterActive: boolean }) {
   const setAction = useMatchAction();
   const saved = action === "saved";
+  // When the user is filtering by country, flag postings whose country couldn't be parsed — they're
+  // kept in the results (we never silently drop unknowns) but the user should know why they appear.
+  const showUnknownCountry = countryFilterActive && posting.country === undefined;
 
   return (
     <Card className={expired ? "opacity-60" : ""}>
@@ -25,6 +34,19 @@ function MatchCard({ posting, result, action, expired }: ScoredPosting) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {posting.remote ? (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+              Remote
+            </span>
+          ) : null}
+          {showUnknownCountry ? (
+            <span
+              className="rounded-full bg-subtle px-2 py-0.5 text-xs text-muted"
+              title="The location couldn't be matched to a country, so this role is shown for every country filter."
+            >
+              Unknown location
+            </span>
+          ) : null}
           {expired ? (
             <span className="rounded-full bg-subtle px-2 py-0.5 text-xs text-muted">expired</span>
           ) : null}
@@ -78,7 +100,21 @@ export function Matches() {
   const [minScore, setMinScore] = useState(50);
   const [includeExpired, setIncludeExpired] = useState(false);
   const [includeDismissed, setIncludeDismissed] = useState(false);
-  const matches = useMatches(minScore, { includeExpired, includeDismissed });
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [country, setCountry] = useState<string | undefined>(undefined);
+  const matches = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly, country });
+
+  // Dropdown options come from the SAME query WITHOUT the country filter, so the full set of
+  // countries stays available even while a country is selected — otherwise selecting one country
+  // would collapse the list to just that country and the user couldn't switch directly to another.
+  const countrySource = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
+  const countryOptions: string[] = countrySource.data
+    ? [
+        ...new Set(
+          countrySource.data.flatMap((m) => (m.posting.country ? [m.posting.country] : [])),
+        ),
+      ].sort()
+    : [];
 
   return (
     <section className="space-y-4">
@@ -112,6 +148,31 @@ export function Matches() {
           />
           Show dismissed
         </label>
+        <label className="flex items-center gap-1 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={remoteOnly}
+            onChange={(e) => setRemoteOnly(e.target.checked)}
+          />
+          Remote only
+        </label>
+        {countryOptions.length > 0 && (
+          <label className="flex items-center gap-1 text-sm text-muted">
+            Country:{" "}
+            <select
+              value={country ?? ""}
+              onChange={(e) => setCountry(e.target.value || undefined)}
+              className="ml-1 rounded border border-border bg-surface px-1 py-0.5 text-sm"
+            >
+              <option value="">All countries</option>
+              {countryOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {matches.isPending ? (
@@ -129,6 +190,7 @@ export function Matches() {
               result={m.result}
               action={m.action}
               expired={m.expired}
+              countryFilterActive={country !== undefined}
             />
           ))}
         </div>

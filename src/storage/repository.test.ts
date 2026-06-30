@@ -1,4 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
+import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { Repository } from "./repository";
 
@@ -302,6 +306,207 @@ describe("scorer tagging + listPostingsForScoring", () => {
     repo.markPostingExpired(gone.id);
 
     expect(repo.countLivePostings()).toBe(1);
+    repo.close();
+  });
+});
+
+describe("remote and country persistence", () => {
+  it("round-trips remote=true and country through savePosting / listScoredPostings", () => {
+    const repo = newRepo();
+    const p: JobPosting = {
+      ...posting,
+      id: "remote-1",
+      remote: true,
+      country: "US",
+    };
+    repo.savePosting(p);
+    repo.saveMatchResult("remote-1", { score: 80, matchedSkills: [], missingSkills: [] });
+    const [hit] = repo.listScoredPostings();
+    expect(hit?.posting.remote).toBe(true);
+    expect(hit?.posting.country).toBe("US");
+    repo.close();
+  });
+
+  it("round-trips remote=false", () => {
+    const repo = newRepo();
+    const p: JobPosting = { ...posting, id: "remote-2", remote: false };
+    repo.savePosting(p);
+    repo.saveMatchResult("remote-2", { score: 70, matchedSkills: [], missingSkills: [] });
+    const [hit] = repo.listScoredPostings();
+    expect(hit?.posting.remote).toBe(false);
+    repo.close();
+  });
+
+  it("resolves remote to true for a posting with no remote flag and no location (blank = remote)", () => {
+    const repo = newRepo();
+    repo.savePosting({ ...posting, id: "remote-3" }); // no remote, no country
+    repo.saveMatchResult("remote-3", { score: 60, matchedSkills: [], missingSkills: [] });
+    const [hit] = repo.listScoredPostings();
+    // No stored remote flag + no location → resolvePostingRemote treats blank location as remote.
+    expect(hit?.posting.remote).toBe(true);
+    expect(hit?.posting.country).toBeUndefined();
+    repo.close();
+  });
+
+  it("migrate() adds remote and country columns to a pre-existing on-disk DB that lacks them", () => {
+    // Write a real DB file with the OLD postings schema (no remote/country), close it, then reopen
+    // through Repository — its constructor runs CREATE TABLE IF NOT EXISTS (a no-op on the existing
+    // table) followed by migrate(), which must ALTER in the new columns. This exercises the actual
+    // upgrade path an existing user hits, not just the fresh-schema path.
+    const dir = mkdtempSync(join(tmpdir(), "jobhunter-migrate-"));
+    const dbPath = join(dir, "old.db");
+    try {
+      const old = new Database(dbPath);
+      old.exec(`
+        CREATE TABLE postings (
+          id TEXT PRIMARY KEY,
+          company TEXT NOT NULL,
+          title TEXT NOT NULL,
+          url TEXT NOT NULL,
+          source TEXT NOT NULL,
+          description TEXT NOT NULL,
+          location TEXT,
+          posted_at TEXT,
+          fetched_at TEXT NOT NULL,
+          last_seen_scan INTEGER,
+          expired_at TEXT
+        );
+      `);
+      old
+        .prepare(
+          "INSERT INTO postings (id, company, title, url, source, description, fetched_at) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          "old-1",
+          "Old Co",
+          "Old Job",
+          "https://old.co/1",
+          "greenhouse",
+          "desc",
+          "2026-01-01T00:00:00.000Z",
+        );
+      old.close();
+
+      // Reopen through Repository — migrate() runs here and must not throw.
+      const repo = new Repository(dbPath);
+
+      // The pre-existing row has NULL remote and no location. resolvePostingRemote treats blank
+      // location as remote, so the resolved wire value is true (not undefined).
+      repo.saveMatchResult("old-1", { score: 80, matchedSkills: [], missingSkills: [] });
+      const afterMigrate = repo.listScoredPostings();
+      const old1 = afterMigrate.find((s) => s.posting.id === "old-1");
+      expect(old1?.posting.remote).toBe(true);
+      expect(old1?.posting.country).toBeUndefined();
+
+      // And a new write through the migrated DB persists both columns.
+      repo.savePosting({ ...posting, id: "migrated-1", remote: true, country: "Canada" });
+      repo.saveMatchResult("migrated-1", { score: 55, matchedSkills: [], missingSkills: [] });
+      const migrated = repo.listScoredPostings().find((s) => s.posting.id === "migrated-1");
+      expect(migrated?.posting.remote).toBe(true);
+      expect(migrated?.posting.country).toBe("Canada");
+      repo.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("listScoredPostings — remote filter and resolved remote on the wire", () => {
+  function seedWithRemote(
+    repo: Repository,
+    id: string,
+    score: number,
+    remote: boolean | undefined,
+    location?: string,
+  ): void {
+    repo.savePosting({
+      ...posting,
+      id,
+      ...(remote !== undefined ? { remote } : {}),
+      ...(location ? { location } : {}),
+    });
+    repo.saveMatchResult(id, { score, matchedSkills: [], missingSkills: [] });
+  }
+
+  it("remoteOnly=true returns only resolved-remote postings", () => {
+    const repo = newRepo();
+    seedWithRemote(repo, "r1", 90, true); // structured remote=true
+    seedWithRemote(repo, "o1", 80, false); // structured remote=false
+    seedWithRemote(repo, "r2", 70, undefined, "Remote - US"); // fallback regex resolves true
+    seedWithRemote(repo, "o2", 60, undefined, "London, UK"); // fallback regex resolves false
+
+    const all = repo.listScoredPostings(0, { remoteOnly: true });
+    const ids = all.map((s) => s.posting.id).sort();
+    expect(ids).toEqual(["r1", "r2"]);
+    repo.close();
+  });
+
+  it("resolved remote on the wire is a definitive boolean, not the raw stored value", () => {
+    const repo = newRepo();
+    // Stored with no remote flag; location regex makes it remote.
+    seedWithRemote(repo, "reg1", 75, undefined, "Remote - US");
+    const [hit] = repo.listScoredPostings();
+    // The raw stored value is undefined (NULL in SQLite), but the wire value is resolved true.
+    expect(hit?.posting.remote).toBe(true);
+    repo.close();
+  });
+
+  it("remoteOnly=false (default) returns all postings regardless of remote", () => {
+    const repo = newRepo();
+    seedWithRemote(repo, "a1", 90, true);
+    seedWithRemote(repo, "b1", 80, false);
+    const all = repo.listScoredPostings();
+    expect(all).toHaveLength(2);
+    repo.close();
+  });
+});
+
+describe("listScoredPostings — country filter", () => {
+  function seedWithCountry(repo: Repository, id: string, score: number, country?: string): void {
+    repo.savePosting({
+      ...posting,
+      id,
+      ...(country ? { country } : {}),
+    });
+    repo.saveMatchResult(id, { score, matchedSkills: [], missingSkills: [] });
+  }
+
+  it("filters by stored country (case-insensitive) and keeps unknown-country postings", () => {
+    const repo = newRepo();
+    seedWithCountry(repo, "us1", 90, "US");
+    seedWithCountry(repo, "de1", 80, "Germany");
+    seedWithCountry(repo, "nx1", 70); // no country (unknown)
+
+    // A specific country keeps that country AND unknowns (never silently drops an unparseable
+    // location), but excludes other known countries. Ordered by score DESC.
+    const us = repo.listScoredPostings(0, { country: "US" });
+    expect(us.map((s) => s.posting.id)).toEqual(["us1", "nx1"]);
+    expect(us.map((s) => s.posting.id)).not.toContain("de1");
+
+    // Case-insensitive on the known-country match.
+    const usLower = repo.listScoredPostings(0, { country: "us" });
+    expect(usLower.map((s) => s.posting.id)).toEqual(["us1", "nx1"]);
+
+    repo.close();
+  });
+
+  it("returns all postings when country is absent", () => {
+    const repo = newRepo();
+    seedWithCountry(repo, "c1", 90, "US");
+    seedWithCountry(repo, "c2", 80);
+    const all = repo.listScoredPostings(0, {});
+    expect(all).toHaveLength(2);
+    repo.close();
+  });
+
+  it("returns only unknown-country postings when no known country matches", () => {
+    const repo = newRepo();
+    seedWithCountry(repo, "d1", 90, "US"); // a known non-matching country
+    seedWithCountry(repo, "dx", 70); // unknown country
+    // Filtering for CA matches no known country, but unknown-country postings still come through.
+    const result = repo.listScoredPostings(0, { country: "CA" });
+    expect(result.map((s) => s.posting.id)).toEqual(["dx"]);
     repo.close();
   });
 });

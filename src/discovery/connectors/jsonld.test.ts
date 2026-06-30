@@ -62,6 +62,47 @@ describe("extractJsonLdPostings", () => {
   });
 });
 
+describe("extractJsonLdPostings — remote field", () => {
+  it('sets remote=true when jobLocationType is "TELECOMMUTE"', () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Remote Engineer",
+      jobLocationType: "TELECOMMUTE",
+    })}</script>`;
+    const [posting] = extractJsonLdPostings(html, PAGE_URL, "Acme");
+    expect(posting?.remote).toBe(true);
+  });
+
+  it("matches jobLocationType case- and whitespace-insensitively", () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Remote Engineer",
+      jobLocationType: " Telecommute ",
+    })}</script>`;
+    const [posting] = extractJsonLdPostings(html, PAGE_URL, "Acme");
+    expect(posting?.remote).toBe(true);
+  });
+
+  it("sets remote=false when jobLocationType is present but not TELECOMMUTE", () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Office Engineer",
+      jobLocationType: "TELECOMMUTE_HYBRID",
+    })}</script>`;
+    const [posting] = extractJsonLdPostings(html, PAGE_URL, "Acme");
+    expect(posting?.remote).toBe(false);
+  });
+
+  it("leaves remote undefined when jobLocationType is absent", () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Unknown Location",
+    })}</script>`;
+    const [posting] = extractJsonLdPostings(html, PAGE_URL, "Acme");
+    expect(posting?.remote).toBeUndefined();
+  });
+});
+
 describe("extractJsonLdDescription", () => {
   it("returns the description of the first JobPosting on the page", () => {
     const html = `<script type="application/ld+json">${JSON.stringify({

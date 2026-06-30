@@ -11,12 +11,32 @@ const PAGE_SIZE = 50;
 const MAX_PAGES = 10; // bound a single company to ~500 roles
 const DETAIL_CONCURRENCY = 6; // per-company cap on the follow-up description fetches
 
-type RipplingJobRef = { id: string; title: string; url: string; location?: string };
+type RipplingJobRef = {
+  id: string;
+  title: string;
+  url: string;
+  location?: string;
+  remote?: boolean;
+};
 
 /** Join one job's location names (Rippling lists one or more) into a single display string. */
 function joinLocations(locations: { name: string }[] | undefined): string | undefined {
   const names = (locations ?? []).map((l) => l.name).filter(Boolean);
   return names.length > 0 ? names.join("; ") : undefined;
+}
+
+/**
+ * Derive the remote flag from Rippling's per-location workplaceType array.
+ * Any REMOTE location → true; locations present but all non-remote → false; absent → undefined.
+ */
+function resolveRipplingRemote(
+  locations: { workplaceType?: string }[] | undefined,
+): boolean | undefined {
+  if (locations === undefined || locations.length === 0) return undefined;
+  if (locations.some((l) => l.workplaceType === "REMOTE")) return true;
+  // All locations have a workplaceType present → determinably on-site/hybrid.
+  if (locations.every((l) => l.workplaceType !== undefined)) return false;
+  return undefined;
 }
 
 /**
@@ -49,7 +69,8 @@ export class RipplingConnector implements AtsConnector {
             url: job.url,
             source: this.source,
             description,
-            location: job.location,
+            ...(job.location !== undefined ? { location: job.location } : {}),
+            ...(job.remote !== undefined ? { remote: job.remote } : {}),
             fetchedAt,
           } satisfies JobPosting;
         }),
@@ -80,6 +101,7 @@ export class RipplingConnector implements AtsConnector {
           title: job.name,
           url: job.url,
           location: joinLocations(job.locations),
+          remote: resolveRipplingRemote(job.locations),
         });
       }
 

@@ -1,6 +1,7 @@
 import type { JobPosting, MatchResult, SkillProfile, Warning } from "@app/domain/types";
-import type { ScoringCandidate } from "@app/storage/repository";
+import type { ScorerTag, ScoringCandidate } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
+import { REMOTE_PENALTY_FACTOR } from "./heuristic-scorer";
 import { LlmTriager } from "./llm-triager";
 import { runScoreRun, type ScoreOptions, type ScoreRepo } from "./score-run";
 import { FakeTriageClient } from "./triage-client";
@@ -24,21 +25,38 @@ function candidate(
   id: string,
   title: string,
   heuristicScore: number,
-  opts: { location?: string; alreadyLlmScored?: boolean } = {},
+  opts: {
+    location?: string;
+    remote?: boolean;
+    alreadyLlmScored?: boolean;
+    scorer?: ScorerTag;
+    matchedSkills?: string[];
+    missingSkills?: string[];
+  } = {},
 ): ScoringCandidate {
+  const scorer = opts.scorer ?? (opts.alreadyLlmScored ? "llm" : "heuristic");
   return {
-    posting: posting(id, title, opts.location),
+    posting: {
+      ...posting(id, title, opts.location),
+      ...(opts.remote !== undefined ? { remote: opts.remote } : {}),
+    },
+    current: {
+      score: heuristicScore,
+      matchedSkills: opts.matchedSkills ?? [],
+      missingSkills: opts.missingSkills ?? [],
+    },
     heuristicScore,
-    alreadyLlmScored: opts.alreadyLlmScored ?? false,
+    scorer,
+    alreadyLlmScored: opts.alreadyLlmScored ?? scorer === "llm",
   };
 }
 
 /** In-memory ScoreRepo capturing saved results. */
 function fakeRepo(candidates: ScoringCandidate[]): {
   repo: ScoreRepo;
-  saved: { id: string; result: MatchResult; scorer: "heuristic" | "llm" }[];
+  saved: { id: string; result: MatchResult; scorer: ScorerTag }[];
 } {
-  const saved: { id: string; result: MatchResult; scorer: "heuristic" | "llm" }[] = [];
+  const saved: { id: string; result: MatchResult; scorer: ScorerTag }[] = [];
   const repo: ScoreRepo = {
     countLivePostings: () => candidates.length,
     listPostingsForScoring: ({ minHeuristic }) =>
@@ -140,7 +158,7 @@ describe("runScoreRun", () => {
     expect(forced.saved.length).toBe(1);
   });
 
-  it("drops non-remote postings when remoteOnly is on (unknown location kept)", async () => {
+  it("partitions remote vs non-remote when remoteOnly is on (unknown location treated as remote)", async () => {
     const candidates = [
       candidate("remote", "Engineer A", 70, { location: "Remote - US" }),
       candidate("onsite", "Engineer B", 70, { location: "London, UK" }),
@@ -156,8 +174,20 @@ describe("runScoreRun", () => {
       options: { ...baseOptions, remoteOnly: true },
     });
 
+    // afterRemote counts only the remote candidates proceeding to the LLM (remote + unknown).
     expect(outcome.counts.afterRemote).toBe(2);
-    expect(saved.map((s) => s.id).sort()).toEqual(["remote", "unknown"]);
+
+    // Remote and unknown go through LLM (deep-scored).
+    const llmSaves = saved
+      .filter((s) => s.scorer === "llm")
+      .map((s) => s.id)
+      .sort();
+    expect(llmSaves).toEqual(["remote", "unknown"]);
+
+    // Non-remote (onsite) is saved with a penalized score — not absent — and tagged as penalized.
+    const heuristicSave = saved.find((s) => s.id === "onsite");
+    expect(heuristicSave?.scorer).toBe("heuristic-remote-penalized");
+    expect(saved).toHaveLength(3);
   });
 
   it("dry-run spends nothing: no triage calls, no saves, estimate populated", async () => {
@@ -263,5 +293,178 @@ describe("runScoreRun", () => {
     expect(saved.length).toBe(candidates.length);
     // The serial implementation would peak at 1; the bounded-concurrent one overlaps work.
     expect(maxInFlight).toBeGreaterThan(1);
+  });
+});
+
+describe("runScoreRun — remote partition (remoteOnly=true)", () => {
+  it("remote candidates reach the LLM deep-score; non-remote are saved with penalized heuristic", async () => {
+    const remotePosting = candidate("rem", "Remote Job", 70, { location: "Remote - US" });
+    const officePosting = candidate("off", "Office Job", 60, { location: "New York, NY" });
+    const { repo, saved } = fakeRepo([remotePosting, officePosting]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true },
+    });
+
+    // Remote posting was deep-scored by the LLM scorer.
+    const remoteSave = saved.find((s) => s.id === "rem");
+    expect(remoteSave?.scorer).toBe("llm");
+
+    // Non-remote posting was saved with the penalty applied, tagged as penalized.
+    const officeSave = saved.find((s) => s.id === "off");
+    expect(officeSave?.scorer).toBe("heuristic-remote-penalized");
+
+    // The office posting's heuristic score is the base score * REMOTE_PENALTY_FACTOR.
+    // (The fake scorer returns title.length; HeuristicScorer is injected via the repo's
+    // listPostingsForScoring which supplies heuristicScore — see the candidate helper.)
+    const expectedPenalizedScore = Math.max(
+      0,
+      Math.round(officePosting.heuristicScore * REMOTE_PENALTY_FACTOR),
+    );
+    expect(officeSave?.result.score).toBe(expectedPenalizedScore);
+  });
+
+  it("penalized score is clamped to 0 for a zero heuristic score", async () => {
+    const officePosting = candidate("off0", "Office Zero", 0, { location: "London, UK" });
+    const { repo, saved } = fakeRepo([officePosting]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true, minHeuristic: 0 },
+    });
+
+    const officeSave = saved.find((s) => s.id === "off0");
+    expect(officeSave?.result.score).toBe(0);
+  });
+
+  it("remoteOnly=false leaves all candidates going through the LLM pipeline (no penalty)", async () => {
+    const remotePosting = candidate("r2", "Remote Job 2", 70, { location: "Remote - US" });
+    const officePosting = candidate("o2", "Office Job 2", 60, { location: "Austin, TX" });
+    const { repo, saved } = fakeRepo([remotePosting, officePosting]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: false },
+    });
+
+    // Both go through LLM when remoteOnly is off.
+    const scorers = saved.map((s) => s.scorer);
+    expect(scorers.every((sc) => sc === "llm")).toBe(true);
+    expect(saved).toHaveLength(2);
+  });
+
+  it("dry-run with remoteOnly on does NOT save the non-remote penalty", async () => {
+    const officePosting = candidate("dry-off", "Dry Office Job", 60, { location: "Chicago, IL" });
+    const { repo, saved } = fakeRepo([officePosting]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true, dryRun: true },
+    });
+
+    expect(saved).toHaveLength(0);
+  });
+
+  it("does not clobber an already-LLM-scored non-remote posting unless rescore is set", async () => {
+    const officePosting = candidate("off-llm", "Office Job", 60, {
+      location: "New York, NY",
+      alreadyLlmScored: true,
+    });
+    const { repo, saved } = fakeRepo([officePosting]);
+
+    // Without rescore: the prior LLM score is preserved (no penalized heuristic save).
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true },
+    });
+    expect(saved).toHaveLength(0);
+
+    // With rescore: the penalty IS applied (the user opted into overwriting).
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true, rescore: true },
+    });
+    const penalized = saved.find((s) => s.id === "off-llm");
+    expect(penalized?.scorer).toBe("heuristic-remote-penalized");
+    expect(penalized?.result.score).toBe(
+      Math.max(0, Math.round(officePosting.heuristicScore * REMOTE_PENALTY_FACTOR)),
+    );
+  });
+
+  it("applies the remote penalty exactly once across repeated runs (no compounding)", async () => {
+    // An already-penalized row (tagged heuristic-remote-penalized) must be skipped, so its score
+    // doesn't get multiplied by the factor again on the next remote-only run.
+    const already = candidate("off-pen", "Office Job", 48, {
+      location: "Austin, TX",
+      scorer: "heuristic-remote-penalized",
+    });
+    const { repo, saved } = fakeRepo([already]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true },
+    });
+
+    expect(saved).toHaveLength(0); // already penalized → not re-penalized
+  });
+
+  it("preserves matched/missing skills when penalizing a non-remote posting", async () => {
+    const office = candidate("off-skills", "Office Job", 70, {
+      location: "Boston, MA",
+      matchedSkills: ["react", "typescript"],
+      missingSkills: ["go"],
+    });
+    const { repo, saved } = fakeRepo([office]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true },
+    });
+
+    const penalized = saved.find((s) => s.id === "off-skills");
+    expect(penalized?.result.matchedSkills).toEqual(["react", "typescript"]);
+    expect(penalized?.result.missingSkills).toEqual(["go"]);
+  });
+
+  it("respects the limit cap on the non-remote penalty saves", async () => {
+    const offices = Array.from({ length: 5 }, (_, i) =>
+      candidate(`off${i}`, `Office Job ${i}`, 60, { location: "Denver, CO" }),
+    );
+    const { repo, saved } = fakeRepo(offices);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true, limit: 2 },
+    });
+
+    expect(saved).toHaveLength(2); // capped, not all 5
   });
 });

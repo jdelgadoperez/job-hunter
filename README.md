@@ -64,12 +64,14 @@ npm run cli -- scan                       # discover + free heuristic score, sto
 npm run cli -- score --dry-run            # preview the LLM deep-score plan + estimated cost (no spend)
 npm run cli -- score --limit 50           # LLM triage + deep-score the best postings from the last scan
 npm run cli -- list --min-score 70        # show matches scoring 70+
+npm run cli -- list --remote-only         # only remote matches
+npm run cli -- list --country US          # only matches in a country (parsed from the posting location)
 npm run cli -- serve                       # start the web dashboard (--port N, --no-open, --refresh-hours N)
 npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
 npm run cli -- track list
 npm run cli -- track remove https://boards.greenhouse.io/acme
-npm run cli -- config remote on           # only LLM-score remote roles (persisted; --remote/--no-remote overrides per run)
+npm run cli -- config remote on           # prefer remote: rank non-remote roles lower (persisted; --remote/--no-remote overrides per run)
 npm run cli -- --help                      # full command reference (also `<command> --help`)
 npm run cli -- --version
 ```
@@ -80,6 +82,13 @@ batch-triages titles, deep-scores the survivors (bounded by `--min-heuristic` an
 postings already LLM-scored (unless `--rescore`), and aborts cleanly if it hits your provider usage
 limit. `score --dry-run` prints the plan and estimated cost without calling the LLM. LLM scoring is
 **CLI-only** today — the dashboard shows heuristic scores until you run `score`.
+
+**Remote preference (changed behavior).** With `config remote on`, non-remote postings are no longer
+dropped from scoring — they're kept but **ranked lower** (a penalized heuristic score) and skip the
+paid LLM deep-score, so they still appear at the bottom of your matches at no cost. To fully *hide*
+non-remote roles, use the **Remote only** toggle in the dashboard Matches view (or `list --remote-only`
+on the CLI). "Remote" is read from the ATS feed's structured flag when available and falls back to the
+posting's location text otherwise; an unknown location counts as remote so nothing is silently hidden.
 
 ### Web dashboard
 
@@ -92,7 +101,9 @@ and opens a React dashboard in your browser:
   per-company → heuristic scoring) — so you can switch tabs or close the page and it keeps going. The
   server also **auto-refreshes** on a schedule (default every 6h; tune with `--refresh-hours N`, or
   `--refresh-hours 0` to disable).
-- **Matches** — ranked postings filtered by a minimum-score slider (default **50**), with matched/
+- **Matches** — ranked postings filtered by a minimum-score slider (default **50**), a **Remote only**
+  toggle, and a **Country** dropdown (its options are the countries actually present in your results).
+  Remote roles show a **Remote** badge. Cards list matched/
   missing skills and (once you've run the CLI `score`) the LLM rationale. **Save** or **dismiss** any
   match (dismissed ones hide by default; toggles reveal expired/dismissed). Scans are **incremental**:
   postings that vanish from their board across consecutive scans are auto-expired and drop off the
