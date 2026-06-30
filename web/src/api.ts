@@ -22,7 +22,7 @@ export type MatchResult = {
   rationale?: string;
 };
 
-export type UserAction = "saved" | "dismissed";
+export type UserAction = "saved" | "dismissed" | "applied";
 
 export type ScoredPosting = {
   posting: JobPosting;
@@ -36,6 +36,8 @@ export type MatchFilters = {
   includeDismissed?: boolean;
   remoteOnly?: boolean;
   country?: string;
+  includeApplied?: boolean;
+  onlyApplied?: boolean;
 };
 
 export type TrackedCompany = { careersUrl: string; name?: string };
@@ -110,6 +112,8 @@ export const api = {
     if (filters.includeDismissed) params.set("includeDismissed", "true");
     if (filters.remoteOnly) params.set("remoteOnly", "true");
     if (filters.country) params.set("country", filters.country);
+    if (filters.includeApplied) params.set("includeApplied", "true");
+    if (filters.onlyApplied) params.set("onlyApplied", "true");
     return request<ScoredPosting[]>(`/api/matches?${params}`);
   },
   setMatchAction: (id: string, action: UserAction) =>

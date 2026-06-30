@@ -586,6 +586,59 @@ describe("scan jobs", () => {
   });
 });
 
+describe("applied action API", () => {
+  const samplePosting = {
+    company: "Acme",
+    title: "Engineer",
+    url: "https://acme.com/jobs/1",
+    source: "greenhouse" as const,
+    description: "TypeScript",
+    fetchedAt: new Date("2026-01-01T00:00:00Z"),
+  };
+
+  it("accepts applied on the action endpoint", async () => {
+    const app = makeApp();
+    repo.savePosting({ ...samplePosting, id: "a1" });
+    repo.saveMatchResult("a1", { score: 90, matchedSkills: [], missingSkills: [] });
+    const res = await app.request("/api/matches/a1/action", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "applied" }),
+    });
+    expect(res.status).toBe(200);
+    // Hidden by default, visible with includeApplied.
+    const def = await json<unknown[]>(await app.request("/api/matches?minScore=0"));
+    expect(def).toHaveLength(0);
+    const shown = await json<unknown[]>(
+      await app.request("/api/matches?minScore=0&includeApplied=true"),
+    );
+    expect(shown).toHaveLength(1);
+  });
+
+  it("rejects an unknown action", async () => {
+    const app = makeApp();
+    const res = await app.request("/api/matches/x/action", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "bogus" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("onlyApplied returns just applied postings", async () => {
+    const app = makeApp();
+    repo.savePosting({ ...samplePosting, id: "ap" });
+    repo.saveMatchResult("ap", { score: 90, matchedSkills: [], missingSkills: [] });
+    repo.setUserAction("ap", "applied");
+    repo.savePosting({ ...samplePosting, id: "no" });
+    repo.saveMatchResult("no", { score: 80, matchedSkills: [], missingSkills: [] });
+    const only = await json<{ posting: { id: string } }[]>(
+      await app.request("/api/matches?minScore=0&onlyApplied=true"),
+    );
+    expect(only.map((s) => s.posting.id)).toEqual(["ap"]);
+  });
+});
+
 describe("GET /api/scans/latest", () => {
   it("returns null before any scan, then the latest finished scan's diff", async () => {
     const app = makeApp();

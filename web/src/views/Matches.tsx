@@ -75,6 +75,15 @@ function MatchCard({
         >
           {saved ? "★ Saved" : "☆ Save"}
         </Button>
+        <Button
+          variant="ghost"
+          onClick={() =>
+            setAction.mutate({ id: posting.id, action: action === "applied" ? null : "applied" })
+          }
+          className={action === "applied" ? "text-success" : ""}
+        >
+          {action === "applied" ? "✓ Applied" : "Mark applied"}
+        </Button>
         {action === "dismissed" ? (
           <Button
             variant="ghost"
@@ -102,12 +111,30 @@ export function Matches() {
   const [includeDismissed, setIncludeDismissed] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [country, setCountry] = useState<string | undefined>(undefined);
-  const matches = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly, country });
+  const [includeApplied, setIncludeApplied] = useState(false);
+  const [onlyApplied, setOnlyApplied] = useState(false);
+  // In the Applied view (onlyApplied) the include*/expired flags are meaningless — the server shows
+  // exactly the applied set (expired included) — so we send only the filters that still apply. This
+  // keeps the key identical to the Applied-count query (real dedup) and avoids leaking a stale
+  // includeApplied into a later normal query.
+  const matches = useMatches(
+    minScore,
+    onlyApplied
+      ? { remoteOnly, country, onlyApplied: true }
+      : { includeExpired, includeDismissed, remoteOnly, country, includeApplied },
+  );
 
   // Dropdown options come from the SAME query WITHOUT the country filter, so the full set of
   // countries stays available even while a country is selected — otherwise selecting one country
   // would collapse the list to just that country and the user couldn't switch directly to another.
   const countrySource = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
+
+  // Applied count for the badge. It must agree with what the Applied view actually shows, so it
+  // carries the SAME non-action filters as the main query (minScore, remoteOnly, country) plus
+  // onlyApplied. When the Applied view is already active the main query IS that result (identical
+  // key ⇒ TanStack serves it from cache, no extra fetch).
+  const appliedCountSource = useMatches(minScore, { remoteOnly, country, onlyApplied: true });
+  const appliedCount = appliedCountSource.data?.length ?? 0;
   const countryOptions: string[] = countrySource.data
     ? [
         ...new Set(
@@ -132,22 +159,28 @@ export function Matches() {
           onChange={(e) => setMinScore(Number(e.target.value))}
           className="w-48"
         />
-        <label className="flex items-center gap-1 text-sm text-muted">
-          <input
-            type="checkbox"
-            checked={includeExpired}
-            onChange={(e) => setIncludeExpired(e.target.checked)}
-          />
-          Show expired
-        </label>
-        <label className="flex items-center gap-1 text-sm text-muted">
-          <input
-            type="checkbox"
-            checked={includeDismissed}
-            onChange={(e) => setIncludeDismissed(e.target.checked)}
-          />
-          Show dismissed
-        </label>
+        {/* Show expired / Show dismissed are no-ops in the Applied view (it shows exactly the applied
+            set, expired included), so hide them there. Remote/Country still narrow the applied set. */}
+        {!onlyApplied ? (
+          <>
+            <label className="flex items-center gap-1 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={includeExpired}
+                onChange={(e) => setIncludeExpired(e.target.checked)}
+              />
+              Show expired
+            </label>
+            <label className="flex items-center gap-1 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={includeDismissed}
+                onChange={(e) => setIncludeDismissed(e.target.checked)}
+              />
+              Show dismissed
+            </label>
+          </>
+        ) : null}
         <label className="flex items-center gap-1 text-sm text-muted">
           <input
             type="checkbox"
@@ -173,6 +206,25 @@ export function Matches() {
             </select>
           </label>
         )}
+        <button
+          type="button"
+          onClick={() => setOnlyApplied((v) => !v)}
+          className={`rounded border px-2 py-0.5 text-sm ${
+            onlyApplied ? "border-link bg-subtle text-fg" : "border-border text-muted"
+          }`}
+        >
+          Applied ({appliedCount})
+        </button>
+        {!onlyApplied ? (
+          <label className="flex items-center gap-1 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={includeApplied}
+              onChange={(e) => setIncludeApplied(e.target.checked)}
+            />
+            Show applied
+          </label>
+        ) : null}
       </div>
 
       {matches.isPending ? (

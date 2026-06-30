@@ -15,7 +15,14 @@ export type Command =
   | { kind: "track-list" }
   | { kind: "track-remove"; url: string }
   | { kind: "profile"; resumePath: string }
-  | { kind: "list"; minScore: number; remoteOnly: boolean; country?: string }
+  | {
+      kind: "list";
+      minScore: number;
+      remoteOnly: boolean;
+      country?: string;
+      includeApplied: boolean;
+      onlyApplied: boolean;
+    }
   | {
       kind: "score";
       minHeuristic: number;
@@ -85,6 +92,8 @@ export function parseCli(argv: string[]): Command {
           "min-score": { type: "string" },
           "remote-only": { type: "boolean" },
           country: { type: "string" },
+          "include-applied": { type: "boolean" },
+          "only-applied": { type: "boolean" },
         },
         allowPositionals: true,
       });
@@ -95,6 +104,8 @@ export function parseCli(argv: string[]): Command {
         minScore: Number.isFinite(minScore) ? minScore : DEFAULT_MIN_SCORE,
         remoteOnly: Boolean(values["remote-only"]),
         ...(values.country ? { country: values.country } : {}),
+        includeApplied: Boolean(values["include-applied"]),
+        onlyApplied: Boolean(values["only-applied"]),
       };
     }
 

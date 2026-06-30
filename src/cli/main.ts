@@ -236,6 +236,8 @@ export async function main(): Promise<void> {
         listMatches(repo, command.minScore, log, {
           remoteOnly: command.remoteOnly,
           country: command.country,
+          includeApplied: command.includeApplied,
+          onlyApplied: command.onlyApplied,
         });
         break;
       case "scan":

@@ -7,7 +7,7 @@ import { SCHEMA } from "./schema";
 export type CompanyRef = { careersUrl: string; name?: string };
 
 /** A user's disposition toward a match. */
-export type UserAction = "saved" | "dismissed";
+export type UserAction = "saved" | "dismissed" | "applied";
 
 /** A scored posting plus the user's action and whether it's expired (gone from its board). */
 export type ScoredPosting = {
@@ -17,12 +17,14 @@ export type ScoredPosting = {
   expired: boolean;
 };
 
-/** Filters for `listScoredPostings`. By default expired and dismissed postings are hidden. */
+/** Filters for `listScoredPostings`. By default expired, dismissed, and applied postings are hidden. */
 export type ListMatchesOptions = {
   includeExpired?: boolean;
   includeDismissed?: boolean;
   remoteOnly?: boolean;
   country?: string;
+  includeApplied?: boolean;
+  onlyApplied?: boolean;
 };
 
 /**
@@ -200,6 +202,27 @@ export class Repository {
     const params: (string | number)[] = [minScore];
     if (opts.country !== undefined) params.push(opts.country);
 
+    // Action visibility. onlyApplied is an explicit "show me what I applied to" view and overrides
+    // the default hides. Otherwise dismissed and applied are each hidden unless their include flag is
+    // set. Every clause keeps the `ua.action IS NULL` guard so a no-action posting always shows.
+    let actionSql: string;
+    if (opts.onlyApplied) {
+      actionSql = " AND ua.action = 'applied'";
+    } else {
+      const hideDismissed = opts.includeDismissed
+        ? ""
+        : " AND (ua.action IS NULL OR ua.action != 'dismissed')";
+      const hideApplied = opts.includeApplied
+        ? ""
+        : " AND (ua.action IS NULL OR ua.action != 'applied')";
+      actionSql = `${hideDismissed}${hideApplied}`;
+    }
+
+    // The "Applied" view answers "what did I apply to?" — that intent spans postings that have since
+    // expired (the board closed, but your application stands), so onlyApplied shows expired roles too
+    // (MatchCard already marks them with the expired badge). Otherwise expired hides unless asked for.
+    const hideExpired = opts.includeExpired || opts.onlyApplied ? "" : " AND p.expired_at IS NULL";
+
     const rows = this.db
       .prepare(
         `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
@@ -210,9 +233,7 @@ export class Repository {
          FROM match_results m
          JOIN postings p ON p.id = m.posting_id
          LEFT JOIN user_actions ua ON ua.posting_id = p.id
-         WHERE m.score >= ?${opts.includeExpired ? "" : " AND p.expired_at IS NULL"}${
-           opts.includeDismissed ? "" : " AND (ua.action IS NULL OR ua.action != 'dismissed')"
-}${countrySql}
+         WHERE m.score >= ?${hideExpired}${actionSql}${countrySql}
          ORDER BY m.score DESC, p.title`,
       )
       .all(...params) as {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { Repository } from "./repository";
+import { Repository, type UserAction } from "./repository";
 
 function newRepo(): Repository {
   return new Repository(":memory:");
@@ -507,6 +507,80 @@ describe("listScoredPostings — country filter", () => {
     // Filtering for CA matches no known country, but unknown-country postings still come through.
     const result = repo.listScoredPostings(0, { country: "CA" });
     expect(result.map((s) => s.posting.id)).toEqual(["dx"]);
+    repo.close();
+  });
+});
+
+describe("listScoredPostings — applied action", () => {
+  function seedWithAction(repo: Repository, id: string, score: number, action?: UserAction): void {
+    repo.savePosting({ ...posting, id });
+    repo.saveMatchResult(id, { score, matchedSkills: [], missingSkills: [] });
+    if (action) repo.setUserAction(id, action);
+  }
+
+  it("hides applied postings by default", () => {
+    const repo = newRepo();
+    seedWithAction(repo, "p-applied", 90, "applied");
+    seedWithAction(repo, "p-none", 80);
+    const ids = repo.listScoredPostings(0).map((s) => s.posting.id);
+    expect(ids).toEqual(["p-none"]);
+    repo.close();
+  });
+
+  it("reveals applied postings with includeApplied", () => {
+    const repo = newRepo();
+    seedWithAction(repo, "p-applied", 90, "applied");
+    seedWithAction(repo, "p-none", 80);
+    const ids = repo.listScoredPostings(0, { includeApplied: true }).map((s) => s.posting.id);
+    expect(ids).toEqual(["p-applied", "p-none"]);
+    repo.close();
+  });
+
+  it("onlyApplied returns just applied postings", () => {
+    const repo = newRepo();
+    seedWithAction(repo, "p-applied", 90, "applied");
+    seedWithAction(repo, "p-saved", 80, "saved");
+    seedWithAction(repo, "p-none", 70);
+    const ids = repo.listScoredPostings(0, { onlyApplied: true }).map((s) => s.posting.id);
+    expect(ids).toEqual(["p-applied"]);
+    repo.close();
+  });
+
+  it("a no-action posting always shows (never dropped by the applied clause)", () => {
+    const repo = newRepo();
+    seedWithAction(repo, "p-none", 80);
+    expect(repo.listScoredPostings(0).map((s) => s.posting.id)).toEqual(["p-none"]);
+    repo.close();
+  });
+
+  it("setting applied replaces a prior saved (single-action model)", () => {
+    const repo = newRepo();
+    seedWithAction(repo, "p", 90, "saved");
+    repo.setUserAction("p", "applied");
+    // Default list hides it now (applied), and includeApplied shows action=applied.
+    expect(repo.listScoredPostings(0).map((s) => s.posting.id)).toEqual([]);
+    const [row] = repo.listScoredPostings(0, { includeApplied: true });
+    expect(row?.action).toBe("applied");
+    repo.close();
+  });
+
+  it("onlyApplied still shows an applied posting after it expires (you applied to it)", () => {
+    const repo = newRepo();
+    // Save under a scan, mark applied, then let it miss two consecutive scans so it expires.
+    repo.savePosting(postingWith("p-exp"), repo.startScan());
+    repo.saveMatchResult("p-exp", { score: 90, matchedSkills: [], missingSkills: [] });
+    repo.setUserAction("p-exp", "applied");
+    repo.expireStalePostings(repo.startScan());
+    repo.expireStalePostings(repo.startScan());
+
+    // It's expired, so the default list (and a normal includeApplied reveal) hides it...
+    expect(repo.listScoredPostings(0, { includeApplied: true }).map((s) => s.posting.id)).toEqual(
+      [],
+    );
+    // ...but the Applied view keeps it — the point of "Applied" spans closed postings.
+    const applied = repo.listScoredPostings(0, { onlyApplied: true });
+    expect(applied.map((s) => s.posting.id)).toEqual(["p-exp"]);
+    expect(applied[0]?.expired).toBe(true);
     repo.close();
   });
 });
