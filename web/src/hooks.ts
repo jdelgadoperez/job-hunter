@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type MatchFilters, type SettingsUpdate, type UserAction } from "./api";
+import {
+  api,
+  type MatchFilters,
+  type ScoredPosting,
+  type SettingsUpdate,
+  type UserAction,
+} from "./api";
 
 export function useMatches(minScore: number, filters: MatchFilters = {}) {
   return useQuery({
@@ -17,14 +23,35 @@ export function useMatches(minScore: number, filters: MatchFilters = {}) {
   });
 }
 
+type MatchActionVars = { id: string; action: UserAction | null };
+
 export function useMatchAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { id: string; action: UserAction | null }) => {
+    mutationFn: async (vars: MatchActionVars) => {
       if (vars.action) await api.setMatchAction(vars.id, vars.action);
       else await api.clearMatchAction(vars.id);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["matches"] }),
+    // Optimistically patch the posting's action across every cached matches query so the button
+    // state flips instantly. Snapshot the prior cache for rollback on error.
+    onMutate: async (vars: MatchActionVars) => {
+      await qc.cancelQueries({ queryKey: ["matches"] });
+      const snapshot = qc.getQueriesData<ScoredPosting[]>({ queryKey: ["matches"] });
+      for (const [key, data] of snapshot) {
+        if (!data) continue;
+        qc.setQueryData(
+          key,
+          data.map((m) => (m.posting.id === vars.id ? { ...m, action: vars.action } : m)),
+        );
+      }
+      return { snapshot };
+    },
+    onError: (_error, _vars, context) => {
+      for (const [key, data] of context?.snapshot ?? []) qc.setQueryData(key, data);
+    },
+    // Re-sync with the server regardless of outcome (a successful write can change expiry/ordering
+    // that the optimistic patch doesn't model).
+    onSettled: () => qc.invalidateQueries({ queryKey: ["matches"] }),
   });
 }
 

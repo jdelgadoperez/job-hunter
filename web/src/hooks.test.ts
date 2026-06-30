@@ -61,4 +61,53 @@ describe("useMatchAction", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("optimistically patches the cached posting's action across matches queries", async () => {
+    mockFetch({ ok: true });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = ["matches", 50, false, false, false, "", false, false];
+    client.setQueryData(key, [scoredPosting("p1", null)]);
+
+    const { result } = renderHook(() => useMatchAction(), { wrapper: withClient(client) });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "p1", action: "saved" });
+    });
+
+    const patched = client.getQueryData<ReturnType<typeof scoredPosting>[]>(key);
+    expect(patched?.[0]?.action).toBe("saved");
+  });
+
+  it("rolls the cache back to its prior value when the action request fails", async () => {
+    mockFetch({ error: "boom" }, 500);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = ["matches", 50, false, false, false, "", false, false];
+    client.setQueryData(key, [scoredPosting("p1", null)]);
+
+    const { result } = renderHook(() => useMatchAction(), { wrapper: withClient(client) });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: "p1", action: "saved" }).catch(() => {});
+    });
+
+    const rolledBack = client.getQueryData<ReturnType<typeof scoredPosting>[]>(key);
+    expect(rolledBack?.[0]?.action).toBeNull();
+  });
 });
+
+function scoredPosting(id: string, action: "saved" | "dismissed" | "applied" | null) {
+  return {
+    posting: {
+      id,
+      company: "Acme",
+      title: "Engineer",
+      url: `https://acme.com/jobs/${id}`,
+      source: "greenhouse",
+      description: "",
+      fetchedAt: "2026-06-30T00:00:00.000Z",
+    },
+    result: { score: 80, matchedSkills: [], missingSkills: [] },
+    action,
+    expired: false,
+  };
+}

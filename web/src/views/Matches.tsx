@@ -11,6 +11,7 @@ function MatchCard({
   countryFilterActive,
 }: ScoredPosting & { countryFilterActive: boolean }) {
   const setAction = useMatchAction();
+  const pending = setAction.isPending;
   const saved = action === "saved";
   // When the user is filtering by country, flag postings whose country couldn't be parsed — they're
   // kept in the results (we never silently drop unknowns) but the user should know why they appear.
@@ -70,6 +71,7 @@ function MatchCard({
       <div className="mt-3 flex items-center gap-2">
         <Button
           variant="ghost"
+          disabled={pending}
           onClick={() => setAction.mutate({ id: posting.id, action: saved ? null : "saved" })}
           className={saved ? "text-success" : ""}
         >
@@ -77,6 +79,7 @@ function MatchCard({
         </Button>
         <Button
           variant="ghost"
+          disabled={pending}
           onClick={() =>
             setAction.mutate({ id: posting.id, action: action === "applied" ? null : "applied" })
           }
@@ -87,6 +90,7 @@ function MatchCard({
         {action === "dismissed" ? (
           <Button
             variant="ghost"
+            disabled={pending}
             onClick={() => setAction.mutate({ id: posting.id, action: null })}
           >
             Undismiss
@@ -94,6 +98,7 @@ function MatchCard({
         ) : (
           <Button
             variant="ghost"
+            disabled={pending}
             onClick={() => setAction.mutate({ id: posting.id, action: "dismissed" })}
           >
             Dismiss
