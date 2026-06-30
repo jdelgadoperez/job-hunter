@@ -86,10 +86,11 @@ export class PostgresScanStore implements ScanStore {
     const r = postingToRow(posting);
     await this.sql`
       INSERT INTO postings
-        (id, company, title, url, source, description, location, posted_at, fetched_at,
-         last_seen_scan, expired_at)
+        (id, company, title, url, source, description, location, remote, country,
+         posted_at, fetched_at, last_seen_scan, expired_at)
       VALUES (${r.id}, ${r.company}, ${r.title}, ${r.url}, ${r.source}, ${r.description},
-         ${r.location}, ${r.posted_at}, ${r.fetched_at}, ${scanId}, NULL)
+         ${r.location}, ${r.remote}, ${r.country},
+         ${r.posted_at}, ${r.fetched_at}, ${scanId}, NULL)
       ON CONFLICT (id) DO UPDATE SET
         company = excluded.company,
         title = excluded.title,
@@ -97,6 +98,8 @@ export class PostgresScanStore implements ScanStore {
         source = excluded.source,
         description = excluded.description,
         location = excluded.location,
+        remote = excluded.remote,
+        country = excluded.country,
         posted_at = excluded.posted_at,
         fetched_at = excluded.fetched_at,
         last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
@@ -122,6 +125,8 @@ export class PostgresScanStore implements ScanStore {
       "source",
       "description",
       "location",
+      "remote",
+      "country",
       "posted_at",
       "fetched_at",
       "last_seen_scan",
@@ -146,7 +151,7 @@ export class PostgresScanStore implements ScanStore {
 
   async listLivePostingsNotSeen(scanId: number): Promise<JobPosting[]> {
     const rows = await this.sql<PostingRow[]>`
-      SELECT id, company, title, url, source, description, location, posted_at, fetched_at
+      SELECT id, company, title, url, source, description, location, remote, country, posted_at, fetched_at
       FROM postings
       WHERE expired_at IS NULL AND (last_seen_scan IS NULL OR last_seen_scan != ${scanId})`;
     return rows.map(rowToPosting);

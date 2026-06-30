@@ -13,6 +13,8 @@ export type PostingRow = {
   source: string;
   description: string;
   location: string | null;
+  remote: boolean | null;
+  country: string | null;
   posted_at: string | Date | null;
   fetched_at: string | Date;
 };
@@ -26,6 +28,8 @@ export type PostingInsert = {
   source: string;
   description: string;
   location: string | null;
+  remote: boolean | null;
+  country: string | null;
   posted_at: string | null;
   fetched_at: string;
 };
@@ -40,6 +44,8 @@ export function postingToRow(posting: JobPosting): PostingInsert {
     source: posting.source,
     description: posting.description,
     location: posting.location ?? null,
+    remote: posting.remote ?? null,
+    country: posting.country ?? null,
     posted_at: posting.postedAt ? posting.postedAt.toISOString() : null,
     fetched_at: posting.fetchedAt.toISOString(),
   };
@@ -55,6 +61,8 @@ export function rowToPosting(row: PostingRow): JobPosting {
     source: row.source,
     description: row.description,
     ...(row.location ? { location: row.location } : {}),
+    ...(row.remote == null ? {} : { remote: row.remote }),
+    ...(row.country ? { country: row.country } : {}),
     ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
     fetchedAt: new Date(row.fetched_at),
   };

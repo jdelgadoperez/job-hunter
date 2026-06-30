@@ -29,13 +29,16 @@ const FeedRow = z
     source: z.string(),
     description: z.string(),
     location: z.string().nullish(),
+    remote: z.boolean().nullish(),
+    country: z.string().nullish(),
     posted_at: z.string().nullish(),
     fetched_at: z.string(),
   })
   .passthrough();
 const FeedRows = z.array(FeedRow);
 
-const COLUMNS = "id,company,title,url,source,description,location,posted_at,fetched_at";
+const COLUMNS =
+  "id,company,title,url,source,description,location,remote,country,posted_at,fetched_at";
 const DEFAULT_LIMIT = 1000;
 
 /**
@@ -72,6 +75,8 @@ export class HttpPostingFeed implements PostingFeed {
         source: r.source,
         description: r.description,
         location: r.location ?? null,
+        remote: r.remote ?? null,
+        country: r.country ?? null,
         posted_at: r.posted_at ?? null,
         fetched_at: r.fetched_at,
       }),
