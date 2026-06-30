@@ -29,7 +29,9 @@
   --color-border: #e2e8f0;
   --color-fg: #0f172a;
   --color-muted: #475569;
-  --color-faint: #64748b;
+  /* #475569 muted is ~7:1 on white; faint sits just below it but stays AA-compliant (≥4.5:1) at the
+     12px sizes it's used at — darker than the old #64748b which was borderline (~4.6:1). */
+  --color-faint: #596578;
   --color-primary: #4f46e5;
   --color-primary-hover: #4338ca;
   --color-on-primary: #ffffff;
@@ -40,6 +42,9 @@
   --color-info-surface: #dbeafe;
   --color-link: #4338ca;
   --color-ring: #6366f1;
+  /* Deliberately terminal-styled (near-black in both themes) for the live scan log. */
+  --color-code-bg: #0f172a;
+  --color-code-fg: #e2e8f0;
 }
 
 .dark {
@@ -60,6 +65,8 @@
   --color-info-surface: #1e3a8a;
   --color-link: #a5b4fc;
   --color-ring: #818cf8;
+  --color-code-bg: #0f172a;
+  --color-code-fg: #e2e8f0;
 }
 
 @layer base {

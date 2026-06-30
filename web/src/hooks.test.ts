@@ -65,7 +65,18 @@ describe("useMatchAction", () => {
   it("optimistically patches the cached posting's action across matches queries", async () => {
     mockFetch({ ok: true });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const key = ["matches", 50, false, false, false, "", false, false];
+    const key = [
+      "matches",
+      {
+        minScore: 50,
+        includeExpired: false,
+        includeDismissed: false,
+        remoteOnly: false,
+        country: "",
+        includeApplied: false,
+        onlyApplied: false,
+      },
+    ];
     client.setQueryData(key, [scoredPosting("p1", null)]);
 
     const { result } = renderHook(() => useMatchAction(), { wrapper: withClient(client) });
@@ -81,7 +92,18 @@ describe("useMatchAction", () => {
   it("rolls the cache back to its prior value when the action request fails", async () => {
     mockFetch({ error: "boom" }, 500);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const key = ["matches", 50, false, false, false, "", false, false];
+    const key = [
+      "matches",
+      {
+        minScore: 50,
+        includeExpired: false,
+        includeDismissed: false,
+        remoteOnly: false,
+        country: "",
+        includeApplied: false,
+        onlyApplied: false,
+      },
+    ];
     client.setQueryData(key, [scoredPosting("p1", null)]);
 
     const { result } = renderHook(() => useMatchAction(), { wrapper: withClient(client) });

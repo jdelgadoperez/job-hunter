@@ -25,24 +25,26 @@ export function Overview() {
     }
   }, [finishedAt, qc]);
 
-  // Tick an elapsed counter while a scan runs, so the long opening step never looks frozen.
   const startedAt = running ? status?.startedAt : null;
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!startedAt) {
-      setElapsed(0);
-      return;
-    }
-    const start = new Date(startedAt).getTime();
-    const tick = () => setElapsed(Math.max(0, Math.round((Date.now() - start) / 1000)));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [startedAt]);
+
+  const [fileError, setFileError] = useState<string | null>(null);
 
   function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) upload.mutate(file);
+    if (!file) return;
+    // Pre-flight checks so a wrong-type or oversized file fails instantly instead of after an
+    // upload round-trip. The server enforces both too (the source of truth); this is just UX.
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!["txt", "md", "pdf", "docx"].includes(ext)) {
+      setFileError("Unsupported file type. Use a .txt, .md, .pdf, or .docx resume.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError("That file is over the 10MB limit.");
+      return;
+    }
+    setFileError(null);
+    upload.mutate(file);
   }
 
   if (profile.isPending) return <Loading label="Loading…" />;
@@ -72,6 +74,7 @@ export function Overview() {
           />
         </label>
         {upload.isPending ? <span className="ml-2 text-sm text-faint">Parsing…</span> : null}
+        {fileError ? <p className="mt-2 text-sm text-danger">{fileError}</p> : null}
         {upload.isError ? <p className="mt-2 text-sm text-danger">{String(upload.error)}</p> : null}
       </Card>
 
@@ -86,7 +89,10 @@ export function Overview() {
         {running ? (
           <div className="mt-3" aria-live="polite">
             <p className="text-sm text-muted">
-              {status?.message ?? "Working…"} <span className="text-faint">· {elapsed}s</span>
+              {status?.message ?? "Working…"}{" "}
+              <span className="text-faint">
+                · <ElapsedTimer startedAt={startedAt} />s
+              </span>
             </p>
             {status?.total ? (
               // Decorative bar; the live text above conveys progress to assistive tech.
@@ -98,7 +104,7 @@ export function Overview() {
               </div>
             ) : null}
             {status && status.recent.length > 0 ? (
-              <ul className="mt-2 max-h-32 overflow-auto rounded bg-slate-900 p-2 font-mono text-xs text-slate-100">
+              <ul className="mt-2 max-h-32 overflow-auto rounded bg-code-bg p-2 font-mono text-xs text-code-fg">
                 {status.recent.map((line) => (
                   <li key={line}>{line}</li>
                 ))}
@@ -136,12 +142,12 @@ export function Overview() {
           ) : (
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <CompanyDelta
-                tone="emerald"
+                tone="success"
                 label={`${latestScan.data.newCompanies.length} new`}
                 companies={latestScan.data.newCompanies}
               />
               <CompanyDelta
-                tone="amber"
+                tone="warning"
                 label={`${latestScan.data.removedCompanies.length} no longer listed`}
                 companies={latestScan.data.removedCompanies}
               />
@@ -153,17 +159,35 @@ export function Overview() {
   );
 }
 
+/** The elapsed seconds since a scan started, ticking once a second. Isolated into its own component
+ *  so the interval re-renders only this counter, not the whole Overview tree. */
+function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startedAt) {
+      setElapsed(0);
+      return;
+    }
+    const start = new Date(startedAt).getTime();
+    const tick = () => setElapsed(Math.max(0, Math.round((Date.now() - start) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  return <>{elapsed}</>;
+}
+
 function CompanyDelta({
   tone,
   label,
   companies,
 }: {
-  tone: "emerald" | "amber";
+  tone: "success" | "warning";
   label: string;
   companies: CompanyRef[];
 }) {
-  const sign = tone === "emerald" ? "+" : "−";
-  const color = tone === "emerald" ? "text-success" : "text-warning";
+  const sign = tone === "success" ? "+" : "−";
+  const color = tone === "success" ? "text-success" : "text-warning";
   const shown = companies.slice(0, 8);
   return (
     <div>

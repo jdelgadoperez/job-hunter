@@ -42,8 +42,17 @@ export function Button({
   );
 }
 
+/** Score thresholds shared by the ScorePill tone and the Matches default floor, so the "relevant"
+ *  bar and the badge colors stay in sync if the scoring scale ever changes. */
+export const SCORE_THRESHOLDS = { strong: 80, relevant: 50 } as const;
+
 export function ScorePill({ score }: { score: number }) {
-  const tone = score >= 80 ? "text-success" : score >= 50 ? "text-warning" : "text-faint";
+  const tone =
+    score >= SCORE_THRESHOLDS.strong
+      ? "text-success"
+      : score >= SCORE_THRESHOLDS.relevant
+        ? "text-warning"
+        : "text-faint";
   return (
     <span className={`rounded-full bg-subtle px-2 py-0.5 text-xs font-semibold ${tone}`}>
       <span className="sr-only">match score </span>

@@ -1,6 +1,14 @@
 import { useMemo, useRef, useState } from "react";
 import type { ScoredPosting } from "../api";
-import { Button, Card, Empty, ErrorNote, Loading, ScorePill } from "../components/ui";
+import {
+  Button,
+  Card,
+  Empty,
+  ErrorNote,
+  Loading,
+  SCORE_THRESHOLDS,
+  ScorePill,
+} from "../components/ui";
 import { useMatchAction, useMatches } from "../hooks";
 
 function MatchCard({
@@ -110,8 +118,8 @@ function MatchCard({
 }
 
 export function Matches() {
-  // Default to a 50 floor so the list leads with genuinely relevant matches.
-  const [minScore, setMinScore] = useState(50);
+  // Default to the "relevant" floor so the list leads with genuinely relevant matches.
+  const [minScore, setMinScore] = useState<number>(SCORE_THRESHOLDS.relevant);
   const [includeExpired, setIncludeExpired] = useState(false);
   const [includeDismissed, setIncludeDismissed] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);

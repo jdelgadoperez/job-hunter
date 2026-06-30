@@ -9,15 +9,20 @@ import {
 
 export function useMatches(minScore: number, filters: MatchFilters = {}) {
   return useQuery({
+    // An object key (not a positional array) so adding/reordering a filter can't silently break
+    // cache dedup, and devtools show self-documenting key/value pairs. TanStack serializes object
+    // keys structurally, so two equivalent filter sets still hit the same cache entry.
     queryKey: [
       "matches",
-      minScore,
-      filters.includeExpired ?? false,
-      filters.includeDismissed ?? false,
-      filters.remoteOnly ?? false,
-      filters.country ?? "",
-      filters.includeApplied ?? false,
-      filters.onlyApplied ?? false,
+      {
+        minScore,
+        includeExpired: filters.includeExpired ?? false,
+        includeDismissed: filters.includeDismissed ?? false,
+        remoteOnly: filters.remoteOnly ?? false,
+        country: filters.country ?? "",
+        includeApplied: filters.includeApplied ?? false,
+        onlyApplied: filters.onlyApplied ?? false,
+      },
     ],
     queryFn: () => api.getMatches(minScore, filters),
   });
@@ -157,10 +162,9 @@ export function useStartScan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.startScan,
-    onSuccess: (status) => {
-      qc.setQueryData(["scan-status"], status);
-      // A finished scan means new matches — refresh them.
-      if (status.state === "done") qc.invalidateQueries({ queryKey: ["matches"] });
-    },
+    // POST /api/scan returns as soon as the background job starts, so this status is always
+    // "running" (or "idle" on a 409) — never "done". Scan completion is detected by useScanStatus's
+    // poll and invalidates ["matches"] from Overview, so there's nothing to refresh here.
+    onSuccess: (status) => qc.setQueryData(["scan-status"], status),
   });
 }
