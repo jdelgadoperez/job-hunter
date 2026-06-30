@@ -563,4 +563,24 @@ describe("listScoredPostings — applied action", () => {
     expect(row?.action).toBe("applied");
     repo.close();
   });
+
+  it("onlyApplied still shows an applied posting after it expires (you applied to it)", () => {
+    const repo = newRepo();
+    // Save under a scan, mark applied, then let it miss two consecutive scans so it expires.
+    repo.savePosting(postingWith("p-exp"), repo.startScan());
+    repo.saveMatchResult("p-exp", { score: 90, matchedSkills: [], missingSkills: [] });
+    repo.setUserAction("p-exp", "applied");
+    repo.expireStalePostings(repo.startScan());
+    repo.expireStalePostings(repo.startScan());
+
+    // It's expired, so the default list (and a normal includeApplied reveal) hides it...
+    expect(repo.listScoredPostings(0, { includeApplied: true }).map((s) => s.posting.id)).toEqual(
+      [],
+    );
+    // ...but the Applied view keeps it — the point of "Applied" spans closed postings.
+    const applied = repo.listScoredPostings(0, { onlyApplied: true });
+    expect(applied.map((s) => s.posting.id)).toEqual(["p-exp"]);
+    expect(applied[0]?.expired).toBe(true);
+    repo.close();
+  });
 });

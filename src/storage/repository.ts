@@ -218,6 +218,11 @@ export class Repository {
       actionSql = `${hideDismissed}${hideApplied}`;
     }
 
+    // The "Applied" view answers "what did I apply to?" — that intent spans postings that have since
+    // expired (the board closed, but your application stands), so onlyApplied shows expired roles too
+    // (MatchCard already marks them with the expired badge). Otherwise expired hides unless asked for.
+    const hideExpired = opts.includeExpired || opts.onlyApplied ? "" : " AND p.expired_at IS NULL";
+
     const rows = this.db
       .prepare(
         `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
@@ -228,7 +233,7 @@ export class Repository {
          FROM match_results m
          JOIN postings p ON p.id = m.posting_id
          LEFT JOIN user_actions ua ON ua.posting_id = p.id
-         WHERE m.score >= ?${opts.includeExpired ? "" : " AND p.expired_at IS NULL"}${actionSql}${countrySql}
+         WHERE m.score >= ?${hideExpired}${actionSql}${countrySql}
          ORDER BY m.score DESC, p.title`,
       )
       .all(...params) as {
