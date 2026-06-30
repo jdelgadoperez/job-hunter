@@ -104,8 +104,10 @@ and opens a React dashboard in your browser:
 - **Matches** — ranked postings filtered by a minimum-score slider (default **50**), a **Remote only**
   toggle, and a **Country** dropdown (its options are the countries actually present in your results).
   Remote roles show a **Remote** badge. Cards list matched/
-  missing skills and (once you've run the CLI `score`) the LLM rationale. **Save** or **dismiss** any
-  match (dismissed ones hide by default; toggles reveal expired/dismissed). Scans are **incremental**:
+  missing skills and (once you've run the CLI `score`) the LLM rationale. **Save**, **dismiss**, or
+  **mark applied** any match (dismissed and applied ones hide by default; toggles reveal
+  expired/dismissed/applied, and an **Applied (N)** view shows just the roles you've applied to).
+  Scans are **incremental**:
   postings that vanish from their board across consecutive scans are auto-expired and drop off the
   list, and the **Last scan** panel lists the directory delta (companies that appeared / are no
   longer listed).
@@ -151,7 +153,7 @@ shows comes from the same local HTTP API:
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/matches?minScore=` | ranked matches |
-| `PUT\|DELETE /api/matches/:id/action` | save / dismiss a match (or clear the action) |
+| `PUT\|DELETE /api/matches/:id/action` | save / dismiss / mark-applied a match (or clear the action) |
 | `GET\|POST /api/companies` · `DELETE /api/companies?url=` | tracked companies (add/remove) |
 | `GET /api/companies/manual-review` | directory companies on hosts we don't auto-scan (LinkedIn/Indeed/…) |
 | `GET /api/profile` · `PUT /api/profile/skills` | profile, and direct edits to its skill list |
