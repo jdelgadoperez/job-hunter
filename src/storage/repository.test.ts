@@ -461,3 +461,46 @@ describe("listScoredPostings — remote filter and resolved remote on the wire",
     repo.close();
   });
 });
+
+describe("listScoredPostings — country filter", () => {
+  function seedWithCountry(repo: Repository, id: string, score: number, country?: string): void {
+    repo.savePosting({
+      ...posting,
+      id,
+      ...(country ? { country } : {}),
+    });
+    repo.saveMatchResult(id, { score, matchedSkills: [], missingSkills: [] });
+  }
+
+  it("filters by stored country (exact match, case-insensitive)", () => {
+    const repo = newRepo();
+    seedWithCountry(repo, "us1", 90, "US");
+    seedWithCountry(repo, "de1", 80, "Germany");
+    seedWithCountry(repo, "nx1", 70); // no country
+
+    const us = repo.listScoredPostings(0, { country: "US" });
+    expect(us.map((s) => s.posting.id)).toEqual(["us1"]);
+
+    const usLower = repo.listScoredPostings(0, { country: "us" });
+    expect(usLower.map((s) => s.posting.id)).toEqual(["us1"]);
+
+    repo.close();
+  });
+
+  it("returns all postings when country is absent", () => {
+    const repo = newRepo();
+    seedWithCountry(repo, "c1", 90, "US");
+    seedWithCountry(repo, "c2", 80);
+    const all = repo.listScoredPostings(0, {});
+    expect(all).toHaveLength(2);
+    repo.close();
+  });
+
+  it("returns empty when no postings match the given country", () => {
+    const repo = newRepo();
+    seedWithCountry(repo, "d1", 90, "US");
+    const result = repo.listScoredPostings(0, { country: "CA" });
+    expect(result).toHaveLength(0);
+    repo.close();
+  });
+});

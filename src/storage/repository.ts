@@ -22,6 +22,7 @@ export type ListMatchesOptions = {
   includeExpired?: boolean;
   includeDismissed?: boolean;
   remoteOnly?: boolean;
+  country?: string;
 };
 
 /** A posting eligible for LLM scoring: its heuristic score plus whether the LLM already scored it. */
@@ -175,6 +176,13 @@ export class Repository {
    * excluded unless `includeDismissed`.
    */
   listScoredPostings(minScore = 0, opts: ListMatchesOptions = {}): ScoredPosting[] {
+    const countrySql = opts.country !== undefined ? " AND p.country = ? COLLATE NOCASE" : "";
+
+    // Build positional params as a plain array — no tuple assertion needed.
+    // minScore is always first; the country value is appended only when the clause is present.
+    const params: (string | number)[] = [minScore];
+    if (opts.country !== undefined) params.push(opts.country);
+
     const rows = this.db
       .prepare(
         `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
@@ -187,10 +195,10 @@ export class Repository {
          LEFT JOIN user_actions ua ON ua.posting_id = p.id
          WHERE m.score >= ?${opts.includeExpired ? "" : " AND p.expired_at IS NULL"}${
            opts.includeDismissed ? "" : " AND (ua.action IS NULL OR ua.action != 'dismissed')"
-}
+}${countrySql}
          ORDER BY m.score DESC, p.title`,
       )
-      .all(minScore) as {
+      .all(...params) as {
       id: string;
       company: string;
       title: string;
