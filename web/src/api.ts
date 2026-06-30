@@ -1,35 +1,44 @@
-// Typed client for the job-hunter local server. Shapes mirror `src/server` and the domain types;
+// Typed client for the job-hunter local server. Response shapes are defined as zod schemas and
+// validated at the boundary in `request()`, so a server-side shape change surfaces as a thrown
+// error on the first request rather than silently propagating `undefined` through the UI. Types
+// are derived from the schemas via `z.infer`; they mirror `src/server` and the domain types and are
 // kept in sync by hand (the server is a separate build target, so there's no shared import).
 
-export type JobPosting = {
-  id: string;
-  company: string;
-  title: string;
-  url: string;
-  source: string;
-  description: string;
-  location?: string;
-  remote?: boolean;
-  country?: string;
-  postedAt?: string;
-  fetchedAt: string;
-};
+import { z } from "zod";
 
-export type MatchResult = {
-  score: number;
-  matchedSkills: string[];
-  missingSkills: string[];
-  rationale?: string;
-};
+const JobPostingSchema = z.object({
+  id: z.string(),
+  company: z.string(),
+  title: z.string(),
+  url: z.string(),
+  source: z.string(),
+  description: z.string(),
+  location: z.string().optional(),
+  remote: z.boolean().optional(),
+  country: z.string().optional(),
+  postedAt: z.string().optional(),
+  fetchedAt: z.string(),
+});
+export type JobPosting = z.infer<typeof JobPostingSchema>;
 
-export type UserAction = "saved" | "dismissed" | "applied";
+const MatchResultSchema = z.object({
+  score: z.number(),
+  matchedSkills: z.array(z.string()),
+  missingSkills: z.array(z.string()),
+  rationale: z.string().optional(),
+});
+export type MatchResult = z.infer<typeof MatchResultSchema>;
 
-export type ScoredPosting = {
-  posting: JobPosting;
-  result: MatchResult;
-  action: UserAction | null;
-  expired: boolean;
-};
+const UserActionSchema = z.enum(["saved", "dismissed", "applied"]);
+export type UserAction = z.infer<typeof UserActionSchema>;
+
+const ScoredPostingSchema = z.object({
+  posting: JobPostingSchema,
+  result: MatchResultSchema,
+  action: UserActionSchema.nullable(),
+  expired: z.boolean(),
+});
+export type ScoredPosting = z.infer<typeof ScoredPostingSchema>;
 
 export type MatchFilters = {
   includeExpired?: boolean;
@@ -40,59 +49,91 @@ export type MatchFilters = {
   onlyApplied?: boolean;
 };
 
-export type TrackedCompany = { careersUrl: string; name?: string };
+const TrackedCompanySchema = z.object({ careersUrl: z.string(), name: z.string().optional() });
+export type TrackedCompany = z.infer<typeof TrackedCompanySchema>;
 
-export type Skill = { name: string; category: string };
+const SkillSchema = z.object({ name: z.string(), category: z.string() });
+export type Skill = z.infer<typeof SkillSchema>;
 
-export type CompanyRef = { careersUrl: string; name?: string };
+const CompanyRefSchema = z.object({ careersUrl: z.string(), name: z.string().optional() });
+export type CompanyRef = z.infer<typeof CompanyRefSchema>;
 
 /** A finished scan's outcome: counts plus the directory delta vs. the previous scan. */
-export type ScanRecord = {
-  id: number;
-  startedAt: string;
-  finishedAt: string | null;
-  postingsSeen: number | null;
-  companiesSeen: number | null;
-  newCompanies: CompanyRef[];
-  removedCompanies: CompanyRef[];
-};
+const ScanRecordSchema = z.object({
+  id: z.number(),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable(),
+  postingsSeen: z.number().nullable(),
+  companiesSeen: z.number().nullable(),
+  newCompanies: z.array(CompanyRefSchema),
+  removedCompanies: z.array(CompanyRefSchema),
+});
+export type ScanRecord = z.infer<typeof ScanRecordSchema>;
 
-export type SkillProfile = {
-  skills: string[];
-  roleKeywords: string[];
-  categories: string[];
-  yearsExperience?: number;
-};
+const SkillProfileSchema = z.object({
+  skills: z.array(z.string()),
+  roleKeywords: z.array(z.string()),
+  categories: z.array(z.string()),
+  yearsExperience: z.number().optional(),
+});
+export type SkillProfile = z.infer<typeof SkillProfileSchema>;
 
-export type SettingsView = {
-  hasAnthropicKey: boolean;
-  scorerModel: string | null;
-  scorerProvider: string | null;
-};
+// Mirrors the server's `readSettings` (src/server/app.ts): secret keys are reported by presence
+// only, the feed URL is echoed back (not secret).
+const SettingsViewSchema = z.object({
+  hasAnthropicKey: z.boolean(),
+  scorerModel: z.string().nullable(),
+  scorerProvider: z.string().nullable(),
+  hasTheMuseKey: z.boolean(),
+  feedUrl: z.string().nullable(),
+  hasFeedKey: z.boolean(),
+});
+export type SettingsView = z.infer<typeof SettingsViewSchema>;
 
+// Mirrors the server's `WRITABLE_SETTINGS`. Secret keys (anthropicApiKey, theMuseApiKey, feedKey)
+// are write-only; the server masks them on read.
 export type SettingsUpdate = Partial<{
   anthropicApiKey: string;
   scorerModel: string;
   scorerProvider: string;
+  theMuseApiKey: string;
+  feedUrl: string;
+  feedKey: string;
 }>;
 
-export type ScanJobState = "idle" | "running" | "done" | "error";
+const ScanJobStateSchema = z.enum(["idle", "running", "done", "error"]);
+export type ScanJobState = z.infer<typeof ScanJobStateSchema>;
 
 /** Snapshot of the background scan, mirroring the server's `ScanJobStatus`. */
-export type ScanJobStatus = {
-  state: ScanJobState;
-  message: string | null;
-  current: number | null;
-  total: number | null;
-  count: number | null;
-  warnings: { source: string; message: string }[];
-  error: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
-  recent: string[];
-};
+const ScanJobStatusSchema = z.object({
+  state: ScanJobStateSchema,
+  message: z.string().nullable(),
+  current: z.number().nullable(),
+  total: z.number().nullable(),
+  count: z.number().nullable(),
+  warnings: z.array(z.object({ source: z.string(), message: z.string() })),
+  error: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+  recent: z.array(z.string()),
+});
+export type ScanJobStatus = z.infer<typeof ScanJobStatusSchema>;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+const OkSchema = z.object({ ok: z.literal(true) });
+const RemovedSchema = z.object({ removed: z.boolean() });
+const VersionSchema = z.object({
+  version: z.string(),
+  behind: z.number().nullable(),
+  updateAvailable: z.boolean(),
+});
+export type VersionInfo = z.infer<typeof VersionSchema>;
+
+/**
+ * Fetch `path` and validate the JSON body against `schema`. A non-2xx response throws with the
+ * server's `error` message when present; a 2xx body that fails the schema throws a zod error,
+ * turning silent client/server drift into a loud, first-request failure.
+ */
+async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
@@ -102,7 +143,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         : `${res.status} ${res.statusText}`;
     throw new Error(message);
   }
-  return (await res.json()) as T;
+  return schema.parse(await res.json());
 }
 
 export const api = {
@@ -114,34 +155,35 @@ export const api = {
     if (filters.country) params.set("country", filters.country);
     if (filters.includeApplied) params.set("includeApplied", "true");
     if (filters.onlyApplied) params.set("onlyApplied", "true");
-    return request<ScoredPosting[]>(`/api/matches?${params}`);
+    return request(`/api/matches?${params}`, z.array(ScoredPostingSchema));
   },
   setMatchAction: (id: string, action: UserAction) =>
-    request<{ ok: true }>(`/api/matches/${encodeURIComponent(id)}/action`, {
+    request(`/api/matches/${encodeURIComponent(id)}/action`, OkSchema, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action }),
     }),
   clearMatchAction: (id: string) =>
-    request<{ removed: boolean }>(`/api/matches/${encodeURIComponent(id)}/action`, {
+    request(`/api/matches/${encodeURIComponent(id)}/action`, RemovedSchema, {
       method: "DELETE",
     }),
-  getCompanies: () => request<TrackedCompany[]>("/api/companies"),
-  getManualReviewCompanies: () => request<CompanyRef[]>("/api/companies/manual-review"),
+  getCompanies: () => request("/api/companies", z.array(TrackedCompanySchema)),
+  getManualReviewCompanies: () =>
+    request("/api/companies/manual-review", z.array(CompanyRefSchema)),
   addCompany: (careersUrl: string, name?: string) =>
-    request<TrackedCompany[]>("/api/companies", {
+    request("/api/companies", z.array(TrackedCompanySchema), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ careersUrl, name }),
     }),
   removeCompany: (careersUrl: string) =>
-    request<{ removed: boolean }>(`/api/companies?url=${encodeURIComponent(careersUrl)}`, {
+    request(`/api/companies?url=${encodeURIComponent(careersUrl)}`, RemovedSchema, {
       method: "DELETE",
     }),
-  getProfile: () => request<SkillProfile | null>("/api/profile"),
-  getSettings: () => request<SettingsView>("/api/settings"),
+  getProfile: () => request("/api/profile", SkillProfileSchema.nullable()),
+  getSettings: () => request("/api/settings", SettingsViewSchema),
   putSettings: (update: SettingsUpdate) =>
-    request<SettingsView>("/api/settings", {
+    request("/api/settings", SettingsViewSchema, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(update),
@@ -149,34 +191,33 @@ export const api = {
   uploadResume: (file: File) => {
     const form = new FormData();
     form.set("file", file);
-    return request<SkillProfile>("/api/profile", { method: "POST", body: form });
+    return request("/api/profile", SkillProfileSchema, { method: "POST", body: form });
   },
   updateProfileSkills: (skills: string[]) =>
-    request<SkillProfile>("/api/profile/skills", {
+    request("/api/profile/skills", SkillProfileSchema, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ skills }),
     }),
-  getSkills: () => request<Skill[]>("/api/skills"),
+  getSkills: () => request("/api/skills", z.array(SkillSchema)),
   addSkill: (name: string, category?: string) =>
-    request<Skill[]>("/api/skills", {
+    request("/api/skills", z.array(SkillSchema), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name, category }),
     }),
   removeSkill: (name: string) =>
-    request<{ removed: boolean }>(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    request(`/api/skills/${encodeURIComponent(name)}`, RemovedSchema, { method: "DELETE" }),
   // Start a background scan (or no-op if one is already running). Both 202 (started) and 409
   // (already running) carry the current job status, so neither is an error here.
   startScan: async (): Promise<ScanJobStatus> => {
     const res = await fetch("/api/scan", { method: "POST" });
     if (res.status === 202 || res.status === 409 || res.ok) {
-      return (await res.json()) as ScanJobStatus;
+      return ScanJobStatusSchema.parse(await res.json());
     }
     throw new Error(`${res.status} ${res.statusText}`);
   },
-  getScanStatus: () => request<ScanJobStatus>("/api/scan/status"),
-  getLatestScan: () => request<ScanRecord | null>("/api/scans/latest"),
-  getVersion: () =>
-    request<{ version: string; behind: number | null; updateAvailable: boolean }>("/api/version"),
+  getScanStatus: () => request("/api/scan/status", ScanJobStatusSchema),
+  getLatestScan: () => request("/api/scans/latest", ScanRecordSchema.nullable()),
+  getVersion: () => request("/api/version", VersionSchema),
 };

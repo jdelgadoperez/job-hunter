@@ -9,10 +9,17 @@ export function Settings() {
 
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
+  const [theMuseKey, setTheMuseKey] = useState("");
+  const [feedUrl, setFeedUrl] = useState("");
+  const [feedKey, setFeedKey] = useState("");
 
-  // Seed the editable fields from the server once loaded (the key is write-only, so it stays blank).
+  // Seed the editable non-secret fields from the server once loaded. Secret keys are write-only, so
+  // they stay blank.
   useEffect(() => {
-    if (settings.data) setModel(settings.data.scorerModel ?? "");
+    if (settings.data) {
+      setModel(settings.data.scorerModel ?? "");
+      setFeedUrl(settings.data.feedUrl ?? "");
+    }
   }, [settings.data]);
 
   if (settings.isPending) return <Loading label="Loading settings…" />;
@@ -20,9 +27,26 @@ export function Settings() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const payload: SettingsUpdate = { scorerModel: model };
+    const payload: SettingsUpdate = { scorerModel: model, feedUrl };
     if (apiKey.trim()) payload.anthropicApiKey = apiKey.trim();
-    update.mutate(payload, { onSuccess: () => setApiKey("") });
+    if (theMuseKey.trim()) payload.theMuseApiKey = theMuseKey.trim();
+    if (feedKey.trim()) payload.feedKey = feedKey.trim();
+    update.mutate(payload, {
+      onSuccess: () => {
+        setApiKey("");
+        setTheMuseKey("");
+        setFeedKey("");
+      },
+    });
+  }
+
+  // Clear a stale "Saved." banner the moment the user edits any field, so it never implies that
+  // unsaved edits are persisted.
+  function edited<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      if (update.isSuccess || update.isError) update.reset();
+      setter(value);
+    };
   }
 
   return (
@@ -38,8 +62,9 @@ export function Settings() {
         >
           <input
             type="password"
+            autoComplete="new-password"
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) => edited(setApiKey)(e.target.value)}
             placeholder={settings.data.hasAnthropicKey ? "••••••••" : "sk-ant-…"}
             className="input"
           />
@@ -48,8 +73,51 @@ export function Settings() {
           <input
             type="text"
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => edited(setModel)(e.target.value)}
             placeholder="claude-sonnet-4-6"
+            className="input"
+          />
+        </Field>
+        <Field
+          label="The Muse API key"
+          hint={
+            settings.data.hasTheMuseKey
+              ? "A key is set. Leave blank to keep it."
+              : "Optional — adds The Muse as a lead source."
+          }
+        >
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={theMuseKey}
+            onChange={(e) => edited(setTheMuseKey)(e.target.value)}
+            placeholder={settings.data.hasTheMuseKey ? "••••••••" : "your-muse-key"}
+            className="input"
+          />
+        </Field>
+        <Field label="Remote feed URL" hint="Optional — a hosted job feed to merge into scans.">
+          <input
+            type="url"
+            value={feedUrl}
+            onChange={(e) => edited(setFeedUrl)(e.target.value)}
+            placeholder="https://feed.example.com/jobs"
+            className="input"
+          />
+        </Field>
+        <Field
+          label="Remote feed key"
+          hint={
+            settings.data.hasFeedKey
+              ? "A key is set. Leave blank to keep it."
+              : "Optional — sent when the feed requires authentication."
+          }
+        >
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={feedKey}
+            onChange={(e) => edited(setFeedKey)(e.target.value)}
+            placeholder={settings.data.hasFeedKey ? "••••••••" : "feed-anon-key"}
             className="input"
           />
         </Field>
