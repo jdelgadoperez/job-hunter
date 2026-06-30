@@ -66,6 +66,7 @@ npm run cli -- score --limit 50           # LLM triage + deep-score the best pos
 npm run cli -- list --min-score 70        # show matches scoring 70+
 npm run cli -- list --remote-only         # only remote matches
 npm run cli -- list --country US          # only matches in a country (parsed from the posting location)
+npm run cli -- list --only-applied        # only roles you've marked applied (include-applied reveals them inline)
 npm run cli -- serve                       # start the web dashboard (--port N, --no-open, --refresh-hours N)
 npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
