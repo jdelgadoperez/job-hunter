@@ -3,8 +3,9 @@ import { errorMessage } from "@app/net/error-message";
 import type { ScoringCandidate } from "@app/storage/repository";
 import pLimit from "p-limit";
 import { type CostEstimate, estimateCost } from "./cost-estimate";
+import { applyRemotePenalty } from "./heuristic-scorer";
 import type { LlmTriager } from "./llm-triager";
-import { isRemote } from "./remote-filter";
+import { resolvePostingRemote } from "./remote-filter";
 import type { TriageItem } from "./triage-prompt";
 import { isUsageLimitError } from "./usage-limit-error";
 
@@ -78,9 +79,21 @@ export async function runScoreRun(deps: {
   // Heuristic gate is applied by the query (score >= minHeuristic).
   const gated = repo.listPostingsForScoring({ minHeuristic: options.minHeuristic });
 
-  const afterRemote = options.remoteOnly
-    ? gated.filter((c) => isRemote(c.posting.location))
-    : gated;
+  // When remoteOnly is on, partition rather than filter:
+  //   - Remote candidates proceed through the full pipeline (triage → LLM deep-score).
+  //   - Non-remote candidates skip the LLM but are saved with a penalized heuristic score,
+  //     so they appear in Matches ranked low rather than being absent.
+  // When remoteOnly is off, no partition and no penalty — same pipeline as before.
+  let afterRemote: ScoringCandidate[];
+  let nonRemotePenalized: ScoringCandidate[];
+
+  if (options.remoteOnly) {
+    afterRemote = gated.filter((c) => resolvePostingRemote(c.posting));
+    nonRemotePenalized = gated.filter((c) => !resolvePostingRemote(c.posting));
+  } else {
+    afterRemote = gated;
+    nonRemotePenalized = [];
+  }
 
   const capped = afterRemote.slice(0, options.limit);
 
@@ -106,6 +119,17 @@ export async function runScoreRun(deps: {
 
   if (options.dryRun) {
     return { counts, estimate, warnings, abortedOnLimit: false };
+  }
+
+  // Save penalized heuristic scores for non-remote candidates before entering the LLM pipeline.
+  // These postings never reach the triager or LLM, so there's no cost and no usage-limit risk.
+  for (const c of nonRemotePenalized) {
+    const base: MatchResult = {
+      score: c.heuristicScore,
+      matchedSkills: [],
+      missingSkills: [],
+    };
+    repo.saveMatchResult(c.posting.id, applyRemotePenalty(base), "heuristic");
   }
 
   // Stage 4 — batch title triage (fail-open inside the triager for ordinary errors).
