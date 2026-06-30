@@ -137,9 +137,12 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
     companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
   );
 
-  // Enrich each posting with a normalized country derived from its location string.
-  // parseCountry is conservative: returns undefined when the location is unrecognizable.
+  // Enrich each posting with a normalized country derived from its location string — but only when
+  // it doesn't already carry one. A feed-sourced posting may arrive with an authoritative country
+  // from upstream; re-parsing its (looser) location string could overwrite that with a worse value,
+  // so we never clobber an existing country. parseCountry is conservative: undefined when unparseable.
   const enriched = postings.map((p) => {
+    if (p.country !== undefined) return p;
     const country = parseCountry(p.location);
     return country !== undefined ? { ...p, country } : p;
   });

@@ -73,6 +73,16 @@ describe("extractJsonLdPostings — remote field", () => {
     expect(posting?.remote).toBe(true);
   });
 
+  it("matches jobLocationType case- and whitespace-insensitively", () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      "@type": "JobPosting",
+      title: "Remote Engineer",
+      jobLocationType: " Telecommute ",
+    })}</script>`;
+    const [posting] = extractJsonLdPostings(html, PAGE_URL, "Acme");
+    expect(posting?.remote).toBe(true);
+  });
+
   it("sets remote=false when jobLocationType is present but not TELECOMMUTE", () => {
     const html = `<script type="application/ld+json">${JSON.stringify({
       "@type": "JobPosting",

@@ -30,7 +30,8 @@ function resolveUrl(raw: string | undefined, pageUrl: string): string {
 function readJobLocationType(node: JsonLdNode): boolean | undefined {
   const value = asString(node.jobLocationType);
   if (value === undefined) return undefined;
-  return value === "TELECOMMUTE";
+  // Case/whitespace-insensitive: feeds emit "TELECOMMUTE", "Telecommute", " telecommute ", etc.
+  return value.trim().toUpperCase() === "TELECOMMUTE";
 }
 
 /** Pull the human-readable locality out of schema.org's nested jobLocation shape. */

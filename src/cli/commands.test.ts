@@ -333,6 +333,48 @@ describe("runScan + listMatches", () => {
     repo.close();
   });
 
+  it("does not overwrite a country a feed posting already carries", async () => {
+    const repo = newRepo();
+    // A feed posting that arrives with an authoritative country AND a location string that would
+    // parse to a different country. The scan must keep the feed's value, not re-derive from location.
+    const feedPosting: JobPosting = {
+      id: "feed-1",
+      company: "Acme",
+      title: "Software Engineer",
+      url: "https://acme.example/jobs/1",
+      source: "feed",
+      description: "TypeScript and React.",
+      location: "Berlin, Germany",
+      country: "US",
+      fetchedAt: new Date(),
+    };
+    const feed = { fetch: async () => ({ postings: [feedPosting], warnings: [] }) };
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        feed,
+        discoverDeps: {
+          fetcher: new RouteFetcher({}),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(airtableData([])),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const match = repo.listScoredPostings(0).find((s) => s.posting.id === "feed-1");
+    // Feed's authoritative "US" is preserved, NOT overwritten by parseCountry("Berlin, Germany").
+    expect(match?.posting.country).toBe("US");
+    repo.close();
+  });
+
   it("expires a posting via liveness re-check once it's gone from its board", async () => {
     const repo = newRepo();
     const ghUrl = "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true";
