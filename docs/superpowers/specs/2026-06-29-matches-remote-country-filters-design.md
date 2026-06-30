@@ -74,14 +74,22 @@ existing code.
 
 ## Behavior change to call out
 
-Today `remoteOnly` **filters** on the scoring path — `score-run.ts` drops
-non-remote candidates (`gated.filter((c) => isRemote(c.posting.location))`).
-This design **changes that from a drop to a penalty**: with `remoteOnly` on,
-non-remote/unknown postings are scored lower but still stored and shown. The
-Matches "Remote only" toggle becomes the place a user *hides* non-remote roles.
-This is intentional and must be documented in the PR and README. (Rationale: the
-user explicitly asked for "show but lower in score," and dropping during scoring
-permanently loses the posting from the DB.)
+Today `remoteOnly` acts as a **pre-scoring cost gate** in `score-run.ts`:
+`gated.filter((c) => isRemote(c.posting.location))` removes non-remote candidates
+from the list *before* the expensive title-triage and LLM deep-score, so a
+remote-preferring user doesn't pay to LLM-score roles they want hidden.
+
+This design **keeps the cost gate** but changes what happens to the gated-out
+postings: instead of vanishing from the scored set, a non-remote posting (when
+`remoteOnly` is on) **skips the LLM deep-score but is saved with a penalized
+heuristic score**, so it still appears in Matches — ranked low — rather than
+being absent. Remote postings get the full pipeline (triage → LLM) as today.
+
+Rationale: the user wants "show but score lower," but LLM-scoring every non-remote
+role costs money. Penalizing the *free* heuristic score for non-remote roles
+delivers "show but lower" without the LLM cost. The Matches "Remote only" toggle
+remains how a user fully *hides* non-remote roles. This is intentional and must be
+documented in the PR and README.
 
 ## Architecture
 
@@ -240,25 +248,39 @@ handler/repo mapper.)
 
 ### Scoring (`src/matching/`)
 
-The penalty is gated on `resolveRemoteOnly(settings, override)` (existing).
+The penalty is gated on the existing `remoteOnly` flag (resolved via
+`resolveRemoteOnly`). The **cost gate is kept** — non-remote roles still skip the
+LLM deep-score — but they are no longer dropped from the scored set.
 
-- **`score-run.ts`:** replace the hard filter
-  `gated.filter((c) => isRemote(c.posting.location))` with a penalty pass — when
-  `remoteOnly` is on, reduce the score of candidates where
-  `resolvePostingRemote(posting)` is false. The penalty is applied to the final
-  `MatchResult.score` (clamped to ≥ 0). Exact penalty magnitude fixed in the
-  plan (a proportional reduction, e.g. multiply by a constant < 1, so a strong
-  match that happens to be on-site still ranks above weak matches).
-- **`HeuristicScorer`:** the scorer itself stays location-agnostic; the penalty
-  is applied uniformly in `score-run.ts` after scoring, so it works identically
-  for heuristic and LLM results. (This keeps the penalty in one place rather than
-  duplicated in each scorer.)
-- **`LlmScorer` prompt (`score-prompt.ts`):** when `remoteOnly` is on, add a
-  one-line remote-preference instruction to the cacheable `system` prefix and
-  include `Remote: <resolved>` / `Location: <location>` in the per-posting `user`
-  message, so the model's own score already reflects the preference. The
-  post-scoring penalty in `score-run.ts` still applies as a deterministic floor.
-  `MatchPayloadSchema` is unchanged (remote is input, not output).
+- **`score-run.ts`:** today, when `remoteOnly` is on,
+  `gated.filter((c) => isRemote(c.posting.location))` removes non-remote
+  candidates before triage/deep-score. Change this so the candidate list is
+  **partitioned** rather than filtered:
+  - **Remote** candidates (`resolvePostingRemote(posting)` true) → continue
+    through the existing pipeline (cap → triage → LLM deep-score), unchanged.
+  - **Non-remote** candidates → skip triage/deep-score, and instead get a
+    **penalized heuristic score saved** (`saveMatchResult(id, penalized,
+    "heuristic")`) so they appear in Matches ranked low. They never reach the
+    LLM, so they cost nothing.
+  - When `remoteOnly` is **off**, behavior is exactly as today (no partition, no
+    penalty).
+  - `ScoreStageCounts` keeps an honest `afterRemote` (now: count of remote
+    candidates that proceed to LLM); add a count of penalized non-remote postings
+    if useful for the CLI summary.
+- **`HeuristicScorer` penalty (`heuristic-scorer.ts`):** the penalty is a pure
+  transform applied to the heuristic `MatchResult.score` for non-remote postings:
+  `penalizedScore = Math.max(0, Math.round(score * REMOTE_PENALTY_FACTOR))` with
+  `REMOTE_PENALTY_FACTOR = 0.6` (a 40% reduction — a strong on-site match still
+  outranks a weak remote one; exact constant is a named module const, not a magic
+  number). The scorer stays callable without remote awareness; the penalty is
+  applied by `score-run.ts` to the heuristic result it computes for non-remote
+  postings (one place, not duplicated).
+- **`LlmScorer` prompt (`score-prompt.ts`):** since non-remote roles no longer
+  reach the LLM under `remoteOnly`, the LLM prompt change is **optional polish**:
+  when `remoteOnly` is on, add a one-line remote-preference note to the cacheable
+  `system` prefix so the model slightly favors the (remote) roles it does score.
+  No per-posting `Remote:` line is needed (all LLM-scored roles are remote under
+  the gate). `MatchPayloadSchema` is unchanged (remote is input, not output).
 
 ## Data flow
 
@@ -271,8 +293,11 @@ scan → connector.fetchPostings()
      → repo.savePosting / scan-store  (persist remote 0/1/null, country text/null)
 
 score → resolveRemoteOnly(settings)
-         └─ if on: penalize score where !resolvePostingRemote(posting)
-            + LLM prompt remote-preference signal
+         └─ if on: partition candidates —
+              remote     → triage → LLM deep-score (unchanged)
+              non-remote → skip LLM; save penalized heuristic score (×0.6)
+            (+ optional LLM system-prompt remote-preference note)
+         └─ if off: unchanged pipeline, no penalty
 
 read  → GET /api/matches?minScore&remoteOnly&country
          ├─ SQL: minScore, expired, dismissed, country
@@ -298,8 +323,10 @@ groundwork and is reviewable on its own.
    only" toggle; Remote badge on the card; CLI `list --remote-only`.
 3. **PR 3 — Country filter + CLI.** `/api/matches?country`; SQL country filter;
    Matches country dropdown (options from results); CLI `list --country`.
-4. **PR 4 — Remote-preference scoring penalty.** `score-run.ts` filter→penalty
-   change; LLM prompt remote-preference signal; README/behavior-change note.
+4. **PR 4 — Remote-preference scoring penalty.** `score-run.ts` partition
+   (keep the cost gate; non-remote skip LLM but get a penalized heuristic score);
+   `REMOTE_PENALTY_FACTOR` in the heuristic path; optional LLM system-prompt note;
+   README/behavior-change note.
 
 ## Error handling
 
@@ -347,12 +374,15 @@ Per PR, colocated and offline (fixtures), matching existing patterns
   - `repository.test.ts`: SQL country filter.
   - Web: dropdown options derived from results; selecting one sets the param.
 - **PR 4:**
-  - `score-run.test.ts`: with `remoteOnly` on, a non-remote posting's score is
-    reduced vs. the same posting remote; with `remoteOnly` off, no change;
-    score clamped ≥ 0; strong on-site match still beats weak remote match (the
-    penalty is proportional, not annihilating).
-  - `score-prompt.test.ts`: remote-preference line present in `system` only when
-    on; `Remote:`/`Location:` present in `user` message.
+  - `score-run.test.ts`: with `remoteOnly` on — remote candidates go through the
+    LLM path (deep-scored); non-remote candidates are NOT deep-scored but ARE
+    saved with a heuristic score reduced by `REMOTE_PENALTY_FACTOR`; with
+    `remoteOnly` off, behavior is unchanged (no partition, no penalty); penalized
+    score clamped ≥ 0; a strong on-site heuristic match still outranks a weak one
+    (penalty proportional, not annihilating). Assert via injected fake scorer/
+    triager (existing `ScoreRepo`/`Scorer` test seams) — no live LLM.
+  - `score-prompt.test.ts`: the optional remote-preference note appears in
+    `system` only when `remoteOnly` is on (and is absent when off).
 
 ## Risks
 
