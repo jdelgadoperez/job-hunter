@@ -584,3 +584,61 @@ describe("listScoredPostings — applied action", () => {
     repo.close();
   });
 });
+
+describe("schema indexes", () => {
+  const EXPECTED_INDEXES = [
+    "idx_postings_expired_at",
+    "idx_postings_last_seen_scan",
+    "idx_match_results_score",
+  ];
+
+  /** Index names in the DB at `dbPath`, read via an independent connection. */
+  function indexNamesAt(dbPath: string): string[] {
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      return (
+        db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as {
+          name: string;
+        }[]
+      ).map((r) => r.name);
+    } finally {
+      db.close();
+    }
+  }
+
+  it("creates the hot-path indexes on a fresh database", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jobhunter-idx-"));
+    const dbPath = join(dir, "fresh.db");
+    const repo = new Repository(dbPath);
+    repo.close();
+    expect(indexNamesAt(dbPath)).toEqual(expect.arrayContaining(EXPECTED_INDEXES));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("migrates and indexes a legacy database that predates the expired_at/remote columns", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jobhunter-legacy-"));
+    const dbPath = join(dir, "legacy.db");
+    // Simulate an old DB: postings without last_seen_scan/expired_at/remote/country, and
+    // match_results without scorer — exactly what migrate() + the index creation must tolerate.
+    const legacy = new Database(dbPath);
+    legacy.exec(`
+      CREATE TABLE postings (
+        id TEXT PRIMARY KEY, company TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL,
+        source TEXT NOT NULL, description TEXT NOT NULL, location TEXT, posted_at TEXT,
+        fetched_at TEXT NOT NULL
+      );
+      CREATE TABLE match_results (
+        posting_id TEXT PRIMARY KEY REFERENCES postings(id), score INTEGER NOT NULL,
+        matched_skills TEXT NOT NULL, missing_skills TEXT NOT NULL, rationale TEXT
+      );
+    `);
+    legacy.close();
+
+    // Opening the repo runs SCHEMA then migrate() — must not throw on the missing columns, and the
+    // indexes must end up created after the ALTERs add the columns they reference.
+    const repo = new Repository(dbPath);
+    repo.close();
+    expect(indexNamesAt(dbPath)).toEqual(expect.arrayContaining(EXPECTED_INDEXES));
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

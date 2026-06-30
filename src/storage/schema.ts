@@ -74,3 +74,15 @@ CREATE TABLE IF NOT EXISTS companies (
   last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
+
+// Indexes for the hot read/scan paths. Created in `migrate()` *after* the column ALTERs, because
+// they reference columns (expired_at, last_seen_scan) that legacy databases gain only during
+// migration — declaring them in SCHEMA would fail on those DBs since SCHEMA runs before migrate().
+//   expired_at:     the `WHERE expired_at IS NULL` predicate in nearly every posting query.
+//   score:          the `WHERE score >= ? ORDER BY score DESC` of listScoredPostings.
+//   last_seen_scan: `listLivePostingsNotSeen` / `expireStalePostings`, which scan by last-seen scan.
+export const INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_postings_expired_at ON postings(expired_at);
+CREATE INDEX IF NOT EXISTS idx_postings_last_seen_scan ON postings(last_seen_scan);
+CREATE INDEX IF NOT EXISTS idx_match_results_score ON match_results(score);
+`;

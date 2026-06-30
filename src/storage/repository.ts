@@ -1,7 +1,7 @@
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import { resolvePostingRemote } from "@app/matching/remote-filter";
 import Database from "better-sqlite3";
-import { SCHEMA } from "./schema";
+import { INDEXES, SCHEMA } from "./schema";
 
 /** A company referenced by its careers-page URL (the directory snapshot + diff unit). */
 export type CompanyRef = { careersUrl: string; name?: string };
@@ -104,6 +104,9 @@ export class Repository {
     if (!matchColumns.has("scorer")) {
       this.db.exec("ALTER TABLE match_results ADD COLUMN scorer TEXT");
     }
+
+    // Create indexes now that every referenced column is guaranteed to exist (above + base schema).
+    this.db.exec(INDEXES);
   }
 
   saveProfile(profile: SkillProfile): number {
