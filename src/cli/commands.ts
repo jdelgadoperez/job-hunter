@@ -320,9 +320,12 @@ export function listMatches(
   repo: Repository,
   minScore: number,
   log: Logger,
-  opts: { remoteOnly?: boolean } = {},
+  opts: { remoteOnly?: boolean; country?: string } = {},
 ): void {
-  const scored = repo.listScoredPostings(minScore, { remoteOnly: opts.remoteOnly });
+  const scored = repo.listScoredPostings(minScore, {
+    remoteOnly: opts.remoteOnly,
+    country: opts.country,
+  });
   if (scored.length === 0) {
     log(style.dim("No matches yet. Run `job-hunter scan` first."));
     return;
