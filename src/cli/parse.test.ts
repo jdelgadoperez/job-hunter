@@ -7,20 +7,23 @@ describe("parseCli", () => {
   });
 
   it("parses list with and without --min-score (defaulting to 50)", () => {
-    expect(parseCli(["list"])).toEqual({ kind: "list", minScore: 50 });
+    expect(parseCli(["list"])).toEqual({ kind: "list", minScore: 50, remoteOnly: false });
     expect(parseCli(["list", "--min-score", "70"])).toEqual({
       kind: "list",
       minScore: 70,
+      remoteOnly: false,
     });
     // An explicit 0 is honored (show everything).
     expect(parseCli(["list", "--min-score", "0"])).toEqual({
       kind: "list",
       minScore: 0,
+      remoteOnly: false,
     });
     // Non-numeric falls back to the default rather than NaN.
     expect(parseCli(["list", "--min-score", "abc"])).toEqual({
       kind: "list",
       minScore: 50,
+      remoteOnly: false,
     });
   });
 
@@ -41,15 +44,17 @@ describe("parseCli", () => {
     expect(parseCli(["list", "--country", "US"])).toEqual({
       kind: "list",
       minScore: 50,
+      remoteOnly: false,
       country: "US",
     });
     expect(parseCli(["list", "--min-score", "60", "--country", "CA"])).toEqual({
       kind: "list",
       minScore: 60,
+      remoteOnly: false,
       country: "CA",
     });
-    // Without --country the field is absent (undefined).
-    expect(parseCli(["list"])).toEqual({ kind: "list", minScore: 50 });
+    // Without --country the field is absent (undefined); remoteOnly defaults to false.
+    expect(parseCli(["list"])).toEqual({ kind: "list", minScore: 50, remoteOnly: false });
   });
 
   it("parses serve with defaults, --port, --no-open, and --refresh-hours", () => {
