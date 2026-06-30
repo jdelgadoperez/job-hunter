@@ -75,6 +75,15 @@ function MatchCard({
         >
           {saved ? "★ Saved" : "☆ Save"}
         </Button>
+        <Button
+          variant="ghost"
+          onClick={() =>
+            setAction.mutate({ id: posting.id, action: action === "applied" ? null : "applied" })
+          }
+          className={action === "applied" ? "text-success" : ""}
+        >
+          {action === "applied" ? "✓ Applied" : "Mark applied"}
+        </Button>
         {action === "dismissed" ? (
           <Button
             variant="ghost"
@@ -102,12 +111,26 @@ export function Matches() {
   const [includeDismissed, setIncludeDismissed] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [country, setCountry] = useState<string | undefined>(undefined);
-  const matches = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly, country });
+  const [includeApplied, setIncludeApplied] = useState(false);
+  const [onlyApplied, setOnlyApplied] = useState(false);
+  const matches = useMatches(minScore, {
+    includeExpired,
+    includeDismissed,
+    remoteOnly,
+    country,
+    includeApplied,
+    onlyApplied,
+  });
 
   // Dropdown options come from the SAME query WITHOUT the country filter, so the full set of
   // countries stays available even while a country is selected — otherwise selecting one country
   // would collapse the list to just that country and the user couldn't switch directly to another.
   const countrySource = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
+
+  // Applied count — onlyApplied query so the badge stays accurate regardless of current filter.
+  // TanStack Query dedupes by key, so this is free when "Applied (N)" mode is already active.
+  const appliedSource = useMatches(minScore, { onlyApplied: true });
+  const appliedCount = appliedSource.data?.length ?? 0;
   const countryOptions: string[] = countrySource.data
     ? [
         ...new Set(
@@ -173,6 +196,25 @@ export function Matches() {
             </select>
           </label>
         )}
+        <button
+          type="button"
+          onClick={() => setOnlyApplied((v) => !v)}
+          className={`rounded border px-2 py-0.5 text-sm ${
+            onlyApplied ? "border-link bg-subtle text-fg" : "border-border text-muted"
+          }`}
+        >
+          Applied ({appliedCount})
+        </button>
+        {!onlyApplied ? (
+          <label className="flex items-center gap-1 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={includeApplied}
+              onChange={(e) => setIncludeApplied(e.target.checked)}
+            />
+            Show applied
+          </label>
+        ) : null}
       </div>
 
       {matches.isPending ? (
