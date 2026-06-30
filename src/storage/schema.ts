@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS postings (
   source TEXT NOT NULL,
   description TEXT NOT NULL,
   location TEXT,
+  remote INTEGER,
+  country TEXT,
   posted_at TEXT,
   fetched_at TEXT NOT NULL,
   -- Incremental-scan bookkeeping: the scan that last saw this posting, and when it was judged gone.

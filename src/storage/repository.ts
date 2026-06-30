@@ -64,6 +64,12 @@ export class Repository {
     if (!postingColumns.has("expired_at")) {
       this.db.exec("ALTER TABLE postings ADD COLUMN expired_at TEXT");
     }
+    if (!postingColumns.has("remote")) {
+      this.db.exec("ALTER TABLE postings ADD COLUMN remote INTEGER");
+    }
+    if (!postingColumns.has("country")) {
+      this.db.exec("ALTER TABLE postings ADD COLUMN country TEXT");
+    }
 
     const matchColumns = new Set(
       (this.db.prepare("PRAGMA table_info(match_results)").all() as { name: string }[]).map(
@@ -97,10 +103,10 @@ export class Repository {
     this.db
       .prepare(
         `INSERT INTO postings
-           (id, company, title, url, source, description, location, posted_at, fetched_at,
-            last_seen_scan, expired_at)
-         VALUES (@id, @company, @title, @url, @source, @description, @location, @postedAt,
-            @fetchedAt, @scanId, NULL)
+           (id, company, title, url, source, description, location, remote, country,
+            posted_at, fetched_at, last_seen_scan, expired_at)
+         VALUES (@id, @company, @title, @url, @source, @description, @location, @remote, @country,
+            @postedAt, @fetchedAt, @scanId, NULL)
          ON CONFLICT(id) DO UPDATE SET
            company = excluded.company,
            title = excluded.title,
@@ -108,6 +114,8 @@ export class Repository {
            source = excluded.source,
            description = excluded.description,
            location = excluded.location,
+           remote = excluded.remote,
+           country = excluded.country,
            posted_at = excluded.posted_at,
            fetched_at = excluded.fetched_at,
            last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
@@ -122,6 +130,8 @@ export class Repository {
         source: posting.source,
         description: posting.description,
         location: posting.location ?? null,
+        remote: posting.remote === undefined ? null : posting.remote ? 1 : 0,
+        country: posting.country ?? null,
         postedAt: posting.postedAt?.toISOString() ?? null,
         fetchedAt: posting.fetchedAt.toISOString(),
         scanId,
@@ -163,6 +173,7 @@ export class Repository {
     const rows = this.db
       .prepare(
         `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
+                p.remote, p.country,
                 p.posted_at, p.fetched_at, p.expired_at,
                 m.score, m.matched_skills, m.missing_skills, m.rationale,
                 ua.action
@@ -182,6 +193,8 @@ export class Repository {
       source: string;
       description: string;
       location: string | null;
+      remote: number | null;
+      country: string | null;
       posted_at: string | null;
       fetched_at: string;
       expired_at: string | null;
@@ -201,6 +214,8 @@ export class Repository {
         source: row.source,
         description: row.description,
         ...(row.location ? { location: row.location } : {}),
+        ...(row.remote == null ? {} : { remote: row.remote === 1 }),
+        ...(row.country ? { country: row.country } : {}),
         ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
         fetchedAt: new Date(row.fetched_at),
       },
