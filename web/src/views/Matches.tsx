@@ -25,6 +25,11 @@ function MatchCard({ posting, result, action, expired }: ScoredPosting) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {posting.remote ? (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+              Remote
+            </span>
+          ) : null}
           {expired ? (
             <span className="rounded-full bg-subtle px-2 py-0.5 text-xs text-muted">expired</span>
           ) : null}
@@ -78,7 +83,8 @@ export function Matches() {
   const [minScore, setMinScore] = useState(50);
   const [includeExpired, setIncludeExpired] = useState(false);
   const [includeDismissed, setIncludeDismissed] = useState(false);
-  const matches = useMatches(minScore, { includeExpired, includeDismissed });
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const matches = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
 
   return (
     <section className="space-y-4">
@@ -111,6 +117,14 @@ export function Matches() {
             onChange={(e) => setIncludeDismissed(e.target.checked)}
           />
           Show dismissed
+        </label>
+        <label className="flex items-center gap-1 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={remoteOnly}
+            onChange={(e) => setRemoteOnly(e.target.checked)}
+          />
+          Remote only
         </label>
       </div>
 
