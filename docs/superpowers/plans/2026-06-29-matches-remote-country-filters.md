@@ -1940,6 +1940,12 @@ Update the SQL in `listScoredPostings` to add the country clause and bind it:
 const countrySql =
   opts.country !== undefined ? " AND p.country = ? COLLATE NOCASE" : "";
 
+// Build the positional params as a plainly-typed array — no tuple assertion needed. better-sqlite3's
+// .all() is variadic over (string | number | bigint | Buffer | null), so a (string | number)[] binds
+// cleanly. minScore is always first; the country param is appended only when the clause is present.
+const params: (string | number)[] = [minScore];
+if (opts.country !== undefined) params.push(opts.country);
+
 const rows = this.db
   .prepare(
     `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
@@ -1955,7 +1961,7 @@ const rows = this.db
      }${countrySql}
      ORDER BY m.score DESC, p.title`,
   )
-  .all(...([minScore, ...(opts.country !== undefined ? [opts.country] : [])] as [number, ...unknown[]])) as { /* ... */ }[];
+  .all(...params) as { /* same row type as the existing query */ }[];
 ```
 
 - [ ] **Step 4: Run them to confirm they pass**
