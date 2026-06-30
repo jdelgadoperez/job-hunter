@@ -25,14 +25,28 @@ function serializeProfile(profile: SkillProfile): string {
   return lines.join("\n");
 }
 
+const REMOTE_PREFERENCE_NOTE =
+  "Note: the user prefers remote roles — weight remote-friendly indicators slightly higher when scores are otherwise close.";
+
 /**
  * Build the `{ system, user }` request. The profile + instructions go in `system` (the stable,
  * cacheable prefix across every posting in a run); the posting goes in `user` (the volatile
- * part). Pure and deterministic: identical profiles produce byte-identical `system` strings.
+ * part). Pure and deterministic: identical profiles + remoteOnly flag produce byte-identical
+ * `system` strings.
+ *
+ * When `remoteOnly` is true, a one-line remote-preference note is appended to the system prefix
+ * so the LLM weighs remote-friendly signals slightly higher. Omitting the flag is equivalent to
+ * `false` and preserves the original system prompt byte-for-byte.
  */
-export function buildScorePrompt(profile: SkillProfile, posting: JobPosting): LlmScoreRequest {
+export function buildScorePrompt(
+  profile: SkillProfile,
+  posting: JobPosting,
+  remoteOnly = false,
+): LlmScoreRequest {
+  const systemBase = `${INSTRUCTIONS}\n\n## Candidate profile\n${serializeProfile(profile)}`;
+  const system = remoteOnly ? `${systemBase}\n\n${REMOTE_PREFERENCE_NOTE}` : systemBase;
   return {
-    system: `${INSTRUCTIONS}\n\n## Candidate profile\n${serializeProfile(profile)}`,
+    system,
     user: `## Job posting\nTitle: ${posting.title}\n\nDescription:\n${posting.description}`,
   };
 }

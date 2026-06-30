@@ -137,7 +137,7 @@ export async function runScoreCommand(
   const abortingScorer: Scorer = {
     score: async (profileArg: SkillProfile, posting: JobPosting): Promise<MatchResult> => {
       try {
-        const payload = await rawClient.score(buildScorePrompt(profileArg, posting));
+        const payload = await rawClient.score(buildScorePrompt(profileArg, posting, remoteOnly));
         const parsed = MatchPayloadSchema.safeParse(payload);
         if (!parsed.success) return heuristic.score(profileArg, posting);
         return toMatchResult(parsed.data);
