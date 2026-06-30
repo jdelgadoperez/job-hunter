@@ -84,7 +84,16 @@ export function Matches() {
   const [includeExpired, setIncludeExpired] = useState(false);
   const [includeDismissed, setIncludeDismissed] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
-  const matches = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
+  const [country, setCountry] = useState<string | undefined>(undefined);
+  const matches = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly, country });
+
+  // Collect distinct defined countries from the current result set, sorted.
+  // Derived from results (not a fixed list) so only countries that actually appear are shown.
+  const countryOptions: string[] = matches.data
+    ? [
+        ...new Set(matches.data.flatMap((m) => (m.posting.country ? [m.posting.country] : []))),
+      ].sort()
+    : [];
 
   return (
     <section className="space-y-4">
@@ -126,6 +135,23 @@ export function Matches() {
           />
           Remote only
         </label>
+        {countryOptions.length > 0 && (
+          <label className="flex items-center gap-1 text-sm text-muted">
+            Country:{" "}
+            <select
+              value={country ?? ""}
+              onChange={(e) => setCountry(e.target.value || undefined)}
+              className="ml-1 rounded border border-border bg-surface px-1 py-0.5 text-sm"
+            >
+              <option value="">All countries</option>
+              {countryOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {matches.isPending ? (
