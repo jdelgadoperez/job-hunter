@@ -233,7 +233,7 @@ export async function main(): Promise<void> {
         await runProfile({ repo, readResume: readResumeText }, command.resumePath, log);
         break;
       case "list":
-        listMatches(repo, command.minScore, log);
+        listMatches(repo, command.minScore, log, { remoteOnly: command.remoteOnly });
         break;
       case "scan":
         await runScanCommand(repo, log);

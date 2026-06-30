@@ -316,8 +316,13 @@ export function formatScorePlan(
   return lines.join("\n");
 }
 
-export function listMatches(repo: Repository, minScore: number, log: Logger): void {
-  const scored = repo.listScoredPostings(minScore);
+export function listMatches(
+  repo: Repository,
+  minScore: number,
+  log: Logger,
+  opts: { remoteOnly?: boolean } = {},
+): void {
+  const scored = repo.listScoredPostings(minScore, { remoteOnly: opts.remoteOnly });
   if (scored.length === 0) {
     log(style.dim("No matches yet. Run `job-hunter scan` first."));
     return;

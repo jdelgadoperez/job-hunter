@@ -15,7 +15,7 @@ export type Command =
   | { kind: "track-list" }
   | { kind: "track-remove"; url: string }
   | { kind: "profile"; resumePath: string }
-  | { kind: "list"; minScore: number }
+  | { kind: "list"; minScore: number; remoteOnly: boolean }
   | {
       kind: "score";
       minHeuristic: number;
@@ -81,12 +81,19 @@ export function parseCli(argv: string[]): Command {
     case "list": {
       const { values } = parseArgs({
         args: rest,
-        options: { "min-score": { type: "string" } },
+        options: {
+          "min-score": { type: "string" },
+          "remote-only": { type: "boolean" },
+        },
         allowPositionals: true,
       });
       const raw = values["min-score"];
       const minScore = raw === undefined ? DEFAULT_MIN_SCORE : Number(raw);
-      return { kind: "list", minScore: Number.isFinite(minScore) ? minScore : DEFAULT_MIN_SCORE };
+      return {
+        kind: "list",
+        minScore: Number.isFinite(minScore) ? minScore : DEFAULT_MIN_SCORE,
+        remoteOnly: Boolean(values["remote-only"]),
+      };
     }
 
     case "profile": {
