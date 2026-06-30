@@ -26,15 +26,28 @@ describe("readResumeText", () => {
     expect(await readResumeText(path)).toBe(expected);
   });
 
-  it("extracts the same skills from a PDF resume", async () => {
-    const text = await readResumeText(fixture("resume.pdf"));
-    expect(extractSkills(text).sort()).toEqual(EXPECTED_SKILLS);
-  });
+  // PDF/docx extraction is I/O- and CPU-bound (the parser cold-starts on first use), so it can
+  // edge past Vitest's 5s default under load. Scope a generous timeout to just these parse tests
+  // rather than raising the global default, which would mask slowness elsewhere.
+  const PARSE_TIMEOUT_MS = 15_000;
 
-  it("extracts the same skills from a docx resume", async () => {
-    const text = await readResumeText(fixture("resume.docx"));
-    expect(extractSkills(text).sort()).toEqual(EXPECTED_SKILLS);
-  });
+  it(
+    "extracts the same skills from a PDF resume",
+    async () => {
+      const text = await readResumeText(fixture("resume.pdf"));
+      expect(extractSkills(text).sort()).toEqual(EXPECTED_SKILLS);
+    },
+    PARSE_TIMEOUT_MS,
+  );
+
+  it(
+    "extracts the same skills from a docx resume",
+    async () => {
+      const text = await readResumeText(fixture("resume.docx"));
+      expect(extractSkills(text).sort()).toEqual(EXPECTED_SKILLS);
+    },
+    PARSE_TIMEOUT_MS,
+  );
 
   it("throws a typed error for genuinely unsupported formats", async () => {
     await expect(readResumeText("/tmp/resume.rtf")).rejects.toBeInstanceOf(UnsupportedFormatError);
