@@ -472,17 +472,21 @@ describe("listScoredPostings — country filter", () => {
     repo.saveMatchResult(id, { score, matchedSkills: [], missingSkills: [] });
   }
 
-  it("filters by stored country (exact match, case-insensitive)", () => {
+  it("filters by stored country (case-insensitive) and keeps unknown-country postings", () => {
     const repo = newRepo();
     seedWithCountry(repo, "us1", 90, "US");
     seedWithCountry(repo, "de1", 80, "Germany");
-    seedWithCountry(repo, "nx1", 70); // no country
+    seedWithCountry(repo, "nx1", 70); // no country (unknown)
 
+    // A specific country keeps that country AND unknowns (never silently drops an unparseable
+    // location), but excludes other known countries. Ordered by score DESC.
     const us = repo.listScoredPostings(0, { country: "US" });
-    expect(us.map((s) => s.posting.id)).toEqual(["us1"]);
+    expect(us.map((s) => s.posting.id)).toEqual(["us1", "nx1"]);
+    expect(us.map((s) => s.posting.id)).not.toContain("de1");
 
+    // Case-insensitive on the known-country match.
     const usLower = repo.listScoredPostings(0, { country: "us" });
-    expect(usLower.map((s) => s.posting.id)).toEqual(["us1"]);
+    expect(usLower.map((s) => s.posting.id)).toEqual(["us1", "nx1"]);
 
     repo.close();
   });
@@ -496,11 +500,13 @@ describe("listScoredPostings — country filter", () => {
     repo.close();
   });
 
-  it("returns empty when no postings match the given country", () => {
+  it("returns only unknown-country postings when no known country matches", () => {
     const repo = newRepo();
-    seedWithCountry(repo, "d1", 90, "US");
+    seedWithCountry(repo, "d1", 90, "US"); // a known non-matching country
+    seedWithCountry(repo, "dx", 70); // unknown country
+    // Filtering for CA matches no known country, but unknown-country postings still come through.
     const result = repo.listScoredPostings(0, { country: "CA" });
-    expect(result).toHaveLength(0);
+    expect(result.map((s) => s.posting.id)).toEqual(["dx"]);
     repo.close();
   });
 });

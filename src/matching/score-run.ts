@@ -1,6 +1,6 @@
 import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { errorMessage } from "@app/net/error-message";
-import type { ScoringCandidate } from "@app/storage/repository";
+import type { ScorerTag, ScoringCandidate } from "@app/storage/repository";
 import pLimit from "p-limit";
 import { type CostEstimate, estimateCost } from "./cost-estimate";
 import { applyRemotePenalty } from "./heuristic-scorer";
@@ -48,7 +48,7 @@ export type ScoreOutcome = {
 export type ScoreRepo = {
   countLivePostings(): number;
   listPostingsForScoring(opts: { minHeuristic: number }): ScoringCandidate[];
-  saveMatchResult(id: string, result: MatchResult, scorer: "heuristic" | "llm"): void;
+  saveMatchResult(id: string, result: MatchResult, scorer: ScorerTag): void;
 };
 
 /**
@@ -121,18 +121,18 @@ export async function runScoreRun(deps: {
     return { counts, estimate, warnings, abortedOnLimit: false };
   }
 
-  // Save penalized heuristic scores for non-remote candidates before entering the LLM pipeline.
-  // These postings never reach the triager or LLM, so there's no cost and no usage-limit risk.
-  // Skip ones already LLM-scored (unless --rescore) — the same guard the remote path uses — so a
-  // later remote-only run doesn't clobber a paid LLM score with a penalized heuristic one.
-  for (const c of nonRemotePenalized) {
-    if (!options.rescore && c.alreadyLlmScored) continue;
-    const base: MatchResult = {
-      score: c.heuristicScore,
-      matchedSkills: [],
-      missingSkills: [],
-    };
-    repo.saveMatchResult(c.posting.id, applyRemotePenalty(base), "heuristic");
+  // Save penalized scores for non-remote candidates before entering the LLM pipeline. These never
+  // reach the triager or LLM, so there's no cost and no usage-limit risk. The penalty is applied to
+  // the posting's EXISTING result — preserving its matched/missing skills and rationale — and exactly
+  // ONCE: a row already tagged `heuristic-remote-penalized` is skipped so repeated remote-only runs
+  // don't compound the penalty. Already-LLM-scored rows are skipped too (unless --rescore), matching
+  // the remote path. The cap is respected so a remote-only run doesn't do unbounded writes.
+  const nonRemoteToPenalize = nonRemotePenalized
+    .filter((c) => c.scorer !== "heuristic-remote-penalized")
+    .filter((c) => options.rescore || !c.alreadyLlmScored)
+    .slice(0, options.limit);
+  for (const c of nonRemoteToPenalize) {
+    repo.saveMatchResult(c.posting.id, applyRemotePenalty(c.current), "heuristic-remote-penalized");
   }
 
   // Stage 4 — batch title triage (fail-open inside the triager for ordinary errors).

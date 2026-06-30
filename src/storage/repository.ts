@@ -26,9 +26,19 @@ export type ListMatchesOptions = {
 };
 
 /** A posting eligible for LLM scoring: its heuristic score plus whether the LLM already scored it. */
+/**
+ * How a stored match score was produced. `heuristic-remote-penalized` marks a heuristic score that
+ * already had the remote penalty applied, so a later remote-only run skips it instead of penalizing
+ * it again (the penalty is applied exactly once).
+ */
+export type ScorerTag = "heuristic" | "llm" | "heuristic-remote-penalized";
+
 export type ScoringCandidate = {
   posting: JobPosting;
+  /** The current stored MatchResult for this posting (score + skills + rationale + how it was scored). */
+  current: MatchResult;
   heuristicScore: number;
+  scorer: ScorerTag;
   alreadyLlmScored: boolean;
 };
 
@@ -42,6 +52,13 @@ export type ScanRecord = {
   newCompanies: CompanyRef[];
   removedCompanies: CompanyRef[];
 };
+
+/** Map the nullable stored `scorer` string to a known ScorerTag, defaulting unknown/legacy to heuristic. */
+function normalizeScorerTag(scorer: string | null): ScorerTag {
+  if (scorer === "llm") return "llm";
+  if (scorer === "heuristic-remote-penalized") return "heuristic-remote-penalized";
+  return "heuristic";
+}
 
 export class Repository {
   private readonly db: Database.Database;
@@ -147,7 +164,7 @@ export class Repository {
   saveMatchResult(
     postingId: string,
     result: MatchResult,
-    scorer: "heuristic" | "llm" = "heuristic",
+    scorer: ScorerTag = "heuristic",
   ): void {
     this.db
       .prepare(
@@ -176,7 +193,11 @@ export class Repository {
    * excluded unless `includeDismissed`.
    */
   listScoredPostings(minScore = 0, opts: ListMatchesOptions = {}): ScoredPosting[] {
-    const countrySql = opts.country !== undefined ? " AND p.country = ? COLLATE NOCASE" : "";
+    // A specific country also keeps unknown-country (NULL) postings, so a posting whose location
+    // couldn't be parsed is never silently dropped from a filtered view — it stays visible and the
+    // UI flags it as unknown. (Mirrors the remote filter's blank=remote "don't drop unknowns" rule.)
+    const countrySql =
+      opts.country !== undefined ? " AND (p.country = ? COLLATE NOCASE OR p.country IS NULL)" : "";
 
     // Build positional params as a plain array — no tuple assertion needed.
     // minScore is always first; the country value is appended only when the clause is present.
@@ -490,7 +511,8 @@ export class Repository {
     const rows = this.db
       .prepare(
         `SELECT p.id, p.company, p.title, p.url, p.source, p.description, p.location,
-                p.posted_at, p.fetched_at, m.score, m.scorer
+                p.remote, p.country, p.posted_at, p.fetched_at,
+                m.score, m.matched_skills, m.missing_skills, m.rationale, m.scorer
          FROM match_results m
          JOIN postings p ON p.id = m.posting_id
          WHERE p.expired_at IS NULL AND m.score >= ?
@@ -504,9 +526,14 @@ export class Repository {
       source: string;
       description: string;
       location: string | null;
+      remote: number | null;
+      country: string | null;
       posted_at: string | null;
       fetched_at: string;
       score: number;
+      matched_skills: string;
+      missing_skills: string;
+      rationale: string | null;
       scorer: string | null;
     }[];
     return rows.map((row) => ({
@@ -518,10 +545,21 @@ export class Repository {
         source: row.source,
         description: row.description,
         ...(row.location ? { location: row.location } : {}),
+        // Carry the structured remote flag so resolvePostingRemote in score-run honors it (the
+        // flag wins over the location regex); omit when NULL so unknown stays undefined.
+        ...(row.remote == null ? {} : { remote: row.remote === 1 }),
+        ...(row.country ? { country: row.country } : {}),
         ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
         fetchedAt: new Date(row.fetched_at),
       },
+      current: {
+        score: row.score,
+        matchedSkills: JSON.parse(row.matched_skills) as string[],
+        missingSkills: JSON.parse(row.missing_skills) as string[],
+        ...(row.rationale ? { rationale: row.rationale } : {}),
+      },
       heuristicScore: row.score,
+      scorer: normalizeScorerTag(row.scorer),
       alreadyLlmScored: row.scorer === "llm",
     }));
   }
