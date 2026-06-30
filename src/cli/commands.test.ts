@@ -74,6 +74,7 @@ function outcome(overrides: Partial<ScoreOutcome["counts"]> = {}): ScoreOutcome 
     alreadyScoredSkipped: 18,
     triageTitles: 82,
     deepScored: 0,
+    remotePenalized: 0,
     ...overrides,
   };
   return {
@@ -108,6 +109,25 @@ describe("formatScorePlan", () => {
       dryRun: false,
     });
     expect(text).toContain("80");
+  });
+
+  it("reports the non-remote penalized count when remote-only penalizes postings", () => {
+    const text = formatScorePlan(outcome({ remotePenalized: 25 }), {
+      remoteOnly: true,
+      limit: 100,
+      dryRun: false,
+    });
+    expect(text).toContain("25");
+    expect(text).toMatch(/non-remote/i);
+  });
+
+  it("omits the non-remote line when nothing was penalized", () => {
+    const text = formatScorePlan(outcome({ remotePenalized: 0 }), {
+      remoteOnly: false,
+      limit: 100,
+      dryRun: false,
+    });
+    expect(text).not.toMatch(/non-remote/i);
   });
 });
 

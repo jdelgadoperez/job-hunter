@@ -301,7 +301,12 @@ export function formatScorePlan(
     style.bold(opts.dryRun ? "Score plan (dry run)" : "Score run"),
     `  In DB:              ${counts.inDb} postings`,
     `  Heuristic-gated:    ${counts.afterHeuristic}`,
-    `  Remote filter:      ${counts.afterRemote} remain   (remote_only=${opts.remoteOnly ? "on" : "off"})`,
+    `  Remote → LLM:       ${counts.afterRemote} remain   (remote_only=${opts.remoteOnly ? "on" : "off"})`,
+    ...(counts.remotePenalized > 0
+      ? [
+          `  Non-remote:         ${counts.remotePenalized} kept, ranked lower (penalized heuristic, no LLM)`,
+        ]
+      : []),
     `  Cap (--limit ${opts.limit}):   ${counts.afterCap} selected`,
     `  Already LLM-scored: ${counts.alreadyScoredSkipped} skipped   (--rescore to re-score)`,
     `  Triage:             ${estimate.triageTitles} titles (${estimate.triageBatches} batch(es))   est. ~${usd(estimate.triageUsd)}`,
