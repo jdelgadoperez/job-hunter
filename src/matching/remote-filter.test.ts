@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRemote } from "./remote-filter";
+import { isRemote, resolvePostingRemote } from "./remote-filter";
 
 describe("isRemote", () => {
   const remoteStrings = [
@@ -34,5 +34,24 @@ describe("isRemote", () => {
   it("keeps postings with an empty location string", () => {
     expect(isRemote("")).toBe(true);
     expect(isRemote("   ")).toBe(true);
+  });
+});
+
+describe("resolvePostingRemote", () => {
+  it("trusts an explicit remote=true even when the location reads on-site", () => {
+    expect(resolvePostingRemote({ remote: true, location: "New York, NY" })).toBe(true);
+  });
+
+  it("trusts an explicit remote=false even when the location reads remote", () => {
+    expect(resolvePostingRemote({ remote: false, location: "Remote - US" })).toBe(false);
+  });
+
+  it("falls back to the location regex when remote is undefined", () => {
+    expect(resolvePostingRemote({ location: "Remote - US" })).toBe(true);
+    expect(resolvePostingRemote({ location: "New York, NY" })).toBe(false);
+  });
+
+  it("treats a blank/unknown location as remote when there is no flag", () => {
+    expect(resolvePostingRemote({})).toBe(true);
   });
 });
