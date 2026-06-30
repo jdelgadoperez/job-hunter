@@ -83,7 +83,9 @@ const RipplingJob = z
     id: z.string(),
     name: z.string(),
     url: z.string(),
-    locations: z.array(z.object({ name: z.string() }).passthrough()).optional(),
+    locations: z
+      .array(z.object({ name: z.string(), workplaceType: z.string().optional() }).passthrough())
+      .optional(),
   })
   .passthrough();
 

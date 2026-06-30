@@ -26,6 +26,13 @@ function resolveUrl(raw: string | undefined, pageUrl: string): string {
   }
 }
 
+/** Read schema.org jobLocationType; "TELECOMMUTE" → true; other present value → false; absent → undefined. */
+function readJobLocationType(node: JsonLdNode): boolean | undefined {
+  const value = asString(node.jobLocationType);
+  if (value === undefined) return undefined;
+  return value === "TELECOMMUTE";
+}
+
 /** Pull the human-readable locality out of schema.org's nested jobLocation shape. */
 function readLocation(node: JsonLdNode): string | undefined {
   const location = node.jobLocation;
@@ -115,6 +122,7 @@ export function extractJsonLdPostings(
       continue;
     }
     const url = resolveUrl(asString(node.url), pageUrl);
+    const remote = readJobLocationType(node);
     postings.push({
       id: makePostingId({ company, title, url }),
       company,
@@ -123,6 +131,7 @@ export function extractJsonLdPostings(
       source: "browser",
       description: asString(node.description) ?? "",
       location: readLocation(node),
+      ...(remote !== undefined ? { remote } : {}),
       fetchedAt,
     });
   }
