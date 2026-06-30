@@ -36,5 +36,8 @@ jobs:
       - name: Test (with coverage gate)
         run: npm run test:coverage
 
+      - name: Test (web dashboard)
+        run: npm run test:web
+
       - name: Build web dashboard
         run: npm run build:web
