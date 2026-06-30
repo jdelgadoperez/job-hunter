@@ -337,12 +337,13 @@ describe("remote and country persistence", () => {
     repo.close();
   });
 
-  it("returns remote and country as undefined when stored as NULL", () => {
+  it("resolves remote to true for a posting with no remote flag and no location (blank = remote)", () => {
     const repo = newRepo();
     repo.savePosting({ ...posting, id: "remote-3" }); // no remote, no country
     repo.saveMatchResult("remote-3", { score: 60, matchedSkills: [], missingSkills: [] });
     const [hit] = repo.listScoredPostings();
-    expect(hit?.posting.remote).toBeUndefined();
+    // No stored remote flag + no location → resolvePostingRemote treats blank location as remote.
+    expect(hit?.posting.remote).toBe(true);
     expect(hit?.posting.country).toBeUndefined();
     repo.close();
   });
@@ -390,11 +391,12 @@ describe("remote and country persistence", () => {
       // Reopen through Repository — migrate() runs here and must not throw.
       const repo = new Repository(dbPath);
 
-      // The pre-existing row reads back with remote/country undefined (the new columns are NULL).
+      // The pre-existing row has NULL remote and no location. resolvePostingRemote treats blank
+      // location as remote, so the resolved wire value is true (not undefined).
       repo.saveMatchResult("old-1", { score: 80, matchedSkills: [], missingSkills: [] });
       const afterMigrate = repo.listScoredPostings();
       const old1 = afterMigrate.find((s) => s.posting.id === "old-1");
-      expect(old1?.posting.remote).toBeUndefined();
+      expect(old1?.posting.remote).toBe(true);
       expect(old1?.posting.country).toBeUndefined();
 
       // And a new write through the migrated DB persists both columns.
@@ -407,5 +409,55 @@ describe("remote and country persistence", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("listScoredPostings — remote filter and resolved remote on the wire", () => {
+  function seedWithRemote(
+    repo: Repository,
+    id: string,
+    score: number,
+    remote: boolean | undefined,
+    location?: string,
+  ): void {
+    repo.savePosting({
+      ...posting,
+      id,
+      ...(remote !== undefined ? { remote } : {}),
+      ...(location ? { location } : {}),
+    });
+    repo.saveMatchResult(id, { score, matchedSkills: [], missingSkills: [] });
+  }
+
+  it("remoteOnly=true returns only resolved-remote postings", () => {
+    const repo = newRepo();
+    seedWithRemote(repo, "r1", 90, true); // structured remote=true
+    seedWithRemote(repo, "o1", 80, false); // structured remote=false
+    seedWithRemote(repo, "r2", 70, undefined, "Remote - US"); // fallback regex resolves true
+    seedWithRemote(repo, "o2", 60, undefined, "London, UK"); // fallback regex resolves false
+
+    const all = repo.listScoredPostings(0, { remoteOnly: true });
+    const ids = all.map((s) => s.posting.id).sort();
+    expect(ids).toEqual(["r1", "r2"]);
+    repo.close();
+  });
+
+  it("resolved remote on the wire is a definitive boolean, not the raw stored value", () => {
+    const repo = newRepo();
+    // Stored with no remote flag; location regex makes it remote.
+    seedWithRemote(repo, "reg1", 75, undefined, "Remote - US");
+    const [hit] = repo.listScoredPostings();
+    // The raw stored value is undefined (NULL in SQLite), but the wire value is resolved true.
+    expect(hit?.posting.remote).toBe(true);
+    repo.close();
+  });
+
+  it("remoteOnly=false (default) returns all postings regardless of remote", () => {
+    const repo = newRepo();
+    seedWithRemote(repo, "a1", 90, true);
+    seedWithRemote(repo, "b1", 80, false);
+    const all = repo.listScoredPostings();
+    expect(all).toHaveLength(2);
+    repo.close();
   });
 });

@@ -1,4 +1,5 @@
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
+import { resolvePostingRemote } from "@app/matching/remote-filter";
 import Database from "better-sqlite3";
 import { SCHEMA } from "./schema";
 
@@ -17,7 +18,11 @@ export type ScoredPosting = {
 };
 
 /** Filters for `listScoredPostings`. By default expired and dismissed postings are hidden. */
-export type ListMatchesOptions = { includeExpired?: boolean; includeDismissed?: boolean };
+export type ListMatchesOptions = {
+  includeExpired?: boolean;
+  includeDismissed?: boolean;
+  remoteOnly?: boolean;
+};
 
 /** A posting eligible for LLM scoring: its heuristic score plus whether the LLM already scored it. */
 export type ScoringCandidate = {
@@ -205,7 +210,18 @@ export class Repository {
       action: UserAction | null;
     }[];
 
-    return rows.map((row) => ({
+    // The remote filter is applied in JS (not SQL) because resolvePostingRemote combines the stored
+    // remote column with the location regex fallback — semantics SQL cannot replicate faithfully.
+    const filtered = opts.remoteOnly
+      ? rows.filter((row) =>
+          resolvePostingRemote({
+            remote: row.remote == null ? undefined : row.remote === 1,
+            location: row.location ?? undefined,
+          }),
+        )
+      : rows;
+
+    return filtered.map((row) => ({
       posting: {
         id: row.id,
         company: row.company,
@@ -214,7 +230,12 @@ export class Repository {
         source: row.source,
         description: row.description,
         ...(row.location ? { location: row.location } : {}),
-        ...(row.remote == null ? {} : { remote: row.remote === 1 }),
+        // Resolve remote on the wire so the client always receives a definitive boolean.
+        // The stored column stays raw; resolution happens here, once, in one place.
+        remote: resolvePostingRemote({
+          remote: row.remote == null ? undefined : row.remote === 1,
+          location: row.location ?? undefined,
+        }),
         ...(row.country ? { country: row.country } : {}),
         ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
         fetchedAt: new Date(row.fetched_at),
