@@ -113,24 +113,28 @@ export function Matches() {
   const [country, setCountry] = useState<string | undefined>(undefined);
   const [includeApplied, setIncludeApplied] = useState(false);
   const [onlyApplied, setOnlyApplied] = useState(false);
-  const matches = useMatches(minScore, {
-    includeExpired,
-    includeDismissed,
-    remoteOnly,
-    country,
-    includeApplied,
-    onlyApplied,
-  });
+  // In the Applied view (onlyApplied) the include*/expired flags are meaningless — the server shows
+  // exactly the applied set (expired included) — so we send only the filters that still apply. This
+  // keeps the key identical to the Applied-count query (real dedup) and avoids leaking a stale
+  // includeApplied into a later normal query.
+  const matches = useMatches(
+    minScore,
+    onlyApplied
+      ? { remoteOnly, country, onlyApplied: true }
+      : { includeExpired, includeDismissed, remoteOnly, country, includeApplied },
+  );
 
   // Dropdown options come from the SAME query WITHOUT the country filter, so the full set of
   // countries stays available even while a country is selected — otherwise selecting one country
   // would collapse the list to just that country and the user couldn't switch directly to another.
   const countrySource = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
 
-  // Applied count — onlyApplied query so the badge stays accurate regardless of current filter.
-  // TanStack Query dedupes by key, so this is free when "Applied (N)" mode is already active.
-  const appliedSource = useMatches(minScore, { onlyApplied: true });
-  const appliedCount = appliedSource.data?.length ?? 0;
+  // Applied count for the badge. It must agree with what the Applied view actually shows, so it
+  // carries the SAME non-action filters as the main query (minScore, remoteOnly, country) plus
+  // onlyApplied. When the Applied view is already active the main query IS that result (identical
+  // key ⇒ TanStack serves it from cache, no extra fetch).
+  const appliedCountSource = useMatches(minScore, { remoteOnly, country, onlyApplied: true });
+  const appliedCount = appliedCountSource.data?.length ?? 0;
   const countryOptions: string[] = countrySource.data
     ? [
         ...new Set(
@@ -155,22 +159,28 @@ export function Matches() {
           onChange={(e) => setMinScore(Number(e.target.value))}
           className="w-48"
         />
-        <label className="flex items-center gap-1 text-sm text-muted">
-          <input
-            type="checkbox"
-            checked={includeExpired}
-            onChange={(e) => setIncludeExpired(e.target.checked)}
-          />
-          Show expired
-        </label>
-        <label className="flex items-center gap-1 text-sm text-muted">
-          <input
-            type="checkbox"
-            checked={includeDismissed}
-            onChange={(e) => setIncludeDismissed(e.target.checked)}
-          />
-          Show dismissed
-        </label>
+        {/* Show expired / Show dismissed are no-ops in the Applied view (it shows exactly the applied
+            set, expired included), so hide them there. Remote/Country still narrow the applied set. */}
+        {!onlyApplied ? (
+          <>
+            <label className="flex items-center gap-1 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={includeExpired}
+                onChange={(e) => setIncludeExpired(e.target.checked)}
+              />
+              Show expired
+            </label>
+            <label className="flex items-center gap-1 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={includeDismissed}
+                onChange={(e) => setIncludeDismissed(e.target.checked)}
+              />
+              Show dismissed
+            </label>
+          </>
+        ) : null}
         <label className="flex items-center gap-1 text-sm text-muted">
           <input
             type="checkbox"
