@@ -239,18 +239,19 @@ export class Repository {
       action: UserAction | null;
     }[];
 
-    // The remote filter is applied in JS (not SQL) because resolvePostingRemote combines the stored
-    // remote column with the location regex fallback — semantics SQL cannot replicate faithfully.
-    const filtered = opts.remoteOnly
-      ? rows.filter((row) =>
-          resolvePostingRemote({
-            remote: row.remote == null ? undefined : row.remote === 1,
-            location: row.location ?? undefined,
-          }),
-        )
-      : rows;
+    // Resolve "remote" once per row (structured flag wins, else the location regex) and reuse the
+    // value for both the remoteOnly filter and the on-the-wire value. The filter runs in JS, not SQL,
+    // because resolvePostingRemote's fallback semantics can't be expressed faithfully in SQL.
+    const resolved = rows.map((row) => ({
+      row,
+      remote: resolvePostingRemote({
+        remote: row.remote == null ? undefined : row.remote === 1,
+        location: row.location ?? undefined,
+      }),
+    }));
+    const filtered = opts.remoteOnly ? resolved.filter((r) => r.remote) : resolved;
 
-    return filtered.map((row) => ({
+    return filtered.map(({ row, remote }) => ({
       posting: {
         id: row.id,
         company: row.company,
@@ -259,12 +260,9 @@ export class Repository {
         source: row.source,
         description: row.description,
         ...(row.location ? { location: row.location } : {}),
-        // Resolve remote on the wire so the client always receives a definitive boolean.
-        // The stored column stays raw; resolution happens here, once, in one place.
-        remote: resolvePostingRemote({
-          remote: row.remote == null ? undefined : row.remote === 1,
-          location: row.location ?? undefined,
-        }),
+        // Resolved remote on the wire — the client always receives a definitive boolean; the stored
+        // column stays raw.
+        remote,
         ...(row.country ? { country: row.country } : {}),
         ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
         fetchedAt: new Date(row.fetched_at),

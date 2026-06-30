@@ -3,9 +3,18 @@ import type { ScoredPosting } from "../api";
 import { Button, Card, Empty, ErrorNote, Loading, ScorePill } from "../components/ui";
 import { useMatchAction, useMatches } from "../hooks";
 
-function MatchCard({ posting, result, action, expired }: ScoredPosting) {
+function MatchCard({
+  posting,
+  result,
+  action,
+  expired,
+  countryFilterActive,
+}: ScoredPosting & { countryFilterActive: boolean }) {
   const setAction = useMatchAction();
   const saved = action === "saved";
+  // When the user is filtering by country, flag postings whose country couldn't be parsed — they're
+  // kept in the results (we never silently drop unknowns) but the user should know why they appear.
+  const showUnknownCountry = countryFilterActive && posting.country === undefined;
 
   return (
     <Card className={expired ? "opacity-60" : ""}>
@@ -28,6 +37,14 @@ function MatchCard({ posting, result, action, expired }: ScoredPosting) {
           {posting.remote ? (
             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200">
               Remote
+            </span>
+          ) : null}
+          {showUnknownCountry ? (
+            <span
+              className="rounded-full bg-subtle px-2 py-0.5 text-xs text-muted"
+              title="The location couldn't be matched to a country, so this role is shown for every country filter."
+            >
+              Unknown location
             </span>
           ) : null}
           {expired ? (
@@ -173,6 +190,7 @@ export function Matches() {
               result={m.result}
               action={m.action}
               expired={m.expired}
+              countryFilterActive={country !== undefined}
             />
           ))}
         </div>
