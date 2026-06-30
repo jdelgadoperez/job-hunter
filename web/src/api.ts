@@ -10,6 +10,7 @@ export type JobPosting = {
   description: string;
   location?: string;
   remote?: boolean;
+  country?: string;
   postedAt?: string;
   fetchedAt: string;
 };
@@ -34,6 +35,7 @@ export type MatchFilters = {
   includeExpired?: boolean;
   includeDismissed?: boolean;
   remoteOnly?: boolean;
+  country?: string;
 };
 
 export type TrackedCompany = { careersUrl: string; name?: string };
@@ -107,6 +109,7 @@ export const api = {
     if (filters.includeExpired) params.set("includeExpired", "true");
     if (filters.includeDismissed) params.set("includeDismissed", "true");
     if (filters.remoteOnly) params.set("remoteOnly", "true");
+    if (filters.country) params.set("country", filters.country);
     return request<ScoredPosting[]>(`/api/matches?${params}`);
   },
   setMatchAction: (id: string, action: UserAction) =>
