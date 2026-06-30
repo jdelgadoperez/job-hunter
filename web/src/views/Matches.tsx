@@ -87,11 +87,15 @@ export function Matches() {
   const [country, setCountry] = useState<string | undefined>(undefined);
   const matches = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly, country });
 
-  // Collect distinct defined countries from the current result set, sorted.
-  // Derived from results (not a fixed list) so only countries that actually appear are shown.
-  const countryOptions: string[] = matches.data
+  // Dropdown options come from the SAME query WITHOUT the country filter, so the full set of
+  // countries stays available even while a country is selected — otherwise selecting one country
+  // would collapse the list to just that country and the user couldn't switch directly to another.
+  const countrySource = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
+  const countryOptions: string[] = countrySource.data
     ? [
-        ...new Set(matches.data.flatMap((m) => (m.posting.country ? [m.posting.country] : []))),
+        ...new Set(
+          countrySource.data.flatMap((m) => (m.posting.country ? [m.posting.country] : [])),
+        ),
       ].sort()
     : [];
 
