@@ -253,6 +253,86 @@ describe("runScan + listMatches", () => {
     repo.close();
   });
 
+  it("enriches a posting with country when the location is parseable", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Software Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/2",
+          content: "TypeScript and React.",
+          location: { name: "San Francisco, CA" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const [match] = repo.listScoredPostings(0);
+    expect(match?.posting.country).toBe("US");
+    repo.close();
+  });
+
+  it("omits country when the location is unparseable", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Software Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/3",
+          content: "TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const [match] = repo.listScoredPostings(0);
+    expect(match?.posting.country).toBeUndefined();
+    repo.close();
+  });
+
   it("expires a posting via liveness re-check once it's gone from its board", async () => {
     const repo = newRepo();
     const ghUrl = "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true";

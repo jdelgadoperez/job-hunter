@@ -6,6 +6,7 @@ import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { detectLiveness } from "@app/freshness/detect-liveness";
 import { fetchLivenessSignal } from "@app/freshness/fetch-liveness";
+import { parseCountry } from "@app/matching/location-filter";
 import type { ScoreOutcome } from "@app/matching/score-run";
 import type { Fetcher } from "@app/net/fetcher";
 import { buildProfile } from "@app/profile/build-profile";
@@ -136,13 +137,20 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
     companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
   );
 
+  // Enrich each posting with a normalized country derived from its location string.
+  // parseCountry is conservative: returns undefined when the location is unrecognizable.
+  const enriched = postings.map((p) => {
+    const country = parseCountry(p.location);
+    return country !== undefined ? { ...p, country } : p;
+  });
+
   // The write phase is silent and, for a network-backed store, the slowest part of a crawl — emit a
   // progress event so a stall here is visible rather than looking frozen after the last company.
-  onProgress?.({ kind: "persisting", total: postings.length });
+  onProgress?.({ kind: "persisting", total: enriched.length });
   // Prefer one bulk round-trip when the store offers it (the Postgres worker); fall back to the
   // serial upsert for the synchronous SQLite Repository, which has no per-row round-trip cost.
-  if (repo.savePostings) await repo.savePostings(postings, scanId);
-  else for (const posting of postings) await repo.savePosting(posting, scanId);
+  if (repo.savePostings) await repo.savePostings(enriched, scanId);
+  else for (const posting of enriched) await repo.savePosting(posting, scanId);
 
   // Precise liveness re-check: postings we didn't see this scan get their source re-fetched and are
   // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
