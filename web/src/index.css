@@ -19,6 +19,7 @@
  *   success  #047857 emerald            #34d399
  *   warning  #b45309 amber              #fbbf24
  *   danger   #dc2626 red                #f87171
+ *   info     #1d4ed8 blue (badges)      #93c5fd
  *   link     #4338ca                    #a5b4fc
  */
 @theme {
@@ -35,6 +36,8 @@
   --color-success: #047857;
   --color-warning: #b45309;
   --color-danger: #dc2626;
+  --color-info: #1d4ed8;
+  --color-info-surface: #dbeafe;
   --color-link: #4338ca;
   --color-ring: #6366f1;
 }
@@ -53,6 +56,8 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-danger: #f87171;
+  --color-info: #93c5fd;
+  --color-info-surface: #1e3a8a;
   --color-link: #a5b4fc;
   --color-ring: #818cf8;
 }
@@ -66,5 +71,16 @@
 @layer components {
   .input {
     @apply mt-1 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40;
+  }
+
+  /* Native checkboxes/radios/range: pick up the indigo accent and a focus ring matching the rest of
+     the app, instead of OS-default chrome that reads as disconnected (especially in dark mode). */
+  .control {
+    @apply accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40;
+  }
+
+  /* Native <select>: bordered/themed like .input but inline-sized for toolbars. */
+  .select {
+    @apply rounded-md border border-border bg-surface px-2 py-0.5 text-sm text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40;
   }
 }

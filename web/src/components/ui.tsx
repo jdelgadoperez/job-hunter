@@ -11,17 +11,32 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 export function Button({
   children,
   variant = "primary",
+  pressed,
   className = "",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "ghost" | "toggle";
+  /** For `variant="toggle"`: whether the toggle is currently active. Sets `aria-pressed`. */
+  pressed?: boolean;
+}) {
   const base =
     "inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50";
   const styles =
     variant === "primary"
       ? "bg-primary text-on-primary hover:bg-primary-hover"
-      : "text-muted hover:bg-subtle hover:text-fg";
+      : variant === "toggle"
+        ? pressed
+          ? "bg-primary text-on-primary hover:bg-primary-hover"
+          : "border border-border text-muted hover:bg-subtle hover:text-fg"
+        : "text-muted hover:bg-subtle hover:text-fg";
+  const ariaPressed = variant === "toggle" ? pressed : undefined;
   return (
-    <button type="button" className={`${base} ${styles} ${className}`} {...props}>
+    <button
+      type="button"
+      aria-pressed={ariaPressed}
+      className={`${base} ${styles} ${className}`}
+      {...props}
+    >
       {children}
     </button>
   );

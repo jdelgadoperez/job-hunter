@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ScoredPosting } from "../api";
 import { Button, Card, Empty, ErrorNote, Loading, ScorePill } from "../components/ui";
 import { useMatchAction, useMatches } from "../hooks";
@@ -35,7 +35,7 @@ function MatchCard({
         </div>
         <div className="flex items-center gap-2">
           {posting.remote ? (
-            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+            <span className="rounded-full bg-info-surface px-2 py-0.5 text-xs text-info">
               Remote
             </span>
           ) : null}
@@ -124,24 +124,38 @@ export function Matches() {
       : { includeExpired, includeDismissed, remoteOnly, country, includeApplied },
   );
 
-  // Dropdown options come from the SAME query WITHOUT the country filter, so the full set of
-  // countries stays available even while a country is selected — otherwise selecting one country
-  // would collapse the list to just that country and the user couldn't switch directly to another.
-  const countrySource = useMatches(minScore, { includeExpired, includeDismissed, remoteOnly });
-
   // Applied count for the badge. It must agree with what the Applied view actually shows, so it
   // carries the SAME non-action filters as the main query (minScore, remoteOnly, country) plus
   // onlyApplied. When the Applied view is already active the main query IS that result (identical
   // key ⇒ TanStack serves it from cache, no extra fetch).
   const appliedCountSource = useMatches(minScore, { remoteOnly, country, onlyApplied: true });
   const appliedCount = appliedCountSource.data?.length ?? 0;
-  const countryOptions: string[] = countrySource.data
-    ? [
-        ...new Set(
-          countrySource.data.flatMap((m) => (m.posting.country ? [m.posting.country] : [])),
-        ),
-      ].sort()
-    : [];
+
+  // Country dropdown options are derived from the main query rather than a separate fetch. Selecting
+  // a country narrows the main query (and thus the countries present in it), so we accumulate every
+  // country we've ever seen into a persistent superset — otherwise the dropdown would collapse to
+  // just the selected country and the user couldn't switch directly to another.
+  // Whether any filter is narrowing the result set, so a zero-result list can say "loosen your
+  // filters" instead of misleadingly telling a user with data to go run a scan. minScore > 0 counts
+  // because even the default 50 floor can hide every posting in a sparse DB.
+  const filtersAreActive =
+    minScore > 0 ||
+    includeExpired ||
+    includeDismissed ||
+    remoteOnly ||
+    includeApplied ||
+    onlyApplied ||
+    country !== undefined;
+
+  const seenCountries = useRef(new Set<string>());
+  const countryOptions = useMemo(() => {
+    for (const m of matches.data ?? []) {
+      if (m.posting.country) seenCountries.current.add(m.posting.country);
+    }
+    return [...seenCountries.current].sort();
+    // matches.data identity changes whenever the result set changes, which is exactly when a new
+    // country could appear; recomputing then keeps the superset current.
+  }, [matches.data]);
 
   return (
     <section className="space-y-4">
@@ -157,7 +171,7 @@ export function Matches() {
           step={5}
           value={minScore}
           onChange={(e) => setMinScore(Number(e.target.value))}
-          className="w-48"
+          className="control w-48"
         />
         {/* Show expired / Show dismissed are no-ops in the Applied view (it shows exactly the applied
             set, expired included), so hide them there. Remote/Country still narrow the applied set. */}
@@ -166,6 +180,7 @@ export function Matches() {
             <label className="flex items-center gap-1 text-sm text-muted">
               <input
                 type="checkbox"
+                className="control"
                 checked={includeExpired}
                 onChange={(e) => setIncludeExpired(e.target.checked)}
               />
@@ -174,6 +189,7 @@ export function Matches() {
             <label className="flex items-center gap-1 text-sm text-muted">
               <input
                 type="checkbox"
+                className="control"
                 checked={includeDismissed}
                 onChange={(e) => setIncludeDismissed(e.target.checked)}
               />
@@ -184,6 +200,7 @@ export function Matches() {
         <label className="flex items-center gap-1 text-sm text-muted">
           <input
             type="checkbox"
+            className="control"
             checked={remoteOnly}
             onChange={(e) => setRemoteOnly(e.target.checked)}
           />
@@ -195,7 +212,7 @@ export function Matches() {
             <select
               value={country ?? ""}
               onChange={(e) => setCountry(e.target.value || undefined)}
-              className="ml-1 rounded border border-border bg-surface px-1 py-0.5 text-sm"
+              className="select ml-1"
             >
               <option value="">All countries</option>
               {countryOptions.map((c) => (
@@ -206,19 +223,19 @@ export function Matches() {
             </select>
           </label>
         )}
-        <button
-          type="button"
+        <Button
+          variant="toggle"
+          pressed={onlyApplied}
           onClick={() => setOnlyApplied((v) => !v)}
-          className={`rounded border px-2 py-0.5 text-sm ${
-            onlyApplied ? "border-link bg-subtle text-fg" : "border-border text-muted"
-          }`}
+          className="px-2 py-0.5"
         >
           Applied ({appliedCount})
-        </button>
+        </Button>
         {!onlyApplied ? (
           <label className="flex items-center gap-1 text-sm text-muted">
             <input
               type="checkbox"
+              className="control"
               checked={includeApplied}
               onChange={(e) => setIncludeApplied(e.target.checked)}
             />
@@ -232,7 +249,11 @@ export function Matches() {
       ) : matches.isError ? (
         <ErrorNote error={matches.error} />
       ) : matches.data.length === 0 ? (
-        <Empty>No matches yet. Run a scan from the Overview tab.</Empty>
+        <Empty>
+          {filtersAreActive
+            ? "No matches at these filters. Try lowering the minimum score or clearing filters."
+            : "No matches yet. Run a scan from the Overview tab."}
+        </Empty>
       ) : (
         <div className="space-y-3">
           {matches.data.map((m) => (
