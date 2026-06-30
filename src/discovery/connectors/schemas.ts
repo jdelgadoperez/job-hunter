@@ -27,6 +27,7 @@ const LeverPosting = z
     hostedUrl: z.string(),
     descriptionPlain: z.string().optional(),
     categories: z.object({ location: z.string().optional() }).passthrough().optional(),
+    workplaceType: z.string().optional(),
   })
   .passthrough();
 
@@ -40,6 +41,7 @@ const AshbyJob = z
     jobUrl: z.string(),
     descriptionPlain: z.string().optional(),
     location: z.string().optional(),
+    isRemote: z.boolean().optional(),
   })
   .passthrough();
 

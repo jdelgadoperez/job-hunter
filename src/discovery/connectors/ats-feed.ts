@@ -6,7 +6,13 @@ import { fetchFeed } from "./fetch-feed";
 import type { ConnectorResult } from "./types";
 
 /** The connector-specific fields extracted from one raw job entry. */
-type MappedJob = { title: string; url: string; description: string; location?: string };
+type MappedJob = {
+  title: string;
+  url: string;
+  description: string;
+  location?: string;
+  remote?: boolean;
+};
 
 /**
  * Shared body for the JSON-feed ATS connectors (Greenhouse/Lever/Ashby): fetch + validate the feed,
@@ -38,9 +44,10 @@ export async function fetchAtsPostings<Feed, Job>(
       url: mapped.url,
       source: opts.source,
       description: mapped.description,
-      location: mapped.location,
+      ...(mapped.location !== undefined ? { location: mapped.location } : {}),
+      ...(mapped.remote !== undefined ? { remote: mapped.remote } : {}),
       fetchedAt,
-    };
+    } satisfies JobPosting;
   });
   return { ok: true, postings };
 }

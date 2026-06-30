@@ -52,3 +52,79 @@ describe("AshbyConnector", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("AshbyConnector — remote field", () => {
+  it("passes isRemote=true through to posting.remote", async () => {
+    const feed = {
+      jobs: [
+        {
+          id: "ar1",
+          title: "Remote Engineer",
+          jobUrl: "https://jobs.ashbyhq.com/acme/ar1",
+          descriptionPlain: "desc",
+          location: "Remote",
+          isRemote: true,
+        },
+      ],
+    };
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: {
+        statusCode: 200,
+        finalUrl: ENDPOINT,
+        bodyText: JSON.stringify(feed),
+      },
+    });
+    const result = await new AshbyConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(true);
+  });
+
+  it("passes isRemote=false through to posting.remote", async () => {
+    const feed = {
+      jobs: [
+        {
+          id: "ao1",
+          title: "On-site Engineer",
+          jobUrl: "https://jobs.ashbyhq.com/acme/ao1",
+          descriptionPlain: "desc",
+          location: "London, UK",
+          isRemote: false,
+        },
+      ],
+    };
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: {
+        statusCode: 200,
+        finalUrl: ENDPOINT,
+        bodyText: JSON.stringify(feed),
+      },
+    });
+    const result = await new AshbyConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(false);
+  });
+
+  it("leaves remote undefined when isRemote is absent", async () => {
+    const feed = {
+      jobs: [
+        {
+          id: "an1",
+          title: "Unknown",
+          jobUrl: "https://jobs.ashbyhq.com/acme/an1",
+          descriptionPlain: "desc",
+          location: "Berlin, Germany",
+        },
+      ],
+    };
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: {
+        statusCode: 200,
+        finalUrl: ENDPOINT,
+        bodyText: JSON.stringify(feed),
+      },
+    });
+    const result = await new AshbyConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBeUndefined();
+  });
+});

@@ -3,6 +3,12 @@ import { fetchAtsPostings } from "./ats-feed";
 import { LeverFeed } from "./schemas";
 import type { AtsConnector, ConnectorResult } from "./types";
 
+/** Map Lever's workplaceType string to a structured remote boolean, or undefined when absent. */
+function leverRemote(workplaceType: string | undefined): boolean | undefined {
+  if (workplaceType === undefined) return undefined;
+  return workplaceType === "remote";
+}
+
 export class LeverConnector implements AtsConnector {
   readonly source = "lever";
 
@@ -18,6 +24,7 @@ export class LeverConnector implements AtsConnector {
         url: posting.hostedUrl,
         description: posting.descriptionPlain ?? "",
         location: posting.categories?.location,
+        remote: leverRemote(posting.workplaceType),
       }),
     });
   }

@@ -34,6 +34,8 @@ describe("GreenhouseConnector", () => {
       makePostingId({ company: "acme", title: first?.title ?? "", url: first?.url ?? "" }),
     );
     expect(first?.fetchedAt).toBeInstanceOf(Date);
+    // Greenhouse has no structured remote field — remote must always be undefined.
+    expect(first?.remote).toBeUndefined();
   });
 
   it("fails (not empty) for a malformed feed", async () => {

@@ -52,3 +52,73 @@ describe("LeverConnector", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("LeverConnector — remote field", () => {
+  it('maps workplaceType "remote" to remote=true', async () => {
+    const feed = [
+      {
+        id: "r1",
+        text: "Remote Role",
+        hostedUrl: "https://jobs.lever.co/acme/r1",
+        descriptionPlain: "desc",
+        categories: { location: "Remote" },
+        workplaceType: "remote",
+      },
+    ];
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: {
+        statusCode: 200,
+        finalUrl: ENDPOINT,
+        bodyText: JSON.stringify(feed),
+      },
+    });
+    const result = await new LeverConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(true);
+  });
+
+  it('maps workplaceType "office" to remote=false', async () => {
+    const feed = [
+      {
+        id: "o1",
+        text: "Office Role",
+        hostedUrl: "https://jobs.lever.co/acme/o1",
+        descriptionPlain: "desc",
+        categories: { location: "San Francisco, CA" },
+        workplaceType: "office",
+      },
+    ];
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: {
+        statusCode: 200,
+        finalUrl: ENDPOINT,
+        bodyText: JSON.stringify(feed),
+      },
+    });
+    const result = await new LeverConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(false);
+  });
+
+  it("leaves remote undefined when workplaceType is absent", async () => {
+    const feed = [
+      {
+        id: "n1",
+        text: "No Workplace Type",
+        hostedUrl: "https://jobs.lever.co/acme/n1",
+        descriptionPlain: "desc",
+        categories: { location: "New York, NY" },
+      },
+    ];
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: {
+        statusCode: 200,
+        finalUrl: ENDPOINT,
+        bodyText: JSON.stringify(feed),
+      },
+    });
+    const result = await new LeverConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBeUndefined();
+  });
+});

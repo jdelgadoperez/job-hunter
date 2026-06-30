@@ -18,6 +18,7 @@ export class AshbyConnector implements AtsConnector {
         url: job.jobUrl,
         description: job.descriptionPlain ?? "",
         location: job.location,
+        remote: job.isRemote,
       }),
     });
   }
