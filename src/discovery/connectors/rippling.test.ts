@@ -179,4 +179,29 @@ describe("RipplingConnector — remote field", () => {
     if (!result.ok) throw new Error("expected ok");
     expect(result.postings[0]?.remote).toBeUndefined();
   });
+
+  it("leaves remote undefined when some locations lack workplaceType and none are REMOTE", async () => {
+    const listBody = JSON.stringify({
+      items: [
+        {
+          id: "p1",
+          name: "Partial Location",
+          url: "https://ats.rippling.com/slug/jobs/p1",
+          locations: [
+            { name: "San Francisco, CA", workplaceType: "ON_SITE" },
+            { name: "Austin, TX" },
+          ],
+        },
+      ],
+      page: 0,
+      pageSize: 50,
+      totalPages: 1,
+    });
+    const fetcher = new FakeFetcher({
+      [LIST]: { statusCode: 200, finalUrl: LIST, bodyText: listBody },
+    });
+    const result = await new RipplingConnector().fetchPostings(SLUG, fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBeUndefined();
+  });
 });
