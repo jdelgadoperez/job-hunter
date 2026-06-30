@@ -360,4 +360,36 @@ describe("runScoreRun — remote partition (remoteOnly=true)", () => {
 
     expect(saved).toHaveLength(0);
   });
+
+  it("does not clobber an already-LLM-scored non-remote posting unless rescore is set", async () => {
+    const officePosting = candidate("off-llm", "Office Job", 60, {
+      location: "New York, NY",
+      alreadyLlmScored: true,
+    });
+    const { repo, saved } = fakeRepo([officePosting]);
+
+    // Without rescore: the prior LLM score is preserved (no penalized heuristic save).
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true },
+    });
+    expect(saved).toHaveLength(0);
+
+    // With rescore: the penalty IS applied (the user opted into overwriting).
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true, rescore: true },
+    });
+    const penalized = saved.find((s) => s.id === "off-llm");
+    expect(penalized?.scorer).toBe("heuristic");
+    expect(penalized?.result.score).toBe(
+      Math.max(0, Math.round(officePosting.heuristicScore * REMOTE_PENALTY_FACTOR)),
+    );
+  });
 });

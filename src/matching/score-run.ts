@@ -123,7 +123,10 @@ export async function runScoreRun(deps: {
 
   // Save penalized heuristic scores for non-remote candidates before entering the LLM pipeline.
   // These postings never reach the triager or LLM, so there's no cost and no usage-limit risk.
+  // Skip ones already LLM-scored (unless --rescore) — the same guard the remote path uses — so a
+  // later remote-only run doesn't clobber a paid LLM score with a penalized heuristic one.
   for (const c of nonRemotePenalized) {
+    if (!options.rescore && c.alreadyLlmScored) continue;
     const base: MatchResult = {
       score: c.heuristicScore,
       matchedSkills: [],
