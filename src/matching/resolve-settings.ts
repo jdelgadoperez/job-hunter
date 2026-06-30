@@ -34,10 +34,14 @@ export function settingsWithEnvKey(base: SettingsReader): SettingsReader {
  * Resolve the active provider config from settings, falling back to the default provider
  * when the setting is unset, blank, or an unrecognized id.
  */
+function isLlmProviderId(id: string): id is LlmProviderId {
+  return Object.hasOwn(LLM_PROVIDERS, id);
+}
+
 export function resolveProvider(settings: SettingsReader): LlmProviderConfig {
   const id = settings.getSetting(PROVIDER_SETTING)?.trim();
-  if (id && id in LLM_PROVIDERS) {
-    return LLM_PROVIDERS[id as LlmProviderId];
+  if (id && isLlmProviderId(id)) {
+    return LLM_PROVIDERS[id];
   }
   return LLM_PROVIDERS[DEFAULT_PROVIDER];
 }
