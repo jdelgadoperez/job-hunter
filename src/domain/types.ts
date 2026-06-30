@@ -17,6 +17,8 @@ export type JobPosting = {
   source: string;
   description: string;
   location?: string;
+  remote?: boolean;
+  country?: string;
   postedAt?: Date;
   fetchedAt: Date;
 };
