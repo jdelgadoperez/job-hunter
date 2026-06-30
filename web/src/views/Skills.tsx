@@ -159,21 +159,25 @@ function Dictionary() {
             className="input mt-3"
           />
           <ul className="mt-2 max-h-80 divide-y divide-border overflow-auto rounded border border-border">
-            {shown.map((s) => (
-              <li key={s.name} className="flex items-center justify-between px-3 py-1.5 text-sm">
-                <span>
-                  {s.name} <span className="text-xs text-faint">· {s.category}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeSkill.mutate(s.name)}
-                  aria-label={`Remove ${s.name}`}
-                  className="rounded text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  ×
-                </button>
-              </li>
-            ))}
+            {shown.map((s) => {
+              const removing = removeSkill.isPending && removeSkill.variables === s.name;
+              return (
+                <li key={s.name} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                  <span>
+                    {s.name} <span className="text-xs text-faint">· {s.category}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeSkill.mutate(s.name)}
+                    disabled={removing}
+                    aria-label={`Remove ${s.name}`}
+                    className="rounded text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  >
+                    ×
+                  </button>
+                </li>
+              );
+            })}
             {shown.length === 0 ? (
               <li className="px-3 py-2 text-sm text-faint">No matches.</li>
             ) : null}

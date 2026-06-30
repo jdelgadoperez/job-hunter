@@ -11,24 +11,48 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 export function Button({
   children,
   variant = "primary",
+  pressed,
   className = "",
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "ghost" | "toggle";
+  /** For `variant="toggle"`: whether the toggle is currently active. Sets `aria-pressed`. */
+  pressed?: boolean;
+}) {
   const base =
     "inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50";
   const styles =
     variant === "primary"
       ? "bg-primary text-on-primary hover:bg-primary-hover"
-      : "text-muted hover:bg-subtle hover:text-fg";
+      : variant === "toggle"
+        ? pressed
+          ? "bg-primary text-on-primary hover:bg-primary-hover"
+          : "border border-border text-muted hover:bg-subtle hover:text-fg"
+        : "text-muted hover:bg-subtle hover:text-fg";
+  const ariaPressed = variant === "toggle" ? pressed : undefined;
   return (
-    <button type="button" className={`${base} ${styles} ${className}`} {...props}>
+    <button
+      type="button"
+      aria-pressed={ariaPressed}
+      className={`${base} ${styles} ${className}`}
+      {...props}
+    >
       {children}
     </button>
   );
 }
 
+/** Score thresholds shared by the ScorePill tone and the Matches default floor, so the "relevant"
+ *  bar and the badge colors stay in sync if the scoring scale ever changes. */
+export const SCORE_THRESHOLDS = { strong: 80, relevant: 50 } as const;
+
 export function ScorePill({ score }: { score: number }) {
-  const tone = score >= 80 ? "text-success" : score >= 50 ? "text-warning" : "text-faint";
+  const tone =
+    score >= SCORE_THRESHOLDS.strong
+      ? "text-success"
+      : score >= SCORE_THRESHOLDS.relevant
+        ? "text-warning"
+        : "text-faint";
   return (
     <span className={`rounded-full bg-subtle px-2 py-0.5 text-xs font-semibold ${tone}`}>
       <span className="sr-only">match score </span>

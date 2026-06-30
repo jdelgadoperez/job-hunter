@@ -28,6 +28,13 @@ export async function fetchLivenessSignal(
     };
   }
 
+  return fetchHttpLivenessSignal(posting, deps);
+}
+
+async function fetchHttpLivenessSignal(
+  posting: JobPosting,
+  deps: { fetcher: Fetcher },
+): Promise<LivenessSignal> {
   try {
     const res = await deps.fetcher.fetch(posting.url);
     return {
@@ -47,4 +54,39 @@ export async function fetchLivenessSignal(
       bodyText: "",
     };
   }
+}
+
+/**
+ * Liveness signals for a group of postings that share one ATS board (same `source` + `company`),
+ * fetching that board's feed exactly once. This collapses what would otherwise be one full-feed
+ * fetch per stale posting into one per company. Postings without a board connector fall back to a
+ * per-posting HTTP re-check of their own URL (each has a distinct URL, so there's nothing to share).
+ * Returns a signal per input posting, keyed by posting id. Never throws.
+ */
+export async function fetchLivenessSignalsForBoard(
+  source: string,
+  company: string,
+  postings: readonly JobPosting[],
+  deps: { fetcher: Fetcher },
+): Promise<Map<string, LivenessSignal>> {
+  const connector = connectorBySource[source];
+  if (!connector) {
+    const entries = await Promise.all(
+      postings.map(
+        async (posting) => [posting.id, await fetchHttpLivenessSignal(posting, deps)] as const,
+      ),
+    );
+    return new Map(entries);
+  }
+
+  const result = await connector.fetchPostings(company, deps.fetcher);
+  const present = result.ok ? new Set(result.postings.map((p) => p.id)) : null;
+  return new Map(
+    postings.map((posting) => [
+      posting.id,
+      present
+        ? { kind: "ats-feed", feedAvailable: true, postingPresent: present.has(posting.id) }
+        : { kind: "ats-feed", feedAvailable: false, postingPresent: false },
+    ]),
+  );
 }

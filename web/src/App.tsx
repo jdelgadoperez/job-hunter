@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { useVersion } from "./hooks";
 import { useTheme } from "./theme";
 import { Companies } from "./views/Companies";
@@ -16,23 +16,28 @@ function tabFromHash(): Tab {
   return TABS.find((t) => t.toLowerCase() === raw) ?? "Overview";
 }
 
-export function App() {
-  // The active tab lives in the URL hash so tabs are deep-linkable and the browser back/forward
-  // buttons move between them. We sync React state ↔ hash rather than add a router dependency.
-  const [tab, setTab] = useState<Tab>(tabFromHash);
-  const version = useVersion();
-  const { theme, toggle } = useTheme();
+function subscribeToHash(cb: () => void): () => void {
+  window.addEventListener("hashchange", cb);
+  return () => window.removeEventListener("hashchange", cb);
+}
 
-  useEffect(() => {
-    const onHashChange = () => setTab(tabFromHash());
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
-
-  // Updating the hash fires `hashchange`, which sets the tab — keeping one source of truth.
+/** The active tab, read from the URL hash. Mirrors `useTheme`'s useSyncExternalStore shape so the
+ *  two "sync external browser state into React" patterns are consistent. The hash is the single
+ *  source of truth; selecting a tab writes it and the store re-reads. */
+function useHashTab(): { tab: Tab; selectTab: (t: Tab) => void } {
+  const tab = useSyncExternalStore(subscribeToHash, tabFromHash);
   const selectTab = (t: Tab) => {
     window.location.hash = t.toLowerCase();
   };
+  return { tab, selectTab };
+}
+
+export function App() {
+  // The active tab lives in the URL hash so tabs are deep-linkable and the browser back/forward
+  // buttons move between them — no router dependency.
+  const { tab, selectTab } = useHashTab();
+  const version = useVersion();
+  const { theme, toggle } = useTheme();
 
   return (
     <div className="min-h-screen bg-canvas text-fg">
@@ -83,12 +88,24 @@ export function App() {
         </div>
       </header>
 
+      {/* Keep every tab mounted and toggle visibility, so local view state (Matches filters, draft
+          form text) survives tab switches instead of being discarded on unmount. */}
       <main className="mx-auto max-w-3xl px-4 py-6">
-        {tab === "Overview" ? <Overview /> : null}
-        {tab === "Matches" ? <Matches /> : null}
-        {tab === "Skills" ? <Skills /> : null}
-        {tab === "Companies" ? <Companies /> : null}
-        {tab === "Settings" ? <Settings /> : null}
+        <div hidden={tab !== "Overview"}>
+          <Overview />
+        </div>
+        <div hidden={tab !== "Matches"}>
+          <Matches />
+        </div>
+        <div hidden={tab !== "Skills"}>
+          <Skills />
+        </div>
+        <div hidden={tab !== "Companies"}>
+          <Companies />
+        </div>
+        <div hidden={tab !== "Settings"}>
+          <Settings />
+        </div>
       </main>
     </div>
   );

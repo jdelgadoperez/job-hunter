@@ -1,30 +1,62 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type MatchFilters, type SettingsUpdate, type UserAction } from "./api";
+import {
+  api,
+  type MatchFilters,
+  type ScoredPosting,
+  type SettingsUpdate,
+  type UserAction,
+} from "./api";
 
 export function useMatches(minScore: number, filters: MatchFilters = {}) {
   return useQuery({
+    // An object key (not a positional array) so adding/reordering a filter can't silently break
+    // cache dedup, and devtools show self-documenting key/value pairs. TanStack serializes object
+    // keys structurally, so two equivalent filter sets still hit the same cache entry.
     queryKey: [
       "matches",
-      minScore,
-      filters.includeExpired ?? false,
-      filters.includeDismissed ?? false,
-      filters.remoteOnly ?? false,
-      filters.country ?? "",
-      filters.includeApplied ?? false,
-      filters.onlyApplied ?? false,
+      {
+        minScore,
+        includeExpired: filters.includeExpired ?? false,
+        includeDismissed: filters.includeDismissed ?? false,
+        remoteOnly: filters.remoteOnly ?? false,
+        country: filters.country ?? "",
+        includeApplied: filters.includeApplied ?? false,
+        onlyApplied: filters.onlyApplied ?? false,
+      },
     ],
     queryFn: () => api.getMatches(minScore, filters),
   });
 }
 
+type MatchActionVars = { id: string; action: UserAction | null };
+
 export function useMatchAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { id: string; action: UserAction | null }) => {
+    mutationFn: async (vars: MatchActionVars) => {
       if (vars.action) await api.setMatchAction(vars.id, vars.action);
       else await api.clearMatchAction(vars.id);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["matches"] }),
+    // Optimistically patch the posting's action across every cached matches query so the button
+    // state flips instantly. Snapshot the prior cache for rollback on error.
+    onMutate: async (vars: MatchActionVars) => {
+      await qc.cancelQueries({ queryKey: ["matches"] });
+      const snapshot = qc.getQueriesData<ScoredPosting[]>({ queryKey: ["matches"] });
+      for (const [key, data] of snapshot) {
+        if (!data) continue;
+        qc.setQueryData(
+          key,
+          data.map((m) => (m.posting.id === vars.id ? { ...m, action: vars.action } : m)),
+        );
+      }
+      return { snapshot };
+    },
+    onError: (_error, _vars, context) => {
+      for (const [key, data] of context?.snapshot ?? []) qc.setQueryData(key, data);
+    },
+    // Re-sync with the server regardless of outcome (a successful write can change expiry/ordering
+    // that the optimistic patch doesn't model).
+    onSettled: () => qc.invalidateQueries({ queryKey: ["matches"] }),
   });
 }
 
@@ -130,10 +162,9 @@ export function useStartScan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.startScan,
-    onSuccess: (status) => {
-      qc.setQueryData(["scan-status"], status);
-      // A finished scan means new matches — refresh them.
-      if (status.state === "done") qc.invalidateQueries({ queryKey: ["matches"] });
-    },
+    // POST /api/scan returns as soon as the background job starts, so this status is always
+    // "running" (or "idle" on a 409) — never "done". Scan completion is detected by useScanStatus's
+    // poll and invalidates ["matches"] from Overview, so there's nothing to refresh here.
+    onSuccess: (status) => qc.setQueryData(["scan-status"], status),
   });
 }

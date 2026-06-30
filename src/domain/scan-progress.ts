@@ -29,5 +29,11 @@ export function formatProgress(event: ScanProgressEvent): string {
       return `Re-checking ${plural(event.total, "open role")}…`;
     case "summary":
       return `Scanned and scored ${plural(event.count, "posting")}`;
+    default: {
+      // Exhaustiveness guard: a new ScanProgressEvent variant becomes a compile error here rather
+      // than silently returning undefined for an unhandled kind.
+      const _exhaustive: never = event;
+      return _exhaustive;
+    }
   }
 }

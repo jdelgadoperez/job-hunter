@@ -18,6 +18,7 @@ export function Companies() {
   const removeCompany = useRemoveCompany();
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const sortedCompanies = useMemo(
     () => (companies.data ? [...companies.data].sort(byLabel) : []),
@@ -32,6 +33,13 @@ export function Companies() {
     e.preventDefault();
     const careersUrl = url.trim();
     if (!careersUrl) return;
+    // Mirror the server's protocol check client-side so an ftp:/mailto: URL fails fast with inline
+    // feedback instead of a round-trip 400. (type="url" alone accepts those schemes.)
+    if (!/^https?:\/\//i.test(careersUrl)) {
+      setUrlError("Enter a URL starting with http:// or https://");
+      return;
+    }
+    setUrlError(null);
     addCompany.mutate(
       { careersUrl, name: name.trim() || undefined },
       {
@@ -68,6 +76,7 @@ export function Companies() {
             Add
           </Button>
         </form>
+        {urlError ? <p className="mt-2 text-sm text-danger">{urlError}</p> : null}
         {addCompany.isError ? <ErrorNote error={addCompany.error} /> : null}
       </Card>
 
@@ -95,7 +104,8 @@ export function Companies() {
               <button
                 type="button"
                 onClick={() => removeCompany.mutate(c.careersUrl)}
-                className="shrink-0 rounded text-sm text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={removeCompany.isPending && removeCompany.variables === c.careersUrl}
+                className="shrink-0 rounded text-sm text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               >
                 Remove
               </button>
@@ -114,7 +124,7 @@ export function Companies() {
           <ul className="mt-3 space-y-1">
             {sortedManualReview.map((c) => (
               <li key={c.careersUrl} className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="truncate text-fg">{c.name ?? c.careersUrl}</span>
+                <span className="min-w-0 truncate text-fg">{c.name ?? c.careersUrl}</span>
                 <a
                   href={c.careersUrl}
                   target="_blank"

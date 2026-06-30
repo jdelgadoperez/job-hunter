@@ -5,7 +5,7 @@ import type { CompanyLead } from "@app/discovery/sources/types";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { detectLiveness } from "@app/freshness/detect-liveness";
-import { fetchLivenessSignal } from "@app/freshness/fetch-liveness";
+import { fetchLivenessSignalsForBoard } from "@app/freshness/fetch-liveness";
 import { parseCountry } from "@app/matching/location-filter";
 import type { ScoreOutcome } from "@app/matching/score-run";
 import type { Fetcher } from "@app/net/fetcher";
@@ -273,18 +273,36 @@ async function recheckLiveness(
   if (candidates.length === 0) return 0;
   onProgress?.({ kind: "recheck", total: candidates.length });
 
+  // Group by board (source + company) so each ATS feed is fetched once, not once per stale posting.
+  const groups = new Map<string, { source: string; company: string; postings: JobPosting[] }>();
+  for (const posting of candidates) {
+    const key = `${posting.source} ${posting.company}`;
+    const group = groups.get(key);
+    if (group) group.postings.push(posting);
+    else groups.set(key, { source: posting.source, company: posting.company, postings: [posting] });
+  }
+
   const limit = pLimit(RECHECK_CONCURRENCY);
-  const results = await Promise.all(
-    candidates.map((posting) =>
+  const expiredCounts = await Promise.all(
+    [...groups.values()].map((group) =>
       limit(async () => {
-        const signal = await fetchLivenessSignal(posting, { fetcher });
-        return detectLiveness(signal) === "expired"
-          ? await repo.markPostingExpired(posting.id)
-          : false;
+        const signals = await fetchLivenessSignalsForBoard(
+          group.source,
+          group.company,
+          group.postings,
+          { fetcher },
+        );
+        let expired = 0;
+        for (const posting of group.postings) {
+          const signal = signals.get(posting.id);
+          if (!signal || detectLiveness(signal) !== "expired") continue;
+          if (await repo.markPostingExpired(posting.id)) expired += 1;
+        }
+        return expired;
       }),
     ),
   );
-  return results.filter(Boolean).length;
+  return expiredCounts.reduce((total, count) => total + count, 0);
 }
 
 function usd(amount: number): string {

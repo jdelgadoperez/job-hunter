@@ -9,6 +9,11 @@ import { extractJsonLdPostings } from "./jsonld";
  */
 export interface PageRenderer {
   render(url: string): Promise<string>;
+  /**
+   * Release any resources held across renders (e.g. a shared headless browser). Optional: the
+   * fake renderer used in tests holds nothing. Called once by `discover` after the run completes.
+   */
+  dispose?(): Promise<void>;
 }
 
 /**

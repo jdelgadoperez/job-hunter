@@ -19,6 +19,7 @@
  *   success  #047857 emerald            #34d399
  *   warning  #b45309 amber              #fbbf24
  *   danger   #dc2626 red                #f87171
+ *   info     #1d4ed8 blue (badges)      #93c5fd
  *   link     #4338ca                    #a5b4fc
  */
 @theme {
@@ -28,15 +29,22 @@
   --color-border: #e2e8f0;
   --color-fg: #0f172a;
   --color-muted: #475569;
-  --color-faint: #64748b;
+  /* #475569 muted is ~7:1 on white; faint sits just below it but stays AA-compliant (≥4.5:1) at the
+     12px sizes it's used at — darker than the old #64748b which was borderline (~4.6:1). */
+  --color-faint: #596578;
   --color-primary: #4f46e5;
   --color-primary-hover: #4338ca;
   --color-on-primary: #ffffff;
   --color-success: #047857;
   --color-warning: #b45309;
   --color-danger: #dc2626;
+  --color-info: #1d4ed8;
+  --color-info-surface: #dbeafe;
   --color-link: #4338ca;
   --color-ring: #6366f1;
+  /* Deliberately terminal-styled (near-black in both themes) for the live scan log. */
+  --color-code-bg: #0f172a;
+  --color-code-fg: #e2e8f0;
 }
 
 .dark {
@@ -53,8 +61,12 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-danger: #f87171;
+  --color-info: #93c5fd;
+  --color-info-surface: #1e3a8a;
   --color-link: #a5b4fc;
   --color-ring: #818cf8;
+  --color-code-bg: #0f172a;
+  --color-code-fg: #e2e8f0;
 }
 
 @layer base {
@@ -66,5 +78,16 @@
 @layer components {
   .input {
     @apply mt-1 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40;
+  }
+
+  /* Native checkboxes/radios/range: pick up the indigo accent and a focus ring matching the rest of
+     the app, instead of OS-default chrome that reads as disconnected (especially in dark mode). */
+  .control {
+    @apply accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40;
+  }
+
+  /* Native <select>: bordered/themed like .input but inline-sized for toolbars. */
+  .select {
+    @apply rounded-md border border-border bg-surface px-2 py-0.5 text-sm text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40;
   }
 }

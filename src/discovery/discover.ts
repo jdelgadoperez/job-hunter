@@ -154,28 +154,35 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     return { ok: true, postings };
   };
 
-  const collected = await Promise.all(
-    leads.map(async (lead) => {
-      await waitTurn();
-      return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
-        started += 1;
-        deps.onProgress?.({
-          kind: "company",
-          name: lead.company,
-          // Same-named employers can appear under several distinct boards; the host disambiguates
-          // them in the progress line (e.g. "LawnStarter (boards.greenhouse.io)").
-          host: hostnameOf(lead.careersUrl),
-          index: started,
-          total: leads.length,
+  let collected: { lead: CompanyLead; result: ConnectorResult }[];
+  try {
+    collected = await Promise.all(
+      leads.map(async (lead) => {
+        await waitTurn();
+        return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+          started += 1;
+          deps.onProgress?.({
+            kind: "company",
+            name: lead.company,
+            // Same-named employers can appear under several distinct boards; the host disambiguates
+            // them in the progress line (e.g. "LawnStarter (boards.greenhouse.io)").
+            host: hostnameOf(lead.careersUrl),
+            index: started,
+            total: leads.length,
+          });
+          try {
+            return { lead, result: await fetchLead(lead) };
+          } catch (error) {
+            return { lead, result: { ok: false, warning: errorMessage(error) } };
+          }
         });
-        try {
-          return { lead, result: await fetchLead(lead) };
-        } catch (error) {
-          return { lead, result: { ok: false, warning: errorMessage(error) } };
-        }
-      });
-    }),
-  );
+      }),
+    );
+  } finally {
+    // Release the shared headless browser (if the run used the browser fallback) once, after all
+    // renders are done — rather than launching and closing one per company.
+    await renderer.dispose?.();
+  }
 
   for (const { lead, result } of collected) {
     if (!result.ok) {
