@@ -4,9 +4,9 @@ import { resolvePostingFeed } from "@app/discovery/feed/resolve-feed";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
-import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@app/domain/types";
+import type { Warning } from "@app/domain/types";
+import { createAbortingScorer } from "@app/matching/aborting-scorer";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
-import { MatchPayloadSchema } from "@app/matching/llm-schema";
 import { LlmTriager } from "@app/matching/llm-triager";
 import { formatUsageSummary, UsageAccumulator } from "@app/matching/llm-usage";
 import { resolveRemoteOnly } from "@app/matching/resolve-remote";
@@ -16,11 +16,9 @@ import {
   resolveScorerModel,
   settingsWithEnvKey,
 } from "@app/matching/resolve-settings";
-import { buildScorePrompt, toMatchResult } from "@app/matching/score-prompt";
-import { isUsageLimitError, runScoreRun } from "@app/matching/score-run";
+import { runScoreRun } from "@app/matching/score-run";
 import { REMOTE_ONLY_SETTING } from "@app/matching/settings-keys";
 import { AnthropicTriageClient } from "@app/matching/triage-client";
-import { errorMessage } from "@app/net/error-message";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import { readResumeText } from "@app/profile/read-resume";
@@ -134,23 +132,12 @@ export async function runScoreCommand(
 
   const heuristic = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
   const rawClient = provider.createClient({ apiKey, model, onUsage });
-  const abortingScorer: Scorer = {
-    score: async (profileArg: SkillProfile, posting: JobPosting): Promise<MatchResult> => {
-      try {
-        const payload = await rawClient.score(buildScorePrompt(profileArg, posting, remoteOnly));
-        const parsed = MatchPayloadSchema.safeParse(payload);
-        if (!parsed.success) return heuristic.score(profileArg, posting);
-        return toMatchResult(parsed.data);
-      } catch (error) {
-        if (isUsageLimitError(error)) throw error; // let score-run abort the whole run
-        warnings.push({
-          source: "llm-scorer",
-          message: `LLM scoring failed: ${errorMessage(error)}; using the heuristic scorer`,
-        });
-        return heuristic.score(profileArg, posting);
-      }
-    },
-  };
+  const abortingScorer = createAbortingScorer({
+    client: rawClient,
+    heuristic,
+    remoteOnly,
+    onWarning: (warning) => warnings.push(warning),
+  });
 
   const triager = new LlmTriager(
     new AnthropicTriageClient({ apiKey, model, onUsage }),
