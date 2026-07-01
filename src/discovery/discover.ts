@@ -144,9 +144,9 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     return { ok: true, postings };
   };
 
-  let collected: { lead: CompanyLead; result: ConnectorResult }[];
+  const failed: { lead: CompanyLead; result: Extract<ConnectorResult, { ok: false }> }[] = [];
   try {
-    collected = await Promise.all(
+    const collected = await Promise.all(
       leads.map(async (lead) => {
         await waitTurn();
         return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
@@ -168,46 +168,46 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         });
       }),
     );
-  } finally {
-    // Release the shared headless browser (if the run used the browser fallback) once, after all
-    // renders are done — rather than launching and closing one per company.
-    await renderer.dispose?.();
-  }
 
-  const failed: { lead: CompanyLead; result: Extract<ConnectorResult, { ok: false }> }[] = [];
-  for (const { lead, result } of collected) {
-    if (!result.ok) {
-      failed.push({ lead, result });
-      continue;
-    }
-    for (const posting of result.postings) {
-      byId.set(posting.id, posting);
-    }
-  }
-
-  if (failed.length > 0) {
-    const retried = await Promise.all(
-      failed.map(async ({ lead }) => {
-        try {
-          return { lead, result: await fetchLead(lead) };
-        } catch (error) {
-          return { lead, result: { ok: false, warning: errorMessage(error) } as ConnectorResult };
-        }
-      }),
-    );
-    for (const { lead, result } of retried) {
+    for (const { lead, result } of collected) {
       if (!result.ok) {
-        warnings.push({
-          source: lead.company,
-          message: result.warning,
-          careersUrl: lead.careersUrl,
-        });
+        failed.push({ lead, result });
         continue;
       }
       for (const posting of result.postings) {
         byId.set(posting.id, posting);
       }
     }
+
+    if (failed.length > 0) {
+      const retried = await Promise.all(
+        failed.map(async ({ lead }): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+          try {
+            return { lead, result: await fetchLead(lead) };
+          } catch (error) {
+            return { lead, result: { ok: false, warning: errorMessage(error) } };
+          }
+        }),
+      );
+      for (const { lead, result } of retried) {
+        if (!result.ok) {
+          warnings.push({
+            source: lead.company,
+            message: result.warning,
+            careersUrl: lead.careersUrl,
+          });
+          continue;
+        }
+        for (const posting of result.postings) {
+          byId.set(posting.id, posting);
+        }
+      }
+    }
+  } finally {
+    // Release the shared headless browser (if the run used the browser fallback) once, after all
+    // renders are done — main pass AND retry pass — rather than launching and closing one per
+    // company or per pass.
+    await renderer.dispose?.();
   }
 
   const skipped = leads.filter((lead) => isUnscrapableHost(lead.careersUrl));
