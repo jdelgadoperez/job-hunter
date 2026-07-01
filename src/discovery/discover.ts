@@ -195,7 +195,7 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
           }
         }),
       );
-      const retriedUrls = new Set(toRetry.map(({ lead }) => lead.careersUrl));
+      const retriedUrls = new Set(toRetry.map(({ lead }) => normalizeCareersUrl(lead.careersUrl)));
       for (const { lead, result } of retried) {
         if (!result.ok) {
           warnings.push({
@@ -211,7 +211,7 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
       }
       // Anything skipped (in skipRetryFor) keeps its original main-pass warning.
       for (const { lead, result } of failed) {
-        if (retriedUrls.has(lead.careersUrl)) continue;
+        if (retriedUrls.has(normalizeCareersUrl(lead.careersUrl))) continue;
         warnings.push({
           source: lead.company,
           message: result.warning,
