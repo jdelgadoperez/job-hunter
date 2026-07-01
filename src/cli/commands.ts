@@ -1,6 +1,6 @@
 import { type DiscoverDeps, discover } from "@app/discovery/discover";
 import type { PostingFeed } from "@app/discovery/feed/posting-feed";
-import type { ScanStore } from "@app/discovery/scan-store";
+import type { ScanScope, ScanStore } from "@app/discovery/scan-store";
 import type { CompanyLead } from "@app/discovery/sources/types";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Scorer, SkillProfile, Warning } from "@app/domain/types";
@@ -103,6 +103,10 @@ export type SourcingDeps = {
    */
   feed?: PostingFeed;
   onProgress?: (event: ScanProgressEvent) => void;
+  /** `"retry"` scopes the run to the crawled subset: no removed-diff, no liveness re-check, no
+   * expiry, and the scan is recorded as a retry so it's excluded from the staleness clock.
+   * Defaults to `"full"` (the normal whole-directory scan and the hosted worker). */
+  scope?: ScanScope;
 };
 
 /** Result of a sourcing run: the postings + companies seen, the directory diff, and expiry count. */
@@ -124,9 +128,10 @@ export type SourcingOutcome = {
  */
 export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> {
   const { repo, feed, onProgress } = deps;
+  const scope = deps.scope ?? "full";
   // `await` every store call: a no-op for the synchronous SQLite Repository, but required for an
   // async Postgres-backed store (both satisfy the ScanStore seam).
-  const scanId = await repo.startScan();
+  const scanId = await repo.startScan(scope);
 
   // Remote mode (feed set): pull the shared feed AND crawl only tracked companies locally. Otherwise
   // run the full local crawl. Both yield postings + the companies to snapshot + any warnings.
@@ -134,9 +139,12 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
     ? await sourceFromFeedAndTracked(feed, deps.discoverDeps, onProgress)
     : await sourceFromFullCrawl(deps.discoverDeps, onProgress);
 
+  // A scoped retry only crawls a subset, so the whole-directory removed-diff would flag every
+  // uncrawled healthy company as "gone". Skip it; still upsert the crawled companies.
   const diff = await repo.recordDirectory(
     scanId,
     companies.map((c) => ({ careersUrl: c.careersUrl, name: c.company })),
+    { computeRemoved: scope === "full" },
   );
 
   // Enrich each posting with a normalized country derived from its location string — but only when
@@ -160,14 +168,13 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
   // Precise liveness re-check: postings we didn't see this scan get their source re-fetched and are
   // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
   // the consecutive-miss heuristic. "unknown" (unreachable) is left for that heuristic backstop.
-  const recheckedExpired = await recheckLiveness(
-    repo,
-    scanId,
-    deps.discoverDeps.fetcher,
-    onProgress,
-  );
-
-  const expired = recheckedExpired + (await repo.expireStalePostings(scanId));
+  // A scoped retry refreshes only the companies it crawled; it must not re-check or expire the
+  // postings of companies it never looked at (that treats "not seen this scan" as "gone").
+  const expired =
+    scope === "full"
+      ? (await recheckLiveness(repo, scanId, deps.discoverDeps.fetcher, onProgress)) +
+        (await repo.expireStalePostings(scanId))
+      : 0;
   await repo.finishScan(scanId, {
     postingsSeen: postings.length,
     companiesSeen: companies.length,
