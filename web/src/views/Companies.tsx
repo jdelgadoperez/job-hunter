@@ -1,6 +1,13 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
-import { useAddCompany, useCompanies, useManualReviewCompanies, useRemoveCompany } from "../hooks";
+import {
+  useAddCompany,
+  useCompanies,
+  useManualReviewCompanies,
+  useNeedsAttention,
+  useRemoveCompany,
+  useRetryFailedScan,
+} from "../hooks";
 
 type CompanyEntry = { careersUrl: string; name?: string };
 
@@ -14,8 +21,10 @@ const byLabel = (a: CompanyEntry, b: CompanyEntry) =>
 export function Companies() {
   const companies = useCompanies();
   const manualReview = useManualReviewCompanies();
+  const needsAttention = useNeedsAttention();
   const addCompany = useAddCompany();
   const removeCompany = useRemoveCompany();
+  const retryFailedScan = useRetryFailedScan();
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -133,6 +142,33 @@ export function Companies() {
                 >
                   open ↗
                 </a>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {needsAttention.data && needsAttention.data.length > 0 ? (
+        <Card>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-semibold text-fg">
+              Needs attention ({needsAttention.data.length})
+            </h2>
+            <Button onClick={() => retryFailedScan.mutate()} disabled={retryFailedScan.isPending}>
+              Rescan
+            </Button>
+          </div>
+          <p className="mt-1 text-xs text-faint">
+            These companies have failed to fetch on 5+ consecutive scans — they're still crawled
+            normally, but no longer auto-retried within a run. Rescan to try them again now.
+          </p>
+          <ul className="mt-3 space-y-1">
+            {needsAttention.data.map((c) => (
+              <li key={c.careersUrl} className="text-sm">
+                <span className="font-medium text-fg">{c.company}</span>{" "}
+                <span className="text-faint">
+                  — {c.message} ({c.consecutiveFailures} scans)
+                </span>
               </li>
             ))}
           </ul>
