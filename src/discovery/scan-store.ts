@@ -21,7 +21,11 @@ export type DirectoryDiff = { newCompanies: CompanyRef[]; removedCompanies: Comp
  */
 export interface ScanStore {
   startScan(kind?: ScanScope): number | Promise<number>;
-  recordDirectory(scanId: number, companies: CompanyRef[]): DirectoryDiff | Promise<DirectoryDiff>;
+  recordDirectory(
+    scanId: number,
+    companies: CompanyRef[],
+    options?: { computeRemoved?: boolean },
+  ): DirectoryDiff | Promise<DirectoryDiff>;
   savePosting(posting: JobPosting, scanId?: number | null): void | Promise<void>;
   /**
    * Optional bulk upsert of many postings in one round-trip — the same semantics as calling

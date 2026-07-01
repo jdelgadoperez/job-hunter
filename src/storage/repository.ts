@@ -463,7 +463,9 @@ export class Repository {
   recordDirectory(
     scanId: number,
     companiesIn: CompanyRef[],
+    options: { computeRemoved?: boolean } = {},
   ): { newCompanies: CompanyRef[]; removedCompanies: CompanyRef[] } {
+    const computeRemoved = options.computeRemoved ?? true;
     // Normalized so case/trailing-slash/query-string variants of the same URL update one row
     // instead of the `PRIMARY KEY` admitting a near-duplicate (see `normalizeCareersUrl`).
     const companies = companiesIn.map((c) => ({
@@ -483,9 +485,10 @@ export class Repository {
     const prevScan = prevRow.id;
     const isBaseline = existing.length === 0;
 
-    const newCompanies = isBaseline ? [] : companies.filter((c) => !existingUrls.has(c.careersUrl));
+    const newCompanies =
+      !computeRemoved || isBaseline ? [] : companies.filter((c) => !existingUrls.has(c.careersUrl));
     const removedCompanies =
-      isBaseline || prevScan === null
+      !computeRemoved || isBaseline || prevScan === null
         ? []
         : existing
             .filter((e) => e.last_seen_scan === prevScan && !currentUrls.has(e.careers_url))

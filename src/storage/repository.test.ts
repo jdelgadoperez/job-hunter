@@ -202,6 +202,28 @@ describe("incremental scans — directory diff", () => {
     ]);
     repo.close();
   });
+
+  it("does not report removed companies when computeRemoved is false", () => {
+    const repo = newRepo();
+    const scan1 = repo.startScan("full");
+    repo.recordDirectory(scan1, [
+      { careersUrl: "https://a.example/careers" },
+      { careersUrl: "https://b.example/careers" },
+    ]);
+    const scan2 = repo.startScan("retry");
+    const diff = repo.recordDirectory(scan2, [{ careersUrl: "https://a.example/careers" }], {
+      computeRemoved: false,
+    });
+    expect(diff.removedCompanies).toEqual([]);
+    expect(diff.newCompanies).toEqual([]);
+    // But company A was still upserted/refreshed this scan (last_seen_scan advanced).
+    // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+    const a = repo["db"]
+      .prepare("SELECT last_seen_scan FROM companies WHERE careers_url = ?")
+      .get("https://a.example/careers") as { last_seen_scan: number };
+    expect(a.last_seen_scan).toBe(scan2);
+    repo.close();
+  });
 });
 
 describe("scan kind", () => {
