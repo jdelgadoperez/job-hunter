@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS tracked_companies (
   added_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS failed_leads (
+  careers_url TEXT PRIMARY KEY,
+  company TEXT,
+  message TEXT NOT NULL,
+  consecutive_failures INTEGER NOT NULL DEFAULT 1,
+  last_failed_scan INTEGER NOT NULL
+);
+
 -- One row per scan run. Sequential id drives posting expiry; the diff columns hold the
 -- directory delta (companies that appeared/disappeared vs. the previous snapshot) as JSON.
 CREATE TABLE IF NOT EXISTS scans (

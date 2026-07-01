@@ -496,6 +496,73 @@ export class Repository {
   }
 
   /**
+   * Record this scan's per-company failures (final, post-retry warnings with a `careersUrl`).
+   * A company already in `failed_leads` gets its `consecutive_failures` incremented and message
+   * updated; a new failure is inserted at 1. Any company NOT in `failures` that currently has a row
+   * is deleted — it recovered, so its failure history is cleared rather than kept stale.
+   */
+  recordScanFailures(
+    scanId: number,
+    failures: { careersUrl: string; company: string; message: string }[],
+  ): void {
+    const normalized = failures.map((f) => ({
+      ...f,
+      careersUrl: normalizeCareersUrl(f.careersUrl),
+    }));
+    const currentUrls = new Set(normalized.map((f) => f.careersUrl));
+
+    const existing = this.db.prepare("SELECT careers_url FROM failed_leads").all() as {
+      careers_url: string;
+    }[];
+    const toDelete = existing.filter((e) => !currentUrls.has(e.careers_url));
+
+    const upsert = this.db.prepare(
+      `INSERT INTO failed_leads (careers_url, company, message, consecutive_failures, last_failed_scan)
+       VALUES (@careersUrl, @company, @message, 1, @scanId)
+       ON CONFLICT(careers_url) DO UPDATE SET
+         company = excluded.company,
+         message = excluded.message,
+         consecutive_failures = failed_leads.consecutive_failures + 1,
+         last_failed_scan = excluded.last_failed_scan`,
+    );
+    const del = this.db.prepare("DELETE FROM failed_leads WHERE careers_url = ?");
+
+    const transaction = this.db.transaction(() => {
+      for (const row of toDelete) del.run(row.careers_url);
+      for (const f of normalized) upsert.run({ ...f, scanId });
+    });
+    transaction();
+  }
+
+  /** Companies with `consecutive_failures >= threshold`, for the "Needs attention" CLI/UI surfaces. */
+  listNeedsAttention(
+    threshold = 5,
+  ): { careersUrl: string; company: string; message: string; consecutiveFailures: number }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT careers_url, company, message, consecutive_failures FROM failed_leads
+         WHERE consecutive_failures >= ? ORDER BY consecutive_failures DESC, careers_url`,
+      )
+      .all(threshold) as {
+      careers_url: string;
+      company: string | null;
+      message: string;
+      consecutive_failures: number;
+    }[];
+    return rows.map((row) => ({
+      careersUrl: row.careers_url,
+      company: row.company ?? row.careers_url,
+      message: row.message,
+      consecutiveFailures: row.consecutive_failures,
+    }));
+  }
+
+  /** Just the normalized URLs at/over `threshold` — for `discover()`'s retry pass to skip. */
+  listRetrySkipUrls(threshold = 5): string[] {
+    return this.listNeedsAttention(threshold).map((row) => row.careersUrl);
+  }
+
+  /**
    * Mark postings not seen for `staleAfter` consecutive scans as expired (they vanished from their
    * board). Postings never stamped by a scan (legacy rows) are left alone. Returns how many expired.
    */

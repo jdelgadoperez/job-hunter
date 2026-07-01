@@ -204,6 +204,86 @@ describe("incremental scans — directory diff", () => {
   });
 });
 
+describe("failed leads", () => {
+  it("inserts a new row at consecutive_failures=1 on first failure", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(1, [
+      { careersUrl: "https://boom.com/careers", company: "Boom", message: "render crashed" },
+    ]);
+    expect(repo.listNeedsAttention(1)).toEqual([
+      {
+        careersUrl: "https://boom.com/careers",
+        company: "Boom",
+        message: "render crashed",
+        consecutiveFailures: 1,
+      },
+    ]);
+    repo.close();
+  });
+
+  it("increments consecutive_failures on repeated failure across scans", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(1, [
+      { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
+    ]);
+    repo.recordScanFailures(2, [
+      { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout again" },
+    ]);
+    const [row] = repo.listNeedsAttention(1);
+    expect(row?.consecutiveFailures).toBe(2);
+    expect(row?.message).toBe("timeout again");
+    repo.close();
+  });
+
+  it("deletes the row when a previously-failing company recovers (absent from a later call)", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(1, [
+      { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
+    ]);
+    repo.recordScanFailures(2, []); // Boom recovered — not in this scan's failure list
+    expect(repo.listNeedsAttention(1)).toEqual([]);
+    repo.close();
+  });
+
+  it("listNeedsAttention only returns rows at or above the threshold", () => {
+    const repo = newRepo();
+    for (let scanId = 1; scanId <= 3; scanId++) {
+      repo.recordScanFailures(scanId, [
+        { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
+      ]);
+    }
+    expect(repo.listNeedsAttention(5)).toEqual([]);
+    expect(repo.listNeedsAttention(3)).toHaveLength(1);
+    repo.close();
+  });
+
+  it("listRetrySkipUrls returns only the normalized URLs at or above the threshold", () => {
+    const repo = newRepo();
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(scanId, [
+        { careersUrl: "https://Boom.com/careers/", company: "Boom", message: "timeout" },
+      ]);
+    }
+    expect(repo.listRetrySkipUrls(5)).toEqual(["https://boom.com/careers"]);
+    repo.close();
+  });
+
+  it("normalizes careers URLs so casing/trailing-slash variants collapse to one row", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(1, [
+      { careersUrl: "https://Boom.com/careers/", company: "Boom", message: "a" },
+    ]);
+    repo.recordScanFailures(2, [
+      { careersUrl: "https://boom.com/CAREERS", company: "Boom", message: "b" },
+    ]);
+    const rows = repo.listNeedsAttention(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.careersUrl).toBe("https://boom.com/careers");
+    expect(rows[0]?.consecutiveFailures).toBe(2);
+    repo.close();
+  });
+});
+
 describe("incremental scans — posting expiry", () => {
   function seedScored(repo: Repository, id: string, scanId: number): void {
     repo.savePosting(postingWith(id), scanId);
