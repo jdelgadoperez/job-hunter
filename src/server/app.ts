@@ -100,6 +100,7 @@ export function createApp(deps: ServerDeps): Hono {
     const parsed = raw === undefined ? 0 : Number(raw);
     const minScore = Number.isFinite(parsed) ? parsed : 0;
     const country = c.req.query("country") || undefined;
+    const search = c.req.query("search") || undefined;
     return c.json(
       repo.listScoredPostings(minScore, {
         includeExpired: c.req.query("includeExpired") === "true",
@@ -108,6 +109,7 @@ export function createApp(deps: ServerDeps): Hono {
         country,
         includeApplied: c.req.query("includeApplied") === "true",
         onlyApplied: c.req.query("onlyApplied") === "true",
+        search,
       }),
     );
   });

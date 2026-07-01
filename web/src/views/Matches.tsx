@@ -126,6 +126,11 @@ export function Matches() {
   const [country, setCountry] = useState<string | undefined>(undefined);
   const [includeApplied, setIncludeApplied] = useState(false);
   const [onlyApplied, setOnlyApplied] = useState(false);
+  // The controlled input value (updates per keystroke) vs the committed term that drives the query.
+  // The query only re-runs on Enter or blur, so typing doesn't fire a request per character.
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState<string | undefined>(undefined);
+  const commitSearch = () => setSearch(searchInput.trim() || undefined);
   // In the Applied view (onlyApplied) the include*/expired flags are meaningless — the server shows
   // exactly the applied set (expired included) — so we send only the filters that still apply. This
   // keeps the key identical to the Applied-count query (real dedup) and avoids leaking a stale
@@ -133,15 +138,20 @@ export function Matches() {
   const matches = useMatches(
     minScore,
     onlyApplied
-      ? { remoteOnly, country, onlyApplied: true }
-      : { includeExpired, includeDismissed, remoteOnly, country, includeApplied },
+      ? { remoteOnly, country, onlyApplied: true, search }
+      : { includeExpired, includeDismissed, remoteOnly, country, includeApplied, search },
   );
 
   // Applied count for the badge. It must agree with what the Applied view actually shows, so it
   // carries the SAME non-action filters as the main query (minScore, remoteOnly, country) plus
   // onlyApplied. When the Applied view is already active the main query IS that result (identical
   // key ⇒ TanStack serves it from cache, no extra fetch).
-  const appliedCountSource = useMatches(minScore, { remoteOnly, country, onlyApplied: true });
+  const appliedCountSource = useMatches(minScore, {
+    remoteOnly,
+    country,
+    onlyApplied: true,
+    search,
+  });
   const appliedCount = appliedCountSource.data?.length ?? 0;
 
   // Country dropdown options are derived from the main query rather than a separate fetch. Selecting
@@ -158,7 +168,8 @@ export function Matches() {
     remoteOnly ||
     includeApplied ||
     onlyApplied ||
-    country !== undefined;
+    country !== undefined ||
+    search !== undefined;
 
   const seenCountries = useRef(new Set<string>());
   const countryOptions = useMemo(() => {
@@ -173,6 +184,18 @@ export function Matches() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <input
+          type="text"
+          aria-label="Search matches"
+          placeholder="Search title, company, location…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitSearch();
+          }}
+          onBlur={commitSearch}
+          className="select w-64"
+        />
         <label htmlFor="minScore" className="text-sm text-muted">
           Minimum score: <span className="font-semibold">{minScore}</span>
         </label>

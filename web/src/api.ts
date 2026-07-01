@@ -47,6 +47,7 @@ export type MatchFilters = {
   country?: string;
   includeApplied?: boolean;
   onlyApplied?: boolean;
+  search?: string;
 };
 
 const TrackedCompanySchema = z.object({ careersUrl: z.string(), name: z.string().optional() });
@@ -200,6 +201,7 @@ export const api = {
     if (filters.country) params.set("country", filters.country);
     if (filters.includeApplied) params.set("includeApplied", "true");
     if (filters.onlyApplied) params.set("onlyApplied", "true");
+    if (filters.search) params.set("search", filters.search);
     return request(`/api/matches?${params}`, z.array(ScoredPostingSchema));
   },
   setMatchAction: (id: string, action: UserAction) =>

@@ -26,6 +26,8 @@ export type ListMatchesOptions = {
   country?: string;
   includeApplied?: boolean;
   onlyApplied?: boolean;
+  /** Case-insensitive substring match across title, company, location, and description. */
+  search?: string;
 };
 
 /**
@@ -201,10 +203,23 @@ export class Repository {
     const countrySql =
       opts.country !== undefined ? " AND (p.country = ? COLLATE NOCASE OR p.country IS NULL)" : "";
 
-    // Build positional params as a plain array — no tuple assertion needed.
-    // minScore is always first; the country value is appended only when the clause is present.
+    // Free-text search across the fields shown on a match card plus the full description. NOCASE is
+    // applied per-column (not once after the group) so every LIKE is case-insensitive, and each LIKE
+    // gets its own `%term%` param. An empty/whitespace term is treated as no filter.
+    const searchTerm = opts.search?.trim();
+    const searchSql = searchTerm
+      ? " AND (p.title LIKE ? COLLATE NOCASE OR p.company LIKE ? COLLATE NOCASE" +
+        " OR p.location LIKE ? COLLATE NOCASE OR p.description LIKE ? COLLATE NOCASE)"
+      : "";
+
+    // Build positional params as a plain array — no tuple assertion needed. minScore is always first;
+    // each subsequent clause pushes its params in the order the clause appears in the SQL string.
     const params: (string | number)[] = [minScore];
     if (opts.country !== undefined) params.push(opts.country);
+    if (searchTerm) {
+      const like = `%${searchTerm}%`;
+      params.push(like, like, like, like);
+    }
 
     // Action visibility. onlyApplied is an explicit "show me what I applied to" view and overrides
     // the default hides. Otherwise dismissed and applied are each hidden unless their include flag is
@@ -237,7 +252,7 @@ export class Repository {
          FROM match_results m
          JOIN postings p ON p.id = m.posting_id
          LEFT JOIN user_actions ua ON ua.posting_id = p.id
-         WHERE m.score >= ?${hideExpired}${actionSql}${countrySql}
+         WHERE m.score >= ?${hideExpired}${actionSql}${countrySql}${searchSql}
          ORDER BY m.score DESC, p.title`,
       )
       .all(...params) as {
