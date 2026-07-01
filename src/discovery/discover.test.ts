@@ -474,6 +474,49 @@ describe("discover retry pass", () => {
     expect(rendered).toEqual(["https://initech.com/careers"]);
   });
 
+  it("bounds concurrency in the retry pass", async () => {
+    const companies = Array.from({ length: 6 }, (_, i) => ({
+      name: `Company${i}`,
+      url: `https://company${i}.example.com/careers`,
+    }));
+    const attempts = new Map<string, number>();
+    let inFlight = 0;
+    let peak = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        const attempt = (attempts.get(url) ?? 0) + 1;
+        attempts.set(url, attempt);
+        // First attempt (main pass) fails immediately, forcing every lead into the retry pass.
+        if (attempt === 1) throw new Error("render crashed");
+        // Second attempt (retry pass) is observed for concurrency.
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        try {
+          await sleep(5);
+          return JSONLD_HTML;
+        } finally {
+          inFlight -= 1;
+        }
+      },
+    };
+    const reader = new FakeSharedViewReader(airtableData(companies));
+
+    const { warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      concurrency: 2,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // All six leads failed the main pass and succeeded on retry — no warnings left over.
+    expect(warnings).toHaveLength(0);
+    expect(peak).toBeLessThanOrEqual(2);
+  });
+
   it("skips the retry pass for a company in skipRetryFor, but still attempts it on the main pass", async () => {
     let renderCalls = 0;
     const renderer: PageRenderer = {

@@ -187,12 +187,15 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         ({ lead }) => !skipRetryFor.has(normalizeCareersUrl(lead.careersUrl)),
       );
       const retried = await Promise.all(
-        toRetry.map(async ({ lead }): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
-          try {
-            return { lead, result: await fetchLead(lead) };
-          } catch (error) {
-            return { lead, result: { ok: false, warning: errorMessage(error) } };
-          }
+        toRetry.map(async ({ lead }) => {
+          await waitTurn();
+          return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+            try {
+              return { lead, result: await fetchLead(lead) };
+            } catch (error) {
+              return { lead, result: { ok: false, warning: errorMessage(error) } };
+            }
+          });
         }),
       );
       const retriedUrls = new Set(toRetry.map(({ lead }) => normalizeCareersUrl(lead.careersUrl)));
