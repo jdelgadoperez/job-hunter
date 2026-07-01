@@ -111,7 +111,8 @@ describe("Matches company links", () => {
     mockMatches([scored({ id: "a", title: "Engineer", company: "acme-corp" })]);
     renderMatches();
 
-    const website = await screen.findByRole("link", { name: /website — search for acme-corp/i });
+    // The label uses the normalized display name ("Acme Corp"), not the raw slug ("acme-corp").
+    const website = await screen.findByRole("link", { name: /website — search for Acme Corp/i });
     expect(website).toHaveAttribute("target", "_blank");
     expect(website).toHaveAttribute("rel", "noreferrer");
 
@@ -120,6 +121,14 @@ describe("Matches company links", () => {
       expect(link).toHaveAttribute("target", "_blank");
       expect(link.getAttribute("href")).toMatch(/^https:\/\//);
     }
+  });
+
+  it("marks the decorative icons as aria-hidden so only the link label is announced", async () => {
+    mockMatches([scored({ id: "a", title: "Engineer", company: "acme-corp" })]);
+    renderMatches();
+
+    const website = await screen.findByRole("link", { name: /website — search for Acme Corp/i });
+    expect(website.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
   });
 });
 

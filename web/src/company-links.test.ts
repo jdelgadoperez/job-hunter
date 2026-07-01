@@ -30,6 +30,13 @@ describe("companyDisplayName", () => {
   it("leaves a single clean word title-cased", () => {
     expect(companyDisplayName("stripe")).toBe("Stripe");
   });
+
+  it("preserves existing internal capitals instead of lowercasing real names", () => {
+    // Browser-sourced postings carry a real display name, not a slug — don't mangle its casing.
+    expect(companyDisplayName("IBM")).toBe("IBM");
+    expect(companyDisplayName("eBay")).toBe("eBay");
+    expect(companyDisplayName("PostgreSQL")).toBe("PostgreSQL");
+  });
 });
 
 describe("companyLinks", () => {

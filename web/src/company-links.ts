@@ -27,7 +27,10 @@ export function companyDisplayName(raw: string): string {
     else break;
   }
 
-  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  // Only re-case words that are all-lowercase (i.e. slug-derived like "acme"). Words with any
+  // existing uppercase are left alone so real display names keep their casing — "IBM", "eBay",
+  // "PostgreSQL" must not become "Ibm"/"Ebay"/"Postgresql".
+  return words.map((w) => (/[A-Z]/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(" ");
 }
 
 /** The origin (`https://host`) of a URL with a leading `www.` stripped, or null if unparseable. */
