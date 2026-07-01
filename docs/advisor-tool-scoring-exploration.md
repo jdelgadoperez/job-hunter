@@ -60,28 +60,26 @@ Because the `LlmClient` interface (`{ system, user }` in, validated `LlmMatchPay
 change, `LlmScorer`, `createAbortingScorer`, `runScoreRun`, the prompt builder, and every test double
 are untouched. The change is sealed inside the concrete Anthropic client.
 
-## Two things to verify BEFORE committing
+## Model compatibility (confirmed) + one thing still to verify
 
-These are the reason this is an exploration and not a PR.
-
-### 1. The Sonnet-5 ↔ advisor pairing is not in the documented table
-The advisor model **must be at least as capable as the executor**, or the request returns
-`400 invalid_request_error`. The documented valid pairs (tool version `advisor_20260301`, dated
-2026-03-01) are:
+### Sonnet 5 + Opus advisor IS a valid pair
+Per the [live advisor-tool docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool#model-compatibility),
+the advisor must be Sonnet 4.6 or more capable **and** at least as capable as the executor. The
+relevant rows:
 
 | Executor (request `model`) | Valid advisor (tool `model`) |
 |---|---|
-| `claude-haiku-4-5` / `claude-sonnet-4-6` / `claude-opus-4-6` / `claude-opus-4-7` | `claude-opus-4-8` or `claude-opus-4-7` |
-| `claude-opus-4-8` | `claude-opus-4-8` only |
+| `claude-sonnet-5` | `claude-fable-5`, `claude-mythos-5`, `claude-opus-4-8`, `claude-opus-4-7` |
+| `claude-sonnet-4-6` | `claude-fable-5`, `claude-mythos-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6` |
+| `claude-haiku-4-5` | (same advisor set as Sonnet 4.6) |
 
-**`claude-sonnet-5` does not appear in this table** — it is newer than the published pairing list. So
-"Sonnet 5 executor + Opus advisor" is **not documented as valid yet**; it may be accepted, may require
-a Claude-5-tier advisor, or may be rejected. Verify against live docs / a probe request before
-building on it. A safe, fully-documented starting pair today is **`claude-sonnet-4-6` executor +
-`claude-opus-4-8` advisor** — we can prototype with that and swap the executor to `claude-sonnet-5`
-once its pairing is confirmed.
+So **`claude-sonnet-5` executor + `claude-opus-4-8` advisor is documented as valid** — the earlier
+concern (Sonnet 5 missing from the pairing table) was a stale cached reference, now corrected. An
+invalid pair still returns `400 invalid_request_error`, so the probe should confirm the exact pair we
+ship. Note the advisor tool is beta on the **first-party API + Claude Platform on AWS** only (not
+Bedrock/Vertex/Foundry) — fine for our first-party-API scorer.
 
-### 2. Structured output + advisor tool composition
+### The one real open question: structured output + advisor tool composition
 Our scorer relies on `messages.parse()` + `output_config.format` (a zod schema) to get a validated
 `LlmMatchPayload` back. The advisor tool is a **beta** server-side tool, so we need to confirm that
 (a) the beta Messages endpoint still supports `output_config` structured output, and (b) the parse
@@ -99,6 +97,12 @@ helper works under `client.beta.messages.create`. If they don't compose, the fal
 - Deep scores are already **bounded** (`score --limit`, the triage gate), so the blast radius is
   small and easy to preview. Update the `cost` estimate in `llm-providers.ts` (used by
   `score --dry-run`) to reflect advisor pricing so the preview stays honest.
+- **Usage accounting is split.** Advisor calls are a separate sub-inference billed at the advisor
+  model's rates and reported under `usage.iterations[]` (entries with `type: "advisor_message"` vs
+  `type: "message"`); the **top-level `usage` reflects executor tokens only**. Our `UsageAccumulator`
+  (which reads top-level `usage`) would therefore undercount cost — it must sum `usage.iterations[]`
+  to capture advisor spend. Also relevant to caching: the advisor accepts its own `caching`
+  switch, distinct from the `cache_control` breakpoint on our system block.
 - **Prompt caching still applies** to the cached system prefix (see `docs/prompt-caching.md`); confirm
   the advisor path doesn't disturb `cache_control` on the system block.
 
@@ -111,10 +115,10 @@ leaves the machine except as today's scoring prompt.
 
 ## A phased path
 
-- **Phase 0 — verify (no app code).** A throwaway `smoke:advisor` script: one deep-score request with
-  the advisor tool, first as the documented `claude-sonnet-4-6` + `claude-opus-4-8` pair, then probing
-  `claude-sonnet-5` as executor. Confirm (1) the pairing is accepted and (2) structured output still
-  parses. This resolves both open questions cheaply against a real key.
+- **Phase 0 — verify (no app code).** A throwaway `smoke:advisor` script that resolves the structured-
+  output composition question (and confirms the exact model pair) against a real key. **Detailed build
+  instructions are in [`docs/advisor-tool-phase0-handoff.md`](advisor-tool-phase0-handoff.md)** so it
+  can be built and run locally (this needs a live `ANTHROPIC_API_KEY`, which CI/the sandbox don't have).
 - **Phase 1 — prototype behind a setting.** Add `scorerAdvisorModel` (+ an on/off) to settings and
   `llm-providers.ts`; branch `AnthropicLlmClient.score()` to the advisor path when set. **Off by
   default.** Extend the usage summary to split executor/advisor tokens.
@@ -126,8 +130,8 @@ leaves the machine except as today's scoring prompt.
 ## Bottom line
 
 The advisor tool is a clean fit for the deep-score step and slots behind the existing `LlmClient`
-seam with no ripple into the rest of the pipeline. The idea is sound; two specifics gate it — whether
-`claude-sonnet-5` is a currently-valid executor for an Opus advisor, and whether the beta advisor tool
-composes with our structured-output parse. Both are answerable with a ~20-line smoke probe (Phase 0)
-before any real implementation. Recommended next step: run Phase 0 against the live key, starting from
-the fully-documented `claude-sonnet-4-6` + `claude-opus-4-8` pair.
+seam with no ripple into the rest of the pipeline. The idea is sound and the model pairing is
+confirmed (`claude-sonnet-5` executor + `claude-opus-4-8` advisor is valid). One specific still gates
+it — whether the beta advisor tool composes with our structured-output parse — plus the usage-
+accounting change (sum `usage.iterations[]`). Both are settled by the Phase 0 smoke probe; build
+instructions are in [`docs/advisor-tool-phase0-handoff.md`](advisor-tool-phase0-handoff.md).
