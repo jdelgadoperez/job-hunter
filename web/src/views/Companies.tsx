@@ -1,4 +1,5 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
 import {
   useAddCompany,
@@ -7,6 +8,7 @@ import {
   useNeedsAttention,
   useRemoveCompany,
   useRetryFailedScan,
+  useScanStatus,
 } from "../hooks";
 
 type CompanyEntry = { careersUrl: string; name?: string };
@@ -28,6 +30,16 @@ export function Companies() {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
+
+  const qc = useQueryClient();
+  const scanStatus = useScanStatus();
+  // A retry-failed scan (the Rescan button) runs in the background; when it finishes, a company may
+  // have recovered and been cleared from failed_leads. Refresh the needs-attention list so the
+  // panel reflects that without a page reload. Keyed on finishedAt so each completed scan re-runs.
+  const finishedAt = scanStatus.data?.state === "done" ? scanStatus.data.finishedAt : null;
+  useEffect(() => {
+    if (finishedAt) qc.invalidateQueries({ queryKey: ["companies", "needs-attention"] });
+  }, [finishedAt, qc]);
 
   const sortedCompanies = useMemo(
     () => (companies.data ? [...companies.data].sort(byLabel) : []),

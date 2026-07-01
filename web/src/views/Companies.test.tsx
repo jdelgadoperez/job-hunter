@@ -50,6 +50,23 @@ function mockFetch(bodies: Bodies) {
   );
 }
 
+/** Route requests dynamically via a callback, for tests where the response changes over time
+ *  (e.g. scan-status polling transitioning from "running" to "done"). */
+function mockFetchWith(router: (url: string, init?: RequestInit) => unknown) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) => {
+      const body = router(url, init);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(body),
+      });
+    }),
+  );
+}
+
 function renderCompanies() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) =>
@@ -113,5 +130,51 @@ describe("Companies needs-attention panel", () => {
           ),
       ).toBe(true),
     );
+  });
+
+  it("refreshes the needs-attention panel after a scan completes", async () => {
+    const recovered = {
+      careersUrl: "https://boom.com/careers",
+      company: "Boom",
+      message: "render crashed",
+      consecutiveFailures: 5,
+    };
+    let needsAttentionBody: unknown[] = [recovered];
+    let scanState = "running";
+
+    mockFetchWith((url) => {
+      if (url.includes("/api/companies/needs-attention")) return needsAttentionBody;
+      if (url.includes("/api/companies/manual-review")) return [];
+      if (url.includes("/api/scan/status")) {
+        return {
+          state: scanState,
+          message: null,
+          current: null,
+          total: null,
+          count: null,
+          warnings: [],
+          error: null,
+          startedAt: "2026-07-01T00:00:00.000Z",
+          finishedAt: scanState === "done" ? "2026-07-01T00:05:00.000Z" : null,
+          recent: [],
+        };
+      }
+      if (url.includes("/api/companies")) return [];
+      return [];
+    });
+
+    renderCompanies();
+
+    await waitFor(() => expect(screen.getByText(/Needs attention \(1\)/i)).toBeInTheDocument());
+
+    // The scan completes in the background (the Rescan button's retry scan); the company recovers
+    // and is cleared from failed_leads server-side. useScanStatus polls every 1s (real timers) until
+    // it observes the "done" transition, which should invalidate the needs-attention query.
+    needsAttentionBody = [];
+    scanState = "done";
+
+    await waitFor(() => expect(screen.queryByText(/Needs attention/i)).not.toBeInTheDocument(), {
+      timeout: 5000,
+    });
   });
 });
