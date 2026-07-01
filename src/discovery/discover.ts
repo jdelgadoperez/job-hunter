@@ -30,6 +30,8 @@ export type DiscoverDeps = {
   settings: SettingsReader;
   /** Lead sources to run; defaults to the production registry. Injected for tests. */
   sources?: LeadSource[];
+  /** Normalized careers URLs to exclude from the retry pass (still attempted on the main pass). */
+  skipRetryFor?: Set<string>;
 };
 
 export type DiscoverResult = {
@@ -180,8 +182,12 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     }
 
     if (failed.length > 0) {
+      const skipRetryFor = deps.skipRetryFor ?? new Set<string>();
+      const toRetry = failed.filter(
+        ({ lead }) => !skipRetryFor.has(normalizeCareersUrl(lead.careersUrl)),
+      );
       const retried = await Promise.all(
-        failed.map(async ({ lead }): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+        toRetry.map(async ({ lead }): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
           try {
             return { lead, result: await fetchLead(lead) };
           } catch (error) {
@@ -189,6 +195,7 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
           }
         }),
       );
+      const retriedUrls = new Set(toRetry.map(({ lead }) => lead.careersUrl));
       for (const { lead, result } of retried) {
         if (!result.ok) {
           warnings.push({
@@ -201,6 +208,15 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         for (const posting of result.postings) {
           byId.set(posting.id, posting);
         }
+      }
+      // Anything skipped (in skipRetryFor) keeps its original main-pass warning.
+      for (const { lead, result } of failed) {
+        if (retriedUrls.has(lead.careersUrl)) continue;
+        warnings.push({
+          source: lead.company,
+          message: result.warning,
+          careersUrl: lead.careersUrl,
+        });
       }
     }
   } finally {

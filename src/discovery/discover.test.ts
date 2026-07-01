@@ -473,6 +473,37 @@ describe("discover retry pass", () => {
     // LinkedIn is never rendered (skip, not a failure) — only Initech's careers page renders once.
     expect(rendered).toEqual(["https://initech.com/careers"]);
   });
+
+  it("skips the retry pass for a company in skipRetryFor, but still attempts it on the main pass", async () => {
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") {
+          renderCalls += 1;
+          throw new Error("render crashed");
+        }
+        return JSONLD_HTML;
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+    );
+
+    const { warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+      skipRetryFor: new Set(["https://boom.com/careers"]),
+    });
+
+    // Attempted once (main pass) — the retry pass skipped it, so renderCalls stops at 1.
+    expect(renderCalls).toBe(1);
+    expect(warnings[0]?.careersUrl).toBe("https://boom.com/careers");
+  });
 });
 
 /** Minimal deps for the fan-out tests — no real network/browser needed. */
