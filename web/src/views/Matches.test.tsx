@@ -106,6 +106,32 @@ describe("Matches search filter", () => {
   });
 });
 
+describe("Matches company links", () => {
+  it("renders website, Glassdoor, LinkedIn and Crunchbase links on each card, in a new tab", async () => {
+    mockMatches([scored({ id: "a", title: "Engineer", company: "acme-corp" })]);
+    renderMatches();
+
+    // The label uses the normalized display name ("Acme Corp"), not the raw slug ("acme-corp").
+    const website = await screen.findByRole("link", { name: /website — search for Acme Corp/i });
+    expect(website).toHaveAttribute("target", "_blank");
+    expect(website).toHaveAttribute("rel", "noreferrer");
+
+    for (const label of [/glassdoor/i, /linkedin/i, /crunchbase/i]) {
+      const link = screen.getByRole("link", { name: label });
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link.getAttribute("href")).toMatch(/^https:\/\//);
+    }
+  });
+
+  it("marks the decorative icons as aria-hidden so only the link label is announced", async () => {
+    mockMatches([scored({ id: "a", title: "Engineer", company: "acme-corp" })]);
+    renderMatches();
+
+    const website = await screen.findByRole("link", { name: /website — search for Acme Corp/i });
+    expect(website.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+  });
+});
+
 describe("Matches empty state", () => {
   it("tells the user to loosen filters when the default score floor hides everything", async () => {
     // Default mount has minScore=50, which counts as an active filter.

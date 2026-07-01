@@ -1,5 +1,7 @@
+import { Globe, type LucideIcon, Star, TrendingUp, Users } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { ScoredPosting } from "../api";
+import { type CompanyLink, companyDisplayName, companyLinks } from "../company-links";
 import {
   Button,
   Card,
@@ -10,6 +12,42 @@ import {
   ScorePill,
 } from "../components/ui";
 import { useMatchAction, useMatches } from "../hooks";
+
+// Semantic glyphs for each research link. lucide dropped brand marks, so these are generic icons
+// (people/reviews/funding/site) — the aria-label + title carry the actual meaning.
+const LINK_ICONS: Record<CompanyLink["key"], LucideIcon> = {
+  website: Globe,
+  glassdoor: Star,
+  linkedin: Users,
+  crunchbase: TrendingUp,
+};
+
+function CompanyLinksRow({ posting }: { posting: ScoredPosting["posting"] }) {
+  // Use the normalized name (what the links actually search) in the label, not the raw
+  // `posting.company` slug, so the tooltip/screen-reader text matches the visible company name.
+  const displayName = companyDisplayName(posting.company);
+  return (
+    <div className="mt-1 flex items-center gap-1">
+      {companyLinks(posting).map((link) => {
+        const Icon = LINK_ICONS[link.key];
+        const title = `${link.label} — search for ${displayName}`;
+        return (
+          <a
+            key={link.key}
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={title}
+            title={title}
+            className="rounded p-1.5 text-faint hover:bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <Icon size={16} aria-hidden="true" />
+          </a>
+        );
+      })}
+    </div>
+  );
+}
 
 function MatchCard({
   posting,
@@ -41,6 +79,7 @@ function MatchCard({
             {posting.company}
             {posting.location ? ` · ${posting.location}` : ""}
           </p>
+          <CompanyLinksRow posting={posting} />
         </div>
         <div className="flex items-center gap-2">
           {posting.remote ? (
