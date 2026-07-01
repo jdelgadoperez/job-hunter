@@ -32,6 +32,8 @@ export type ServerDeps = {
   jobs: ScanJobManager;
   /** The scan to run when a job starts. */
   runScan: ScanRunner;
+  /** The scan to run for `POST /api/scan/retry-failed` — scoped to the needs-attention list. */
+  retryFailedScan: ScanRunner;
   /** Background deep-score-job manager (start + status). */
   scoreJobs: ScoreJobManager;
   /** Build a deep-score runner for the given options (resolves provider/key/model). */

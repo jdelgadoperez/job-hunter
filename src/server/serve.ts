@@ -13,7 +13,7 @@ import type { Hono } from "hono";
 import { createApp } from "./app";
 import { classifyListenError } from "./listen-error";
 import { ScanJobManager } from "./scan-job";
-import { createScanRunner } from "./scan-runner";
+import { createRetryFailedScanRunner, createScanRunner } from "./scan-runner";
 import { ScoreJobManager } from "./score-job";
 import { createScoreRun, previewScore } from "./score-runner";
 import type { ScanRunner } from "./types";
@@ -91,12 +91,14 @@ export function startServer(opts: ServeOptions = {}): void {
   const repo = new Repository(resolveDbPath());
   const jobs = new ScanJobManager();
   const runScan = createScanRunner(repo);
+  const retryFailedScan = createRetryFailedScanRunner(repo);
   const scoreJobs = new ScoreJobManager();
 
   const app = createApp({
     repo,
     jobs,
     runScan,
+    retryFailedScan,
     scoreJobs,
     createScoreRun: createScoreRun(repo),
     previewScore: previewScore(repo),
