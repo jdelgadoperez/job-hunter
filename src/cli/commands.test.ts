@@ -440,4 +440,87 @@ describe("runScan + listMatches", () => {
     expect(repo.listScoredPostings(0, { includeExpired: true })).toHaveLength(1);
     repo.close();
   });
+
+  it("records per-company failures for later retry, and excludes known-bad companies from the retry pass", async () => {
+    const repo = newRepo();
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") {
+          renderCalls += 1;
+          throw new Error("render crashed");
+        }
+        return "";
+      },
+    };
+
+    // Seed a company already at the retry-skip threshold from a prior run.
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(scanId, [
+        { careersUrl: "https://boom.com/careers", company: "Boom", message: "prior failure" },
+      ]);
+    }
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({}),
+          renderer,
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    // Already known-bad (>=5 consecutive failures): attempted once (main pass), retry pass skipped.
+    expect(renderCalls).toBe(1);
+    // Still in the needs-attention list (this scan's failure is recorded, count keeps climbing).
+    const attention = repo.listNeedsAttention(5);
+    expect(attention).toHaveLength(1);
+    expect(attention[0]?.consecutiveFailures).toBe(6);
+    repo.close();
+  });
+
+  it("clears a company's failure history once it succeeds again", async () => {
+    const repo = newRepo();
+    repo.recordScanFailures(1, [
+      { careersUrl: "https://boards.greenhouse.io/acme", company: "Acme", message: "timeout" },
+    ]);
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": JSON.stringify({
+              jobs: [],
+            }),
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    expect(repo.listNeedsAttention(1)).toEqual([]);
+    repo.close();
+  });
 });

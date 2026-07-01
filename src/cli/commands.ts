@@ -8,6 +8,7 @@ import { detectLiveness } from "@app/freshness/detect-liveness";
 import { fetchLivenessSignalsForBoard } from "@app/freshness/fetch-liveness";
 import { parseCountry } from "@app/matching/location-filter";
 import type { ScoreOutcome } from "@app/matching/score-run";
+import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
 import { buildProfile } from "@app/profile/build-profile";
 import type { CompanyRef, Repository } from "@app/storage/repository";
@@ -106,6 +107,7 @@ export type SourcingDeps = {
 
 /** Result of a sourcing run: the postings + companies seen, the directory diff, and expiry count. */
 export type SourcingOutcome = {
+  scanId: number;
   postings: JobPosting[];
   companies: CompanyLead[];
   warnings: Warning[];
@@ -172,7 +174,7 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
     ...diff,
   });
 
-  return { postings, companies, warnings, expired, ...diff };
+  return { scanId, postings, companies, warnings, expired, ...diff };
 }
 
 type SourceResult = { postings: JobPosting[]; companies: CompanyLead[]; warnings: Warning[] };
@@ -216,9 +218,10 @@ async function sourceFromFeedAndTracked(
 export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome> {
   const { onProgress, repo } = deps;
 
+  const skipRetryFor = new Set(repo.listRetrySkipUrls());
   const sourced = await runSourcing({
     repo,
-    discoverDeps: deps.discoverDeps,
+    discoverDeps: { ...deps.discoverDeps, skipRetryFor },
     ...(deps.feed ? { feed: deps.feed } : {}),
     onProgress,
   });
@@ -235,6 +238,16 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
       }),
     ),
   );
+
+  const perCompanyFailures = sourced.warnings
+    .filter((w): w is Warning & { careersUrl: string } => w.careersUrl !== undefined)
+    .map((w) => ({ careersUrl: w.careersUrl, company: w.source, message: w.message }));
+  try {
+    repo.recordScanFailures(sourced.scanId, perCompanyFailures);
+  } catch (error) {
+    // Failures degrade, never crash: the scan itself already succeeded by this point.
+    log(style.warn(`  ! Failed to record scan-failure history: ${errorMessage(error)}`));
+  }
 
   onProgress?.({ kind: "summary", count: sourced.postings.length });
   log(style.success(`Scanned and scored ${sourced.postings.length} posting(s).`));
