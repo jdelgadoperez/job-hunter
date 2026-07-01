@@ -22,6 +22,7 @@ export function useMatches(minScore: number, filters: MatchFilters = {}) {
         country: filters.country ?? "",
         includeApplied: filters.includeApplied ?? false,
         onlyApplied: filters.onlyApplied ?? false,
+        search: filters.search ?? "",
       },
     ],
     queryFn: () => api.getMatches(minScore, filters),

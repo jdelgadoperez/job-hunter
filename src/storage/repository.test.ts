@@ -673,3 +673,103 @@ describe("schema indexes", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("search filter", () => {
+  const seedForSearch = (repo: Repository): void => {
+    const seeds: JobPosting[] = [
+      {
+        ...posting,
+        id: "s-title",
+        company: "Acme",
+        title: "Staff Platform Engineer",
+        location: "Berlin",
+        description: "Own the deployment pipeline.",
+      },
+      {
+        ...posting,
+        id: "s-company",
+        company: "Globex Robotics",
+        title: "Engineer",
+        location: "Berlin",
+        description: "General role.",
+      },
+      {
+        ...posting,
+        id: "s-location",
+        company: "Acme",
+        title: "Engineer",
+        location: "Reykjavik",
+        description: "General role.",
+      },
+      {
+        ...posting,
+        id: "s-description",
+        company: "Acme",
+        title: "Engineer",
+        location: "Berlin",
+        description: "Deep Kubernetes and Terraform experience required.",
+      },
+    ];
+    for (const p of seeds) {
+      repo.savePosting(p);
+      repo.saveMatchResult(p.id, { score: 80, matchedSkills: [], missingSkills: [] });
+    }
+  };
+
+  const idsFor = (repo: Repository, search: string): string[] =>
+    repo
+      .listScoredPostings(0, { search })
+      .map((s) => s.posting.id)
+      .sort();
+
+  it("matches on title", () => {
+    const repo = newRepo();
+    seedForSearch(repo);
+    expect(idsFor(repo, "Platform")).toEqual(["s-title"]);
+    repo.close();
+  });
+
+  it("matches on company", () => {
+    const repo = newRepo();
+    seedForSearch(repo);
+    expect(idsFor(repo, "Globex")).toEqual(["s-company"]);
+    repo.close();
+  });
+
+  it("matches on location", () => {
+    const repo = newRepo();
+    seedForSearch(repo);
+    expect(idsFor(repo, "Reykjavik")).toEqual(["s-location"]);
+    repo.close();
+  });
+
+  it("matches on description", () => {
+    const repo = newRepo();
+    seedForSearch(repo);
+    expect(idsFor(repo, "Terraform")).toEqual(["s-description"]);
+    repo.close();
+  });
+
+  it("is case-insensitive", () => {
+    const repo = newRepo();
+    seedForSearch(repo);
+    expect(idsFor(repo, "gLoBeX")).toEqual(["s-company"]);
+    repo.close();
+  });
+
+  it("excludes non-matching postings", () => {
+    const repo = newRepo();
+    seedForSearch(repo);
+    expect(repo.listScoredPostings(0, { search: "no-such-token" })).toEqual([]);
+    repo.close();
+  });
+
+  it("treats an empty or whitespace search as no filter", () => {
+    const repo = newRepo();
+    seedForSearch(repo);
+    const unfiltered = repo.listScoredPostings(0).length;
+    expect(repo.listScoredPostings(0, { search: "" })).toHaveLength(unfiltered);
+    expect(repo.listScoredPostings(0, { search: "   " })).toHaveLength(unfiltered);
+    repo.close();
+  });
+});
