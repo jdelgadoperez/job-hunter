@@ -1,3 +1,4 @@
+import type { ScanScope } from "@app/discovery/scan-store";
 import { normalizeCareersUrl, normalizeSkill } from "@app/domain/normalize";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import { resolvePostingRemote } from "@app/matching/remote-filter";
@@ -106,6 +107,13 @@ export class Repository {
     );
     if (!matchColumns.has("scorer")) {
       this.db.exec("ALTER TABLE match_results ADD COLUMN scorer TEXT");
+    }
+
+    const scanColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(scans)").all() as { name: string }[]).map((c) => c.name),
+    );
+    if (!scanColumns.has("kind")) {
+      this.db.exec("ALTER TABLE scans ADD COLUMN kind TEXT NOT NULL DEFAULT 'full'");
     }
 
     // Create indexes now that every referenced column is guaranteed to exist (above + base schema).
@@ -438,9 +446,13 @@ export class Repository {
     }));
   }
 
-  /** Open a new scan run and return its sequential id (drives the diff + posting expiry). */
-  startScan(): number {
-    const info = this.db.prepare("INSERT INTO scans (started_at) VALUES (datetime('now'))").run();
+  /** Open a new scan run of the given `kind` and return its sequential id (drives the diff +
+   * posting expiry). A `"retry"` scan is a scoped rescan and is excluded from the staleness clock
+   * that `expireStalePostings` reads (see there). */
+  startScan(kind: ScanScope = "full"): number {
+    const info = this.db
+      .prepare("INSERT INTO scans (started_at, kind) VALUES (datetime('now'), ?)")
+      .run(kind);
     return Number(info.lastInsertRowid);
   }
 

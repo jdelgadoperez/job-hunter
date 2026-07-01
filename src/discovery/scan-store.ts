@@ -1,6 +1,9 @@
 import type { JobPosting } from "@app/domain/types";
 import type { CompanyRef } from "@app/storage/repository";
 
+/** Whether a scan crawled the whole directory (`"full"`) or only a scoped subset (`"retry"`). */
+export type ScanScope = "full" | "retry";
+
 /** The directory delta a scan records (companies that appeared / disappeared vs. the prior scan). */
 export type DirectoryDiff = { newCompanies: CompanyRef[]; removedCompanies: CompanyRef[] };
 
@@ -17,7 +20,7 @@ export type DirectoryDiff = { newCompanies: CompanyRef[]; removedCompanies: Comp
  * a no-op for the synchronous values.
  */
 export interface ScanStore {
-  startScan(): number | Promise<number>;
+  startScan(kind?: ScanScope): number | Promise<number>;
   recordDirectory(scanId: number, companies: CompanyRef[]): DirectoryDiff | Promise<DirectoryDiff>;
   savePosting(posting: JobPosting, scanId?: number | null): void | Promise<void>;
   /**

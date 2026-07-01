@@ -204,6 +204,20 @@ describe("incremental scans — directory diff", () => {
   });
 });
 
+describe("scan kind", () => {
+  it("records the scan kind, defaulting to full", () => {
+    const repo = newRepo();
+    const fullId = repo.startScan();
+    const retryId = repo.startScan("retry");
+    const kindOf = (id: number) =>
+      // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+      (repo["db"].prepare("SELECT kind FROM scans WHERE id = ?").get(id) as { kind: string }).kind;
+    expect(kindOf(fullId)).toBe("full");
+    expect(kindOf(retryId)).toBe("retry");
+    repo.close();
+  });
+});
+
 describe("failed leads", () => {
   it("inserts a new row at consecutive_failures=1 on first failure", () => {
     const repo = newRepo();

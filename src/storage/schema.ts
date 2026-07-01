@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS scans (
   postings_seen INTEGER,
   companies_seen INTEGER,
   new_companies TEXT,
-  removed_companies TEXT
+  removed_companies TEXT,
+  kind TEXT NOT NULL DEFAULT 'full'
 );
 
 -- Snapshot of every company seen in the directory (or tracked), so successive scans can diff it.
