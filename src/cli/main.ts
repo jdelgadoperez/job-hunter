@@ -70,7 +70,11 @@ export async function runScanCommand(
       return;
     }
     trackedCompanies = needsAttention.map((c) => ({ careersUrl: c.careersUrl, name: c.company }));
-    sources = []; // scope the crawl to just these companies, not the full directory
+    // Scope the *local crawl* to just these companies, not the full directory. Known limitation:
+    // when a remote feed is configured (hybrid mode), the shared feed is still pulled whole — only
+    // the local crawl is scoped here, so a feed user's `--retry-failed` run also re-scores feed
+    // postings. Scoping the feed too needs a stable company key on postings (tracked separately).
+    sources = [];
   }
 
   const dictionary = repo.getSkillDictionary();
