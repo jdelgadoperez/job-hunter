@@ -35,6 +35,10 @@ export type LiveStatus = "live" | "expired" | "unknown";
 export type Warning = {
   source: string;
   message: string;
+  /** The careers URL this warning is about, when it's a per-company fetch failure. Absent for
+   * source-level failures (e.g. a lead source erroring) and the unscrapable-host skip notice —
+   * those aren't retry targets. */
+  careersUrl?: string;
 };
 
 export interface Scorer {
