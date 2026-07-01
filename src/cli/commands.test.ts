@@ -492,6 +492,56 @@ describe("runScan + listMatches", () => {
     repo.close();
   });
 
+  it("does not skip-list companies on a retry-scope scan, so a known-bad company still gets its retry pass", async () => {
+    const repo = newRepo();
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") {
+          renderCalls += 1;
+          throw new Error("render crashed");
+        }
+        return "";
+      },
+    };
+
+    // Seed a company already at the retry-skip threshold from a prior run — a full scan WOULD skip
+    // it in the in-run retry pass (see the sibling test above).
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "prior failure" }],
+        ["https://boom.com/careers"],
+      );
+    }
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({}),
+          renderer,
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+        scope: "retry",
+      },
+      capture().log,
+    );
+
+    // A retry-scope scan is exactly what should retry known-bad companies, so the skip-list handed
+    // to discovery must be empty: main pass + retry pass = 2 attempts.
+    expect(renderCalls).toBe(2);
+    repo.close();
+  });
+
   it("clears a company's failure history once it succeeds again", async () => {
     const repo = newRepo();
     repo.recordScanFailures(

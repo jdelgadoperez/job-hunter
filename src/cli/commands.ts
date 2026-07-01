@@ -80,6 +80,10 @@ export type ScanDeps = {
   feed?: PostingFeed;
   /** Optional structured progress (directory read, per-company, scoring, summary). */
   onProgress?: (event: ScanProgressEvent) => void;
+  /** `"retry"` runs a scoped rescan (only the given tracked companies): no directory bookkeeping,
+   * and the in-run retry pass is NOT skip-listed (those companies are exactly what we want to
+   * retry). Defaults to `"full"`. */
+  scope?: ScanScope;
 };
 
 export type ScanOutcome = {
@@ -224,12 +228,17 @@ async function sourceFromFeedAndTracked(
  */
 export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome> {
   const { onProgress, repo } = deps;
+  const scope = deps.scope ?? "full";
 
-  const skipRetryFor = new Set(repo.listRetrySkipUrls());
+  // Full scans skip re-hammering known-bad companies in discovery's in-run retry pass. A scoped
+  // `--retry-failed` run is the opposite: those companies are exactly what we want to retry, so
+  // the skip-list is empty there.
+  const skipRetryFor = scope === "full" ? new Set(repo.listRetrySkipUrls()) : new Set<string>();
   const sourced = await runSourcing({
     repo,
     discoverDeps: { ...deps.discoverDeps, skipRetryFor },
     ...(deps.feed ? { feed: deps.feed } : {}),
+    scope,
     onProgress,
   });
 
