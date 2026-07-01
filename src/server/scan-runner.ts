@@ -84,6 +84,7 @@ export function createRetryFailedScanRunner(repo: Repository): ScanRunner {
         profile,
         scorer,
         ...(feed ? { feed } : {}),
+        scope: "retry",
         onProgress: (event) => {
           onProgress(event);
           console.log(`${style.dim("[scan]")} ${formatProgress(event)}`);

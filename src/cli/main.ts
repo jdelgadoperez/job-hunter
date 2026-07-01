@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DiscoverDeps } from "@app/discovery/discover";
 import { resolvePostingFeed } from "@app/discovery/feed/resolve-feed";
+import type { ScanScope } from "@app/discovery/scan-store";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
@@ -83,6 +84,7 @@ export async function runScanCommand(
   const fetcher = new HttpFetcher();
   // Hybrid remote mode when a feed is configured: pull the shared feed + crawl only tracked companies.
   const feed = resolvePostingFeed(repo, fetcher);
+  const scanScope: ScanScope | undefined = retryFailed ? "retry" : undefined;
 
   const result = await runScan(
     {
@@ -90,6 +92,7 @@ export async function runScanCommand(
       profile,
       scorer,
       ...(feed ? { feed } : {}),
+      ...(scanScope ? { scope: scanScope } : {}),
       // Live status so a scan is never silent: directory read, per-company, scoring.
       // Dimmed as secondary chatter — the final summary stands out in full color.
       onProgress: (event) => log(style.dim(formatProgress(event))),
