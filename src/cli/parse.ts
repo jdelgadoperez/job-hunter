@@ -9,7 +9,7 @@ export const DEFAULT_MIN_SCORE = 50;
 export { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT };
 
 export type Command =
-  | { kind: "scan" }
+  | { kind: "scan"; retryFailed: boolean }
   | { kind: "serve"; port?: number; open: boolean; refreshHours?: number }
   | { kind: "track-add"; url: string; name?: string }
   | { kind: "track-list" }
@@ -53,8 +53,14 @@ export function parseCli(argv: string[]): Command {
     return { kind: "version" };
 
   switch (command) {
-    case "scan":
-      return { kind: "scan" };
+    case "scan": {
+      const { values } = parseArgs({
+        args: rest,
+        options: { "retry-failed": { type: "boolean" } },
+        allowPositionals: true,
+      });
+      return { kind: "scan", retryFailed: Boolean(values["retry-failed"]) };
+    }
 
     case "serve": {
       const { values } = parseArgs({

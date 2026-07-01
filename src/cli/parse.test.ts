@@ -3,7 +3,15 @@ import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT, parseCli } from "./parse";
 
 describe("parseCli", () => {
   it("parses scan", () => {
-    expect(parseCli(["scan"])).toEqual({ kind: "scan" });
+    expect(parseCli(["scan"])).toEqual({ kind: "scan", retryFailed: false });
+  });
+
+  it("parses scan with --retry-failed", () => {
+    expect(parseCli(["scan", "--retry-failed"])).toEqual({ kind: "scan", retryFailed: true });
+  });
+
+  it("parses bare scan with retryFailed defaulting to false", () => {
+    expect(parseCli(["scan"])).toEqual({ kind: "scan", retryFailed: false });
   });
 
   it("parses list with and without --min-score (defaulting to 50)", () => {

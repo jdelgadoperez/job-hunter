@@ -168,6 +168,30 @@ describe("scan command", () => {
     expect(repo.listScoredPostings(0)).toHaveLength(1);
     repo.close();
   });
+
+  it("--retry-failed scopes discovery to the needs-attention list only", async () => {
+    seedProfile();
+    const repo = openDb();
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(scanId, [
+        { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
+      ]);
+    }
+    repo.close();
+    h.postings = [posting("1")];
+
+    await runCli("scan", "--retry-failed");
+
+    expect(logged()).toContain("Scanned and scored 1");
+  });
+
+  it("--retry-failed with an empty needs-attention list is a no-op", async () => {
+    seedProfile();
+
+    await runCli("scan", "--retry-failed");
+
+    expect(logged()).toContain("Nothing needs attention");
+  });
 });
 
 describe("settingsWithEnvKey", () => {

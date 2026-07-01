@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DiscoverDeps } from "@app/discovery/discover";
 import { resolvePostingFeed } from "@app/discovery/feed/resolve-feed";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
@@ -48,12 +49,28 @@ export type ScoreCliOptions = {
   dryRun: boolean;
 };
 
-export async function runScanCommand(repo: Repository, log: Logger): Promise<void> {
+export async function runScanCommand(
+  repo: Repository,
+  log: Logger,
+  retryFailed: boolean,
+): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
     log(style.warn("No profile yet. Run `job-hunter profile <resume-file>` first."));
     process.exitCode = 1;
     return;
+  }
+
+  let trackedCompanies = repo.listTrackedCompanies();
+  let sources: DiscoverDeps["sources"] | undefined;
+  if (retryFailed) {
+    const needsAttention = repo.listNeedsAttention();
+    if (needsAttention.length === 0) {
+      log(style.dim("Nothing needs attention — every company scanned cleanly recently."));
+      return;
+    }
+    trackedCompanies = needsAttention.map((c) => ({ careersUrl: c.careersUrl, name: c.company }));
+    sources = []; // scope the crawl to just these companies, not the full directory
   }
 
   const dictionary = repo.getSkillDictionary();
@@ -77,8 +94,9 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
         renderer: new PlaywrightRenderer(),
         sharedViewReader: new PlaywrightSharedViewReader(),
         shareUrl: resolveShareUrl(),
-        trackedCompanies: repo.listTrackedCompanies(),
+        trackedCompanies,
         settings: settingsWithEnvKey(repo),
+        ...(sources ? { sources } : {}),
       },
     },
     // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.
@@ -226,7 +244,7 @@ export async function main(): Promise<void> {
         });
         break;
       case "scan":
-        await runScanCommand(repo, log);
+        await runScanCommand(repo, log, command.retryFailed);
         break;
       case "score":
         await runScoreCommand(
