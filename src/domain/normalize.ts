@@ -21,3 +21,18 @@ export function hostnameOf(url: string): string {
     return url;
   }
 }
+
+/**
+ * Canonical form of a careers-page URL: origin + pathname only (no query string or fragment),
+ * trailing slash stripped, lower-cased. Used both to de-duplicate leads in-memory and as the form
+ * persisted for `tracked_companies`/`companies`, so the DB's `PRIMARY KEY` catches case/trailing-slash
+ * variants of the same URL instead of storing them as distinct rows.
+ */
+export function normalizeCareersUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`.replace(/\/$/, "").toLowerCase();
+  } catch {
+    return url.trim().toLowerCase();
+  }
+}

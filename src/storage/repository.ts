@@ -1,3 +1,4 @@
+import { normalizeCareersUrl, normalizeSkill } from "@app/domain/normalize";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import { resolvePostingRemote } from "@app/matching/remote-filter";
 import Database from "better-sqlite3";
@@ -316,7 +317,11 @@ export class Repository {
     );
   }
 
-  /** Idempotent upsert of the seeded skill dictionary; re-seeding never duplicates. */
+  /**
+   * Idempotent upsert of the seeded skill dictionary; re-seeding never duplicates. Names are
+   * normalized (see `normalizeSkill`) so casing variants update one row instead of the `PRIMARY KEY`
+   * admitting a near-duplicate.
+   */
   seedSkills(skills: { name: string; category: string }[]): void {
     const insert = this.db.prepare(
       `INSERT INTO skills (name, category, source) VALUES (@name, @category, 'open-taxonomy')
@@ -324,7 +329,7 @@ export class Repository {
     );
     const insertMany = this.db.transaction((rows: { name: string; category: string }[]) => {
       for (const row of rows) {
-        insert.run(row);
+        insert.run({ name: normalizeSkill(row.name), category: row.category });
       }
     });
     insertMany(skills);
@@ -347,29 +352,39 @@ export class Repository {
     return rows.map((row) => ({ name: row.name, category: row.category ?? "other" }));
   }
 
-  /** Upsert a single dictionary skill (tagged as user-added); updates the category on conflict. */
+  /**
+   * Upsert a single dictionary skill (tagged as user-added); updates the category on conflict. The
+   * name is normalized (see `normalizeSkill`) so casing variants update the existing row instead of
+   * the `PRIMARY KEY` admitting a near-duplicate.
+   */
   addSkill(name: string, category: string): void {
     this.db
       .prepare(
         `INSERT INTO skills (name, category, source) VALUES (?, ?, 'user')
          ON CONFLICT(name) DO UPDATE SET category = excluded.category`,
       )
-      .run(name, category);
+      .run(normalizeSkill(name), category);
   }
 
   /** Remove a dictionary skill by name; returns whether a row was deleted. */
   removeSkill(name: string): boolean {
-    return this.db.prepare("DELETE FROM skills WHERE name = ?").run(name).changes > 0;
+    return (
+      this.db.prepare("DELETE FROM skills WHERE name = ?").run(normalizeSkill(name)).changes > 0
+    );
   }
 
-  /** Upsert a user-tracked company by careers URL; re-adding updates the name. */
+  /**
+   * Upsert a user-tracked company by careers URL; re-adding updates the name. The URL is stored
+   * normalized (see `normalizeCareersUrl`) so case/trailing-slash/query-string variants of the same
+   * URL update the existing row instead of the `PRIMARY KEY` silently admitting a near-duplicate.
+   */
   addTrackedCompany(careersUrl: string, name?: string): void {
     this.db
       .prepare(
         `INSERT INTO tracked_companies (careers_url, name) VALUES (?, ?)
          ON CONFLICT(careers_url) DO UPDATE SET name = excluded.name`,
       )
-      .run(careersUrl, name ?? null);
+      .run(normalizeCareersUrl(careersUrl), name ?? null);
   }
 
   listTrackedCompanies(): { careersUrl: string; name?: string }[] {
@@ -386,7 +401,7 @@ export class Repository {
   removeTrackedCompany(careersUrl: string): boolean {
     const info = this.db
       .prepare("DELETE FROM tracked_companies WHERE careers_url = ?")
-      .run(careersUrl);
+      .run(normalizeCareersUrl(careersUrl));
     return info.changes > 0;
   }
 
@@ -420,8 +435,14 @@ export class Repository {
    */
   recordDirectory(
     scanId: number,
-    companies: CompanyRef[],
+    companiesIn: CompanyRef[],
   ): { newCompanies: CompanyRef[]; removedCompanies: CompanyRef[] } {
+    // Normalized so case/trailing-slash/query-string variants of the same URL update one row
+    // instead of the `PRIMARY KEY` admitting a near-duplicate (see `normalizeCareersUrl`).
+    const companies = companiesIn.map((c) => ({
+      ...c,
+      careersUrl: normalizeCareersUrl(c.careersUrl),
+    }));
     const existing = this.db
       .prepare("SELECT careers_url, name, last_seen_scan FROM companies")
       .all() as { careers_url: string; name: string | null; last_seen_scan: number }[];

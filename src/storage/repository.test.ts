@@ -73,6 +73,22 @@ describe("Repository", () => {
     repo.close();
   });
 
+  it("normalizes careers URLs so case and trailing-slash variants don't duplicate", () => {
+    const repo = newRepo();
+    repo.addTrackedCompany("https://Acme.com/careers/", "Acme");
+    // Same company, different casing/trailing slash — must update the existing row, not add one.
+    repo.addTrackedCompany("https://acme.com/CAREERS", "Acme Inc");
+
+    expect(repo.listTrackedCompanies()).toEqual([
+      { careersUrl: "https://acme.com/careers", name: "Acme Inc" },
+    ]);
+
+    // Removal must match on the same normalized key regardless of the casing/slash used to add it.
+    expect(repo.removeTrackedCompany("https://ACME.com/careers/")).toBe(true);
+    expect(repo.listTrackedCompanies()).toEqual([]);
+    repo.close();
+  });
+
   it("returns undefined for a missing setting", () => {
     const repo = newRepo();
     expect(repo.getSetting("missing")).toBeUndefined();
@@ -169,6 +185,21 @@ describe("incremental scans — directory diff", () => {
     // A later scan no longer lists B — it should drop out of the current snapshot.
     repo.recordDirectory(repo.startScan(), [{ careersUrl: "https://a.com", name: "A" }]);
     expect(repo.listDirectoryCompanies()).toEqual([{ careersUrl: "https://a.com", name: "A" }]);
+    repo.close();
+  });
+
+  it("treats case/trailing-slash variants of a careers URL as the same company across scans", () => {
+    const repo = newRepo();
+    repo.recordDirectory(repo.startScan(), [{ careersUrl: "https://A.com/careers/", name: "A" }]);
+    // Same company reported with different casing/trailing slash next scan — must update the
+    // existing row rather than being treated as a distinct new company.
+    const diff = repo.recordDirectory(repo.startScan(), [
+      { careersUrl: "https://a.com/CAREERS", name: "A" },
+    ]);
+    expect(diff.newCompanies).toEqual([]);
+    expect(repo.listDirectoryCompanies()).toEqual([
+      { careersUrl: "https://a.com/careers", name: "A" },
+    ]);
     repo.close();
   });
 });

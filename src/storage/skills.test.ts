@@ -30,4 +30,28 @@ describe("Repository skills dictionary", () => {
     expect(repo.getSkillDictionary()).toHaveLength(skillSeed.skills.length);
     repo.close();
   });
+
+  it("normalizes skill names added directly so casing variants don't duplicate", () => {
+    const repo = newRepo();
+    repo.addSkill("TypeScript", "engineering");
+    // Same skill, different casing — must update the existing row, not add one.
+    repo.addSkill("typescript", "language");
+
+    expect(repo.listSkills()).toEqual([{ name: "typescript", category: "language" }]);
+
+    // Removal must match on the same normalized key regardless of the casing used to add it.
+    expect(repo.removeSkill("TYPESCRIPT")).toBe(true);
+    expect(repo.listSkills()).toEqual([]);
+    repo.close();
+  });
+
+  it("normalizes seeded skill names so casing variants don't duplicate", () => {
+    const repo = newRepo();
+    repo.seedSkills([
+      { name: "TypeScript", category: "engineering" },
+      { name: "typescript", category: "engineering" },
+    ]);
+    expect(repo.getSkillDictionary()).toEqual(["typescript"]);
+    repo.close();
+  });
 });
