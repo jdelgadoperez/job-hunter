@@ -5,31 +5,25 @@ import { createElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
-// App mounts every view at once, so respond to any endpoint with a benign empty shape.
+// App mounts every view at once, so respond to each endpoint with a valid benign shape.
 function mockAllEndpoints() {
   vi.stubGlobal(
     "fetch",
-    vi.fn((url: string) => {
-      const body =
-        url.includes("/api/version") || url.includes("/api/settings") || url.includes("/api/scan")
-          ? versionOrSettingsOrScan(url)
-          : url.includes("/api/profile") || url.includes("/api/scans/latest")
-            ? null
-            : [];
-      return Promise.resolve({
+    vi.fn((url: string) =>
+      Promise.resolve({
         ok: true,
         status: 200,
         statusText: "OK",
-        json: () => Promise.resolve(body),
-      });
-    }),
+        json: () => Promise.resolve(bodyFor(url)),
+      }),
+    ),
   );
 }
 
-function versionOrSettingsOrScan(url: string) {
+function bodyFor(url: string): unknown {
   if (url.includes("/api/version"))
     return { version: "1.0.0", behind: null, updateAvailable: false };
-  if (url.includes("/api/settings"))
+  if (url.includes("/api/settings")) {
     return {
       hasAnthropicKey: false,
       scorerModel: null,
@@ -38,18 +32,36 @@ function versionOrSettingsOrScan(url: string) {
       feedUrl: null,
       hasFeedKey: false,
     };
-  return {
-    state: "idle",
-    message: null,
-    current: null,
-    total: null,
-    count: null,
-    warnings: [],
-    error: null,
-    startedAt: null,
-    finishedAt: null,
-    recent: [],
-  };
+  }
+  if (url.includes("/api/score/status")) {
+    return {
+      state: "idle",
+      message: null,
+      counts: null,
+      estimate: null,
+      abortedOnLimit: false,
+      warnings: [],
+      error: null,
+      startedAt: null,
+      finishedAt: null,
+    };
+  }
+  if (url.includes("/api/scan")) {
+    return {
+      state: "idle",
+      message: null,
+      current: null,
+      total: null,
+      count: null,
+      warnings: [],
+      error: null,
+      startedAt: null,
+      finishedAt: null,
+      recent: [],
+    };
+  }
+  if (url.includes("/api/profile") || url.includes("/api/scans/latest")) return null;
+  return [];
 }
 
 function renderApp() {

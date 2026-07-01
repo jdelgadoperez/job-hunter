@@ -119,6 +119,51 @@ const ScanJobStatusSchema = z.object({
 });
 export type ScanJobStatus = z.infer<typeof ScanJobStatusSchema>;
 
+// Deep-score (LLM) — mirrors the server's ScoreStageCounts / CostEstimate / ScoreJobStatus.
+const ScoreStageCountsSchema = z.object({
+  inDb: z.number(),
+  afterRemote: z.number(),
+  afterHeuristic: z.number(),
+  afterCap: z.number(),
+  alreadyScoredSkipped: z.number(),
+  triageTitles: z.number(),
+  deepScored: z.number(),
+  remotePenalized: z.number(),
+});
+export type ScoreStageCounts = z.infer<typeof ScoreStageCountsSchema>;
+
+const CostEstimateSchema = z.object({
+  triageTitles: z.number(),
+  triageBatches: z.number(),
+  deepScores: z.number(),
+  triageUsd: z.number(),
+  deepScoreUsd: z.number(),
+  totalUsd: z.number(),
+});
+export type CostEstimate = z.infer<typeof CostEstimateSchema>;
+
+const ScorePreviewSchema = z.object({
+  counts: ScoreStageCountsSchema,
+  estimate: CostEstimateSchema,
+});
+export type ScorePreview = z.infer<typeof ScorePreviewSchema>;
+
+const ScoreJobStatusSchema = z.object({
+  state: ScanJobStateSchema,
+  message: z.string().nullable(),
+  counts: ScoreStageCountsSchema.nullable(),
+  estimate: CostEstimateSchema.nullable(),
+  abortedOnLimit: z.boolean(),
+  warnings: z.array(z.object({ source: z.string(), message: z.string() })),
+  error: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+});
+export type ScoreJobStatus = z.infer<typeof ScoreJobStatusSchema>;
+
+/** Options a deep-score run accepts from the dashboard. */
+export type ScoreOptions = { remoteOnly: boolean; limit: number };
+
 const OkSchema = z.object({ ok: z.literal(true) });
 const RemovedSchema = z.object({ removed: z.boolean() });
 const VersionSchema = z.object({
@@ -220,4 +265,30 @@ export const api = {
   getScanStatus: () => request("/api/scan/status", ScanJobStatusSchema),
   getLatestScan: () => request("/api/scans/latest", ScanRecordSchema.nullable()),
   getVersion: () => request("/api/version", VersionSchema),
+  // Deep-score with the LLM. `previewScore` is a synchronous dry-run (plan + cost, no LLM calls);
+  // `startDeepScore` starts the single-flight background job (202/409 both carry the status).
+  previewScore: (options: ScoreOptions) =>
+    request("/api/score/preview", ScorePreviewSchema, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(options),
+    }),
+  startDeepScore: async (options: ScoreOptions): Promise<ScoreJobStatus> => {
+    const res = await fetch("/api/score", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(options),
+    });
+    if (res.status === 202 || res.status === 409) {
+      return ScoreJobStatusSchema.parse(await res.json());
+    }
+    // A 400 (no key configured) or other error carries an { error } message.
+    const detail = await res.json().catch(() => null);
+    const message =
+      detail && typeof detail === "object" && "error" in detail
+        ? String((detail as { error: unknown }).error)
+        : `${res.status} ${res.statusText}`;
+    throw new Error(message);
+  },
+  getScoreStatus: () => request("/api/score/status", ScoreJobStatusSchema),
 };

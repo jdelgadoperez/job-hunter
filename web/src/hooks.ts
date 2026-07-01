@@ -164,7 +164,31 @@ export function useStartScan() {
     mutationFn: api.startScan,
     // POST /api/scan returns as soon as the background job starts, so this status is always
     // "running" (or "idle" on a 409) — never "done". Scan completion is detected by useScanStatus's
-    // poll and invalidates ["matches"] from Overview, so there's nothing to refresh here.
+    // poll and invalidates ["matches"] from Home, so there's nothing to refresh here.
     onSuccess: (status) => qc.setQueryData(["scan-status"], status),
+  });
+}
+
+/** Poll the background deep-score status; refetch quickly while running, idle otherwise. */
+export function useScoreStatus() {
+  return useQuery({
+    queryKey: ["score-status"],
+    queryFn: api.getScoreStatus,
+    refetchInterval: (query) => (query.state.data?.state === "running" ? 1000 : false),
+  });
+}
+
+/** Dry-run preview of a deep-score run (plan + cost estimate). Not auto-run — call `mutate`. */
+export function useScorePreview() {
+  return useMutation({ mutationFn: api.previewScore });
+}
+
+export function useStartDeepScore() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.startDeepScore,
+    // Like the scan: the POST returns while still running, so completion + matches invalidation is
+    // detected by the useScoreStatus poll (handled in the Home view's finishedAt effect).
+    onSuccess: (status) => qc.setQueryData(["score-status"], status),
   });
 }

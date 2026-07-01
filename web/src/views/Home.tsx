@@ -1,19 +1,38 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useEffect, useState } from "react";
-import type { CompanyRef } from "../api";
+import type { CompanyRef, ScorePreview } from "../api";
 import { Button, Card, Loading } from "../components/ui";
-import { useLatestScan, useProfile, useScanStatus, useStartScan, useUploadResume } from "../hooks";
+import {
+  useLatestScan,
+  useProfile,
+  useScanStatus,
+  useScorePreview,
+  useScoreStatus,
+  useSettings,
+  useStartDeepScore,
+  useStartScan,
+  useUploadResume,
+} from "../hooks";
 
-export function Overview() {
+export function Home() {
   const profile = useProfile();
   const upload = useUploadResume();
   const scan = useScanStatus();
   const startScan = useStartScan();
   const latestScan = useLatestScan();
+  const scoreStatus = useScoreStatus();
+  const settings = useSettings();
   const qc = useQueryClient();
 
   const status = scan.data;
   const running = status?.state === "running";
+  const scoring = scoreStatus.data?.state === "running";
+
+  // A finished deep-score means re-ranked matches — refresh them.
+  const scoreFinishedAt = scoreStatus.data?.state === "done" ? scoreStatus.data.finishedAt : null;
+  useEffect(() => {
+    if (scoreFinishedAt) qc.invalidateQueries({ queryKey: ["matches"] });
+  }, [scoreFinishedAt, qc]);
 
   // A scan that finishes in the background (e.g. the scheduled refresh) should refresh matches too.
   // Keying on finishedAt re-runs this for each completed scan, not just the first.
@@ -81,7 +100,10 @@ export function Overview() {
       <Card>
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-fg">2 · Scan for jobs</h2>
-          <Button onClick={() => startScan.mutate()} disabled={running || startScan.isPending}>
+          <Button
+            onClick={() => startScan.mutate()}
+            disabled={running || scoring || startScan.isPending}
+          >
             {running ? "Scanning…" : "Scan now"}
           </Button>
         </div>
@@ -129,6 +151,8 @@ export function Overview() {
         </p>
       </Card>
 
+      <DeepScoreCard hasKey={settings.data?.hasAnthropicKey ?? false} scanRunning={running} />
+
       {latestScan.data ? (
         <Card>
           <h2 className="font-semibold text-fg">Last scan</h2>
@@ -159,8 +183,117 @@ export function Overview() {
   );
 }
 
+/**
+ * Deep-score with the LLM: a two-step preview → run flow. Disabled without an Anthropic key or
+ * while a scan runs (the two mutate the same posting set, so they're mutually exclusive). Preview is
+ * a free dry-run showing the plan + estimated cost; the run spends real money, so it's gated behind
+ * the preview.
+ */
+function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: boolean }) {
+  const scoreStatus = useScoreStatus();
+  const preview = useScorePreview();
+  const startDeepScore = useStartDeepScore();
+
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [limit, setLimit] = useState(100);
+
+  const running = scoreStatus.data?.state === "running";
+  const done = scoreStatus.data?.state === "done" ? scoreStatus.data : null;
+  const errored = scoreStatus.data?.state === "error" ? scoreStatus.data : null;
+  const previewData: ScorePreview | undefined = preview.data;
+
+  const options = { remoteOnly, limit };
+  const blocked = !hasKey || scanRunning || running;
+
+  function runPreview() {
+    preview.mutate(options);
+  }
+  function runDeepScore() {
+    startDeepScore.mutate(options, { onSuccess: () => preview.reset() });
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-fg">3 · Deep-score with Claude</h2>
+        {running ? <span className="text-sm text-faint">{scoreStatus.data?.message}</span> : null}
+      </div>
+      <p className="mt-1 text-xs text-faint">
+        Re-rank matches with the LLM for sharper relevance. Costs money — preview the estimate
+        first.
+      </p>
+
+      {!hasKey ? (
+        <p className="mt-3 text-sm text-warning">
+          Add an Anthropic API key in Settings to enable deep-scoring.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label className="flex items-center gap-1 text-sm text-muted">
+              <input
+                type="checkbox"
+                className="control"
+                checked={remoteOnly}
+                onChange={(e) => setRemoteOnly(e.target.checked)}
+                disabled={blocked}
+              />
+              Remote only
+            </label>
+            <label className="flex items-center gap-1 text-sm text-muted">
+              Limit
+              <input
+                type="number"
+                min={1}
+                value={limit}
+                onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))}
+                disabled={blocked}
+                className="select ml-1 w-20"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <Button variant="ghost" onClick={runPreview} disabled={blocked || preview.isPending}>
+              {preview.isPending ? "Estimating…" : "Preview"}
+            </Button>
+            <Button onClick={runDeepScore} disabled={blocked || startDeepScore.isPending}>
+              {running ? "Scoring…" : "Deep-score"}
+            </Button>
+          </div>
+
+          {scanRunning ? (
+            <p className="mt-2 text-xs text-faint">Waiting for the scan to finish…</p>
+          ) : null}
+
+          {previewData ? (
+            <p className="mt-2 text-sm text-muted">
+              ~{previewData.counts.triageTitles} posting(s) to score · est.{" "}
+              <span className="font-semibold">${previewData.estimate.totalUsd.toFixed(2)}</span>
+            </p>
+          ) : null}
+          {preview.isError ? (
+            <p className="mt-2 text-sm text-danger">{String(preview.error)}</p>
+          ) : null}
+
+          {done ? (
+            <p className="mt-2 text-sm text-success" aria-live="polite">
+              Deep-scored {done.counts?.deepScored ?? 0} posting(s) — see the Matches tab.
+              {done.abortedOnLimit ? " Stopped early — provider usage/rate limit reached." : ""}
+            </p>
+          ) : null}
+          {errored ? <p className="mt-2 text-sm text-danger">{errored.error}</p> : null}
+          {startDeepScore.isError ? (
+            <p className="mt-2 text-sm text-danger">{String(startDeepScore.error)}</p>
+          ) : null}
+        </>
+      )}
+    </Card>
+  );
+}
+
 /** The elapsed seconds since a scan started, ticking once a second. Isolated into its own component
- *  so the interval re-renders only this counter, not the whole Overview tree. */
+ *  so the interval re-renders only this counter, not the whole Home tree. */
 function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {

@@ -265,7 +265,7 @@ export function Matches() {
         <Empty>
           {filtersAreActive
             ? "No matches at these filters. Try lowering the minimum score or clearing filters."
-            : "No matches yet. Run a scan from the Overview tab."}
+            : "No matches yet. Run a scan from the Home tab."}
         </Empty>
       ) : (
         <div className="space-y-3">

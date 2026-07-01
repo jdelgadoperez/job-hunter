@@ -2,18 +2,18 @@ import { useSyncExternalStore } from "react";
 import { useVersion } from "./hooks";
 import { useTheme } from "./theme";
 import { Companies } from "./views/Companies";
+import { Home } from "./views/Home";
 import { Matches } from "./views/Matches";
-import { Overview } from "./views/Overview";
 import { Settings } from "./views/Settings";
 import { Skills } from "./views/Skills";
 
-const TABS = ["Overview", "Matches", "Skills", "Companies", "Settings"] as const;
+const TABS = ["Home", "Matches", "Skills", "Companies", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 
-/** Map the URL hash (e.g. `#companies`) to a tab, falling back to Overview. Case-insensitive. */
+/** Map the URL hash (e.g. `#companies`) to a tab, falling back to Home. Case-insensitive. */
 function tabFromHash(): Tab {
   const raw = window.location.hash.replace(/^#\/?/, "").toLowerCase();
-  return TABS.find((t) => t.toLowerCase() === raw) ?? "Overview";
+  return TABS.find((t) => t.toLowerCase() === raw) ?? "Home";
 }
 
 function subscribeToHash(cb: () => void): () => void {
@@ -91,8 +91,8 @@ export function App() {
       {/* Keep every tab mounted and toggle visibility, so local view state (Matches filters, draft
           form text) survives tab switches instead of being discarded on unmount. */}
       <main className="mx-auto max-w-3xl px-4 py-6">
-        <div hidden={tab !== "Overview"}>
-          <Overview />
+        <div hidden={tab !== "Home"}>
+          <Home />
         </div>
         <div hidden={tab !== "Matches"}>
           <Matches />
