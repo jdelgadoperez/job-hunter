@@ -386,6 +386,26 @@ describe("incremental scans — posting expiry", () => {
     expect(repo.listScoredPostings(0)).toHaveLength(1);
     repo.close();
   });
+
+  it("counts only full scans toward staleness, so retry scans never expire healthy postings", () => {
+    const repo = newRepo();
+    // Full scan #1: a healthy posting is seen.
+    const scan1 = repo.startScan("full");
+    repo.savePosting(postingWith("p1"), scan1);
+
+    // Two scoped retry scans happen (e.g. the user iterates on flaky companies).
+    repo.startScan("retry");
+    repo.startScan("retry");
+    // Even though the raw scanId gap is now >= 2, only 0 FULL scans have elapsed since scan1,
+    // so nothing is stale.
+    expect(repo.expireStalePostings(repo.startScan("retry"))).toBe(0);
+
+    // A genuine second AND third full scan (that don't re-see p1) DO make it stale.
+    repo.startScan("full");
+    const laterFull = repo.startScan("full");
+    expect(repo.expireStalePostings(laterFull)).toBe(1);
+    repo.close();
+  });
 });
 
 describe("match actions — save / dismiss", () => {

@@ -582,15 +582,23 @@ export class Repository {
   }
 
   /**
-   * Mark postings not seen for `staleAfter` consecutive scans as expired (they vanished from their
-   * board). Postings never stamped by a scan (legacy rows) are left alone. Returns how many expired.
+   * Mark postings not seen for `staleAfter` consecutive **full** scans as expired (they vanished
+   * from their board). Postings never stamped by a scan (legacy rows) are left alone. Returns how
+   * many expired.
+   *
+   * Staleness counts only full scans newer than a posting's `last_seen_scan`, so any number of
+   * scoped `"retry"` scans in between never advances the clock (a scoped run refreshes only the
+   * companies it crawls, and must not push untouched postings toward expiry).
    */
   expireStalePostings(currentScanId: number, staleAfter = 2): number {
     return this.db
       .prepare(
         `UPDATE postings SET expired_at = datetime('now')
          WHERE expired_at IS NULL AND last_seen_scan IS NOT NULL
-           AND (? - last_seen_scan) >= ?`,
+           AND (
+             SELECT COUNT(*) FROM scans
+             WHERE kind = 'full' AND id > postings.last_seen_scan AND id <= ?
+           ) >= ?`,
       )
       .run(currentScanId, staleAfter).changes;
   }
