@@ -1,6 +1,8 @@
 import { isUnscrapableHost } from "@app/discovery/unscrapable";
 import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
+import { settingsWithEnvKey } from "@app/matching/resolve-settings";
+import { DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import {
   ANTHROPIC_KEY_SETTING,
   FEED_KEY_SETTING,
@@ -12,7 +14,8 @@ import {
 import { errorMessage } from "@app/net/error-message";
 import { readResumeBuffer } from "@app/profile/read-resume";
 import { Hono } from "hono";
-import type { ServerDeps } from "./types";
+import { NoApiKeyError } from "./score-runner";
+import type { ScoreRunOptions, ServerDeps } from "./types";
 
 // The Airtable directory URL is a fixed community resource (see `resolveShareUrl`), not user
 // config, so it's intentionally absent from the settings API.
@@ -20,7 +23,10 @@ import type { ServerDeps } from "./types";
 /** Settings shape returned to clients — secret keys are never echoed back, only their presence. */
 function readSettings(repo: ServerDeps["repo"]) {
   return {
-    hasAnthropicKey: Boolean(repo.getSetting(ANTHROPIC_KEY_SETTING)?.trim()),
+    // Resolve through the env fallback so the client's "deep-score available?" signal matches what
+    // the score-runner actually sees (it uses settingsWithEnvKey too): a user with only the
+    // ANTHROPIC_API_KEY env var set should read hasAnthropicKey: true.
+    hasAnthropicKey: Boolean(settingsWithEnvKey(repo).getSetting(ANTHROPIC_KEY_SETTING)?.trim()),
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
     hasTheMuseKey: Boolean(repo.getSetting(THE_MUSE_KEY_SETTING)?.trim()),
@@ -66,7 +72,16 @@ export function isLoopbackHost(hostHeader: string | undefined): boolean {
  * network. The production listener and the real scan pipeline live in `serve.ts` (smoke-only).
  */
 export function createApp(deps: ServerDeps): Hono {
-  const { repo, jobs, runScan, buildProfileFromText, getUpdateStatus } = deps;
+  const {
+    repo,
+    jobs,
+    runScan,
+    scoreJobs,
+    createScoreRun,
+    previewScore,
+    buildProfileFromText,
+    getUpdateStatus,
+  } = deps;
   const app = new Hono();
 
   // Defense-in-depth against DNS rebinding: only serve requests addressed to a loopback host.
@@ -268,5 +283,52 @@ export function createApp(deps: ServerDeps): Hono {
   // The most recently completed scan: counts plus the directory diff (new/removed companies).
   app.get("/api/scans/latest", (c) => c.json(repo.getLatestScan() ?? null));
 
+  // Deep-score with the LLM. `preview` is a synchronous dry-run (plan + cost, no LLM calls); the
+  // POST starts a single-flight background job; status is polled like the scan job. All three
+  // require an Anthropic key — a missing key returns 400 rather than starting.
+  app.post("/api/score/preview", async (c) => {
+    const options = await parseScoreOptions(c);
+    try {
+      const result = await previewScore(options);
+      return c.json({ counts: result.counts, estimate: result.estimate });
+    } catch (error) {
+      if (error instanceof NoApiKeyError) return c.json({ error: error.message }, 400);
+      return c.json({ error: errorMessage(error) }, 400);
+    }
+  });
+
+  app.post("/api/score", async (c) => {
+    if (!repoHasAnthropicKey(repo)) {
+      return c.json({ error: new NoApiKeyError().message }, 400);
+    }
+    const options = await parseScoreOptions(c);
+    const started = scoreJobs.start(createScoreRun(options));
+    return c.json(scoreJobs.getStatus(), started ? 202 : 409);
+  });
+
+  app.get("/api/score/status", (c) => c.json(scoreJobs.getStatus()));
+
   return app;
+}
+
+/** Whether a deep-score is possible: an Anthropic key is set (stored or via the env fallback). */
+function repoHasAnthropicKey(repo: ServerDeps["repo"]): boolean {
+  return Boolean(settingsWithEnvKey(repo).getSetting(ANTHROPIC_KEY_SETTING)?.trim());
+}
+
+/**
+ * Parse deep-score options from the request body. `remoteOnly` defaults false; `limit` defaults to
+ * `DEFAULT_SCORE_LIMIT` and is clamped to a positive integer. A malformed body is treated as "use
+ * defaults" rather than an error, since both fields are optional.
+ */
+async function parseScoreOptions(c: {
+  req: { json: () => Promise<unknown> };
+}): Promise<ScoreRunOptions> {
+  const body = await c.req.json().catch(() => null);
+  const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  const remoteOnly = record.remoteOnly === true;
+  const rawLimit = Number(record.limit);
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : DEFAULT_SCORE_LIMIT;
+  return { remoteOnly, limit };
 }

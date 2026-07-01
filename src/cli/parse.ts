@@ -1,12 +1,12 @@
 import { parseArgs } from "node:util";
+import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import { COMMAND_NAMES } from "./help";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
 export const DEFAULT_MIN_SCORE = 50;
-/** Default heuristic-score floor for `score` gating when `--min-heuristic` is omitted. */
-export const DEFAULT_MIN_HEURISTIC = 30;
-/** Default cap on postings deep-scored by `score` when `--limit` is omitted. */
-export const DEFAULT_SCORE_LIMIT = 100;
+// The `score` defaults live in `@app/matching/score-defaults` so the server shares them; re-exported
+// here for the CLI's existing importers.
+export { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT };
 
 export type Command =
   | { kind: "scan" }

@@ -7,6 +7,9 @@ import { isUsageLimitError } from "./usage-limit-error";
 
 const WARNING_SOURCE = "llm-triager";
 
+/** Titles per triage LLM call. Shared by the CLI `score` command and the server score-runner. */
+export const DEFAULT_TRIAGE_BATCH_SIZE = 40;
+
 export type TriageResult = { keptIds: Set<string> };
 
 /**

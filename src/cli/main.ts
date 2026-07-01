@@ -7,7 +7,7 @@ import { formatProgress } from "@app/domain/scan-progress";
 import type { Warning } from "@app/domain/types";
 import { createAbortingScorer } from "@app/matching/aborting-scorer";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
-import { LlmTriager } from "@app/matching/llm-triager";
+import { DEFAULT_TRIAGE_BATCH_SIZE, LlmTriager } from "@app/matching/llm-triager";
 import { formatUsageSummary, UsageAccumulator } from "@app/matching/llm-usage";
 import { resolveRemoteOnly } from "@app/matching/resolve-remote";
 import {
@@ -39,8 +39,6 @@ import {
 import { renderHelp } from "./help";
 import { parseCli } from "./parse";
 import { style } from "./style";
-
-const TRIAGE_BATCH_SIZE = 40;
 
 export type ScoreCliOptions = {
   minHeuristic: number;
@@ -141,7 +139,7 @@ export async function runScoreCommand(
 
   const triager = new LlmTriager(
     new AnthropicTriageClient({ apiKey, model, onUsage }),
-    TRIAGE_BATCH_SIZE,
+    DEFAULT_TRIAGE_BATCH_SIZE,
     (warning) => warnings.push(warning),
   );
 
@@ -156,7 +154,7 @@ export async function runScoreCommand(
       remoteOnly,
       rescore: options.rescore,
       dryRun: options.dryRun,
-      batchSize: TRIAGE_BATCH_SIZE,
+      batchSize: DEFAULT_TRIAGE_BATCH_SIZE,
       cost: provider.cost,
     },
     onWarning: (warning) => warnings.push(warning),

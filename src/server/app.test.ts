@@ -1,13 +1,44 @@
+import { ANTHROPIC_KEY_SETTING } from "@app/matching/settings-keys";
 import { buildProfile } from "@app/profile/build-profile";
 import { Repository } from "@app/storage/repository";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, isLoopbackHost } from "./app";
 import { ScanJobManager } from "./scan-job";
+import { ScoreJobManager, type ScoreResult } from "./score-job";
+
+import { NoApiKeyError } from "./score-runner";
 import type { ServerDeps } from "./types";
 
 /** `Response.json()` is typed `unknown`; this narrows it at the call site without `any`. */
 async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
+}
+
+/** A canned deep-score outcome for the fake runner/preview in tests. */
+function fakeScoreResult(overrides: Partial<ScoreResult> = {}): ScoreResult {
+  return {
+    counts: {
+      inDb: 0,
+      afterRemote: 0,
+      afterHeuristic: 0,
+      afterCap: 0,
+      alreadyScoredSkipped: 0,
+      triageTitles: 0,
+      deepScored: 0,
+      remotePenalized: 0,
+    },
+    estimate: {
+      triageTitles: 0,
+      triageBatches: 0,
+      deepScores: 0,
+      triageUsd: 0,
+      deepScoreUsd: 0,
+      totalUsd: 0,
+    },
+    warnings: [],
+    abortedOnLimit: false,
+    ...overrides,
+  };
 }
 
 let repo: Repository;
@@ -17,6 +48,9 @@ function makeApp(overrides: Partial<ServerDeps> = {}) {
     repo,
     jobs: new ScanJobManager(),
     runScan: async () => ({ count: 0, warnings: [] }),
+    scoreJobs: new ScoreJobManager(),
+    createScoreRun: () => async () => fakeScoreResult(),
+    previewScore: async () => fakeScoreResult(),
     buildProfileFromText: (text) => buildProfile({ resumeText: text }),
     getUpdateStatus: async () => ({ version: "0.1.0", behind: 0, updateAvailable: false }),
     ...overrides,
@@ -603,6 +637,109 @@ describe("scan jobs", () => {
     const status = await pollUntilSettled(app);
     expect(status.state).toBe("error");
     expect(status.error).toContain("no profile yet");
+  });
+});
+
+describe("deep-score jobs", () => {
+  type ScoreStatus = {
+    state: string;
+    counts: { deepScored: number } | null;
+    error: string | null;
+    abortedOnLimit: boolean;
+  };
+
+  async function pollUntilSettled(app: ReturnType<typeof makeApp>): Promise<ScoreStatus> {
+    for (let i = 0; i < 50; i += 1) {
+      const status = await json<ScoreStatus>(await app.request("/api/score/status"));
+      if (status.state !== "running") return status;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    throw new Error("score did not settle");
+  }
+
+  function score(body: unknown = {}) {
+    return {
+      method: "POST" as const,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    };
+  }
+
+  it("preview returns the plan counts and cost estimate", async () => {
+    repo.setSetting(ANTHROPIC_KEY_SETTING, "sk-ant-test");
+    const app = makeApp({
+      previewScore: async () =>
+        fakeScoreResult({ counts: { ...fakeScoreResult().counts, afterCap: 12 } }),
+    });
+    const res = await app.request("/api/score/preview", score({ limit: 50 }));
+    expect(res.status).toBe(200);
+    const body = await json<{ counts: { afterCap: number }; estimate: { totalUsd: number } }>(res);
+    expect(body.counts.afterCap).toBe(12);
+    expect(body.estimate).toBeDefined();
+  });
+
+  it("preview returns 400 when no key is configured", async () => {
+    const app = makeApp({
+      previewScore: async () => {
+        throw new NoApiKeyError();
+      },
+    });
+    const res = await app.request("/api/score/preview", score());
+    expect(res.status).toBe(400);
+    expect((await json<{ error: string }>(res)).error).toMatch(/no anthropic key/i);
+  });
+
+  it("POST /api/score starts a job (202) and reaches done with the deep-scored count", async () => {
+    repo.setSetting(ANTHROPIC_KEY_SETTING, "sk-ant-test");
+    const createScoreRun = vi.fn(
+      () => async () => fakeScoreResult({ counts: { ...fakeScoreResult().counts, deepScored: 4 } }),
+    );
+    const app = makeApp({ createScoreRun });
+
+    const res = await app.request("/api/score", score({ remoteOnly: true, limit: 20 }));
+    expect(res.status).toBe(202);
+
+    const status = await pollUntilSettled(app);
+    expect(status.state).toBe("done");
+    expect(status.counts?.deepScored).toBe(4);
+    expect(createScoreRun).toHaveBeenCalledWith({ remoteOnly: true, limit: 20 });
+  });
+
+  it("rejects POST /api/score with 400 when no key is configured (before starting a job)", async () => {
+    const createScoreRun = vi.fn(() => async () => fakeScoreResult());
+    const app = makeApp({ createScoreRun });
+    const res = await app.request("/api/score", score());
+    expect(res.status).toBe(400);
+    expect(createScoreRun).not.toHaveBeenCalled();
+  });
+
+  it("is single-flight: a second POST returns 409 while running", async () => {
+    repo.setSetting(ANTHROPIC_KEY_SETTING, "sk-ant-test");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const createScoreRun = () => async () => {
+      await gate;
+      return fakeScoreResult();
+    };
+    const app = makeApp({ createScoreRun });
+
+    expect((await app.request("/api/score", score())).status).toBe(202);
+    expect((await app.request("/api/score", score())).status).toBe(409);
+
+    release();
+    expect((await pollUntilSettled(app)).state).toBe("done");
+  });
+
+  it("hasAnthropicKey reflects the ANTHROPIC_API_KEY env var, not just the stored key", async () => {
+    // No stored key, but the env var is set → the UI should see deep-score as available.
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-from-env");
+    const settings = await json<{ hasAnthropicKey: boolean }>(
+      await makeApp().request("/api/settings"),
+    );
+    expect(settings.hasAnthropicKey).toBe(true);
+    vi.unstubAllEnvs();
   });
 });
 
