@@ -1,4 +1,4 @@
-import { hostnameOf } from "@app/domain/normalize";
+import { hostnameOf, normalizeCareersUrl } from "@app/domain/normalize";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Warning } from "@app/domain/types";
 import type { SettingsReader } from "@app/matching/resolve-settings";
@@ -48,16 +48,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Stable key for de-duplicating leads that point at the same careers page. */
-function normalizeUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.origin}${u.pathname}`.replace(/\/$/, "").toLowerCase();
-  } catch {
-    return url.trim().toLowerCase();
-  }
-}
-
 /**
  * Build the company lead list by fanning out over all registered lead sources plus user-tracked
  * companies, merged and de-duplicated by normalized careers URL. Sources run in registry order so
@@ -99,7 +89,7 @@ async function collectLeads(
 
   const byUrl = new Map<string, CompanyLead>();
   for (const lead of [...sourceLeads, ...trackedLeads]) {
-    const key = normalizeUrl(lead.careersUrl);
+    const key = normalizeCareersUrl(lead.careersUrl);
     if (!byUrl.has(key)) byUrl.set(key, lead);
   }
 

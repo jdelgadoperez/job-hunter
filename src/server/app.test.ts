@@ -304,8 +304,9 @@ describe("companies", () => {
       { careersUrl: "https://www.linkedin.com/company/bigco/jobs/", name: "BigCo" },
     ]);
     const res = await makeApp().request("/api/companies/manual-review");
+    // Stored normalized (lower-cased, trailing slash stripped) — see normalizeCareersUrl.
     expect(await json(res)).toEqual([
-      { careersUrl: "https://www.linkedin.com/company/bigco/jobs/", name: "BigCo" },
+      { careersUrl: "https://www.linkedin.com/company/bigco/jobs", name: "BigCo" },
     ]);
   });
 
@@ -317,6 +318,22 @@ describe("companies", () => {
     });
     expect(res.status).toBe(201);
     expect(await json(res)).toEqual([{ careersUrl: "https://acme.com/careers", name: "Acme" }]);
+    expect(repo.listTrackedCompanies()).toHaveLength(1);
+  });
+
+  it("adding a case/trailing-slash variant of a tracked URL updates the row, not a duplicate", async () => {
+    const app = makeApp();
+    await app.request("/api/companies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ careersUrl: "https://Acme.com/careers/", name: "Acme" }),
+    });
+    const res = await app.request("/api/companies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ careersUrl: "https://acme.com/CAREERS", name: "Acme Inc" }),
+    });
+    expect(await json(res)).toEqual([{ careersUrl: "https://acme.com/careers", name: "Acme Inc" }]);
     expect(repo.listTrackedCompanies()).toHaveLength(1);
   });
 
