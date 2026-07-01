@@ -174,13 +174,39 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     await renderer.dispose?.();
   }
 
+  const failed: { lead: CompanyLead; result: Extract<ConnectorResult, { ok: false }> }[] = [];
   for (const { lead, result } of collected) {
     if (!result.ok) {
-      warnings.push({ source: lead.company, message: result.warning });
+      failed.push({ lead, result });
       continue;
     }
     for (const posting of result.postings) {
       byId.set(posting.id, posting);
+    }
+  }
+
+  if (failed.length > 0) {
+    const retried = await Promise.all(
+      failed.map(async ({ lead }) => {
+        try {
+          return { lead, result: await fetchLead(lead) };
+        } catch (error) {
+          return { lead, result: { ok: false, warning: errorMessage(error) } as ConnectorResult };
+        }
+      }),
+    );
+    for (const { lead, result } of retried) {
+      if (!result.ok) {
+        warnings.push({
+          source: lead.company,
+          message: result.warning,
+          careersUrl: lead.careersUrl,
+        });
+        continue;
+      }
+      for (const posting of result.postings) {
+        byId.set(posting.id, posting);
+      }
     }
   }
 
