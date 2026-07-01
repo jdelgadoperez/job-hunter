@@ -372,9 +372,11 @@ describe("GET /api/companies/needs-attention", () => {
     // listNeedsAttention's default threshold is 5 consecutive failures, so record 5 scans' worth
     // (mirrors the loop pattern used in src/cli/main.test.ts for the same threshold).
     for (let scanId = 1; scanId <= 5; scanId += 1) {
-      repo.recordScanFailures(scanId, [
-        { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
-      ]);
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+        ["https://boom.com/careers"],
+      );
     }
     const res = await makeApp().request("/api/companies/needs-attention");
     expect(await json(res)).toEqual([

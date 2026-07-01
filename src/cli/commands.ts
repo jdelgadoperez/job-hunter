@@ -241,9 +241,15 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
 
   const perCompanyFailures = sourced.warnings
     .filter((w): w is Warning & { careersUrl: string } => w.careersUrl !== undefined)
+    // `Warning.source` carries the company label for careersUrl-bearing per-company warnings,
+    // set by `discover()` from `lead.company`.
     .map((w) => ({ careersUrl: w.careersUrl, company: w.source, message: w.message }));
   try {
-    repo.recordScanFailures(sourced.scanId, perCompanyFailures);
+    repo.recordScanFailures(
+      sourced.scanId,
+      perCompanyFailures,
+      sourced.companies.map((c) => c.careersUrl),
+    );
   } catch (error) {
     // Failures degrade, never crash: the scan itself already succeeded by this point.
     log(style.warn(`  ! Failed to record scan-failure history: ${errorMessage(error)}`));

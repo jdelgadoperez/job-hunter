@@ -456,9 +456,11 @@ describe("runScan + listMatches", () => {
 
     // Seed a company already at the retry-skip threshold from a prior run.
     for (let scanId = 1; scanId <= 5; scanId++) {
-      repo.recordScanFailures(scanId, [
-        { careersUrl: "https://boom.com/careers", company: "Boom", message: "prior failure" },
-      ]);
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "prior failure" }],
+        ["https://boom.com/careers"],
+      );
     }
 
     await runScan(
@@ -492,9 +494,11 @@ describe("runScan + listMatches", () => {
 
   it("clears a company's failure history once it succeeds again", async () => {
     const repo = newRepo();
-    repo.recordScanFailures(1, [
-      { careersUrl: "https://boards.greenhouse.io/acme", company: "Acme", message: "timeout" },
-    ]);
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boards.greenhouse.io/acme", company: "Acme", message: "timeout" }],
+      ["https://boards.greenhouse.io/acme"],
+    );
 
     await runScan(
       {

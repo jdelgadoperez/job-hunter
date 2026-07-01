@@ -207,9 +207,11 @@ describe("incremental scans — directory diff", () => {
 describe("failed leads", () => {
   it("inserts a new row at consecutive_failures=1 on first failure", () => {
     const repo = newRepo();
-    repo.recordScanFailures(1, [
-      { careersUrl: "https://boom.com/careers", company: "Boom", message: "render crashed" },
-    ]);
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "render crashed" }],
+      ["https://boom.com/careers"],
+    );
     expect(repo.listNeedsAttention(1)).toEqual([
       {
         careersUrl: "https://boom.com/careers",
@@ -223,34 +225,79 @@ describe("failed leads", () => {
 
   it("increments consecutive_failures on repeated failure across scans", () => {
     const repo = newRepo();
-    repo.recordScanFailures(1, [
-      { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
-    ]);
-    repo.recordScanFailures(2, [
-      { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout again" },
-    ]);
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+      ["https://boom.com/careers"],
+    );
+    repo.recordScanFailures(
+      2,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout again" }],
+      ["https://boom.com/careers"],
+    );
     const [row] = repo.listNeedsAttention(1);
     expect(row?.consecutiveFailures).toBe(2);
     expect(row?.message).toBe("timeout again");
     repo.close();
   });
 
-  it("deletes the row when a previously-failing company recovers (absent from a later call)", () => {
+  it("deletes the row when a previously-failing company recovers on a full scan that attempted it", () => {
     const repo = newRepo();
-    repo.recordScanFailures(1, [
-      { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
-    ]);
-    repo.recordScanFailures(2, []); // Boom recovered — not in this scan's failure list
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+      ["https://boom.com/careers"],
+    );
+    // Boom recovered: this scan attempted it (full scan, so attemptedUrls includes it) but it's
+    // absent from the failures list.
+    repo.recordScanFailures(2, [], ["https://boom.com/careers"]);
     expect(repo.listNeedsAttention(1)).toEqual([]);
+    repo.close();
+  });
+
+  it("a scoped rescan does not delete failure rows for companies it didn't crawl", () => {
+    const repo = newRepo();
+    const companyAUrl = "https://a.com/careers";
+    const companyBUrl = "https://b.com/careers";
+
+    // Full scans 1-3: both A and B fail every time, so B accumulates a sub-threshold history.
+    const fullScanAttemptedUrls = [companyAUrl, companyBUrl];
+    for (let scanId = 1; scanId <= 3; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [
+          { careersUrl: companyAUrl, company: "A", message: "timeout" },
+          { careersUrl: companyBUrl, company: "B", message: "timeout" },
+        ],
+        fullScanAttemptedUrls,
+      );
+    }
+    const seededB = repo.listNeedsAttention(1).find((row) => row.careersUrl === companyBUrl);
+    const seededBFailureCount = seededB?.consecutiveFailures;
+
+    // Scoped retry-failed rescan: only A was attempted (B was never crawled this run), and A
+    // recovered (absent from the failures list).
+    repo.recordScanFailures(4, [], [companyAUrl]);
+
+    const rows = repo.listNeedsAttention(1);
+    const rowForA = rows.find((row) => row.careersUrl === companyAUrl);
+    const rowForB = rows.find((row) => row.careersUrl === companyBUrl);
+
+    // A was attempted and recovered: its row is gone.
+    expect(rowForA).toBeUndefined();
+    // B was never attempted this run: its row and accumulated failure count are untouched.
+    expect(rowForB?.consecutiveFailures).toBe(seededBFailureCount);
     repo.close();
   });
 
   it("listNeedsAttention only returns rows at or above the threshold", () => {
     const repo = newRepo();
     for (let scanId = 1; scanId <= 3; scanId++) {
-      repo.recordScanFailures(scanId, [
-        { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
-      ]);
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+        ["https://boom.com/careers"],
+      );
     }
     expect(repo.listNeedsAttention(5)).toEqual([]);
     expect(repo.listNeedsAttention(3)).toHaveLength(1);
@@ -260,9 +307,11 @@ describe("failed leads", () => {
   it("listRetrySkipUrls returns only the normalized URLs at or above the threshold", () => {
     const repo = newRepo();
     for (let scanId = 1; scanId <= 5; scanId++) {
-      repo.recordScanFailures(scanId, [
-        { careersUrl: "https://Boom.com/careers/", company: "Boom", message: "timeout" },
-      ]);
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://Boom.com/careers/", company: "Boom", message: "timeout" }],
+        ["https://Boom.com/careers/"],
+      );
     }
     expect(repo.listRetrySkipUrls(5)).toEqual(["https://boom.com/careers"]);
     repo.close();
@@ -270,12 +319,16 @@ describe("failed leads", () => {
 
   it("normalizes careers URLs so casing/trailing-slash variants collapse to one row", () => {
     const repo = newRepo();
-    repo.recordScanFailures(1, [
-      { careersUrl: "https://Boom.com/careers/", company: "Boom", message: "a" },
-    ]);
-    repo.recordScanFailures(2, [
-      { careersUrl: "https://boom.com/CAREERS", company: "Boom", message: "b" },
-    ]);
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://Boom.com/careers/", company: "Boom", message: "a" }],
+      ["https://Boom.com/careers/"],
+    );
+    repo.recordScanFailures(
+      2,
+      [{ careersUrl: "https://boom.com/CAREERS", company: "Boom", message: "b" }],
+      ["https://boom.com/CAREERS"],
+    );
     const rows = repo.listNeedsAttention(1);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.careersUrl).toBe("https://boom.com/careers");

@@ -498,23 +498,30 @@ export class Repository {
   /**
    * Record this scan's per-company failures (final, post-retry warnings with a `careersUrl`).
    * A company already in `failed_leads` gets its `consecutive_failures` incremented and message
-   * updated; a new failure is inserted at 1. Any company NOT in `failures` that currently has a row
-   * is deleted — it recovered, so its failure history is cleared rather than kept stale.
+   * updated; a new failure is inserted at 1. Deletion is scoped to `attemptedUrls` — the set of
+   * companies actually crawled this run: a row is cleared only when its company was attempted this
+   * run AND is absent from `failures` (i.e. it recovered). Rows for companies NOT attempted this run
+   * (e.g. everything outside a scoped `--retry-failed` rescan) are left untouched, so a scoped run
+   * never wipes accumulated failure history for companies it didn't crawl.
    */
   recordScanFailures(
     scanId: number,
     failures: { careersUrl: string; company: string; message: string }[],
+    attemptedUrls: Iterable<string>,
   ): void {
     const normalized = failures.map((f) => ({
       ...f,
       careersUrl: normalizeCareersUrl(f.careersUrl),
     }));
     const currentUrls = new Set(normalized.map((f) => f.careersUrl));
+    const attemptedSet = new Set(Array.from(attemptedUrls, (url) => normalizeCareersUrl(url)));
 
     const existing = this.db.prepare("SELECT careers_url FROM failed_leads").all() as {
       careers_url: string;
     }[];
-    const toDelete = existing.filter((e) => !currentUrls.has(e.careers_url));
+    const toDelete = existing.filter(
+      (e) => attemptedSet.has(e.careers_url) && !currentUrls.has(e.careers_url),
+    );
 
     const upsert = this.db.prepare(
       `INSERT INTO failed_leads (careers_url, company, message, consecutive_failures, last_failed_scan)

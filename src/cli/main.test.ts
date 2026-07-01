@@ -173,9 +173,11 @@ describe("scan command", () => {
     seedProfile();
     const repo = openDb();
     for (let scanId = 1; scanId <= 5; scanId++) {
-      repo.recordScanFailures(scanId, [
-        { careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" },
-      ]);
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+        ["https://boom.com/careers"],
+      );
     }
     repo.close();
     h.postings = [posting("1")];
