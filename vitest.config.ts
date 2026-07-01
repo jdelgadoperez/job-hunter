@@ -29,6 +29,9 @@ export default defineConfig({
         // network, so smoke-only. The unit-tested logic lives in `server/app.ts`.
         "src/server/serve.ts",
         "src/server/scan-runner.ts",
+        // Real LLM deep-score pipeline (live provider calls), smoke-only like scan-runner. The
+        // unit-tested logic lives in `server/score-job.ts` + the routes in `server/app.ts`.
+        "src/server/score-runner.ts",
       ],
       reporter: ["text", "html"],
       // Floor for the gate, a few points below current coverage so honest churn

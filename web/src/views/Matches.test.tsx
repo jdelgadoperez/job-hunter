@@ -51,7 +51,7 @@ describe("Matches empty state", () => {
     fireEvent.change(slider, { target: { value: "0" } });
 
     await waitFor(() =>
-      expect(screen.getByText(/Run a scan from the Overview tab/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Run a scan from the Home tab/i)).toBeInTheDocument(),
     );
   });
 });

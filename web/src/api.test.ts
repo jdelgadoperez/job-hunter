@@ -100,4 +100,61 @@ describe("api response validation", () => {
 
     await expect(api.startScan()).resolves.toEqual(status);
   });
+
+  it("parses a deep-score preview (counts + estimate)", async () => {
+    const preview = {
+      counts: {
+        inDb: 100,
+        afterRemote: 40,
+        afterHeuristic: 60,
+        afterCap: 40,
+        alreadyScoredSkipped: 5,
+        triageTitles: 35,
+        deepScored: 0,
+        remotePenalized: 0,
+      },
+      estimate: {
+        triageTitles: 35,
+        triageBatches: 1,
+        deepScores: 35,
+        triageUsd: 0.01,
+        deepScoreUsd: 0.35,
+        totalUsd: 0.36,
+      },
+    };
+    mockFetchOnce(preview);
+
+    await expect(api.previewScore({ remoteOnly: false, limit: 100 })).resolves.toEqual(preview);
+  });
+
+  it("startDeepScore accepts a 202 job status", async () => {
+    const status = {
+      state: "running",
+      message: "Starting…",
+      counts: null,
+      estimate: null,
+      abortedOnLimit: false,
+      warnings: [],
+      error: null,
+      startedAt: "2026-06-30T00:00:00.000Z",
+      finishedAt: null,
+    };
+    mockFetchOnce(status, { ok: false, status: 202 });
+
+    await expect(api.startDeepScore({ remoteOnly: false, limit: 100 })).resolves.toEqual(status);
+  });
+
+  it("startDeepScore surfaces the 400 no-key error message", async () => {
+    mockFetchOnce(
+      { error: "No Anthropic key configured. Add one in Settings to deep-score with Claude." },
+      {
+        ok: false,
+        status: 400,
+      },
+    );
+
+    await expect(api.startDeepScore({ remoteOnly: false, limit: 100 })).rejects.toThrow(
+      /no anthropic key/i,
+    );
+  });
 });
