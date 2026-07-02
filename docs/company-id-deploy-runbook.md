@@ -23,8 +23,15 @@ psql "$DATABASE_URL" -f src/backend/schema.sql
 `DATABASE_URL` is the service-role Postgres connection string. The migration is additive and
 idempotent (`add column if not exists`), so it's safe to re-run. It adds:
 
-- `companies.id` plus its unique index
+- `companies.id` plus its (non-unique) index
 - `postings.company_id` plus its index
+
+`companies.id` is intentionally **non-unique** — it is a content-hash of the normalized careers URL,
+so distinct `careers_url` rows (case / trailing-slash / query-string near-duplicates) can share an
+id. `schema.sql` drops any pre-existing `companies_id_idx` before recreating it non-unique, because
+`create index if not exists` matches by name only and would otherwise leave a stale unique index in
+place. (An early companyId build shipped this index as `unique`; that was corrected — a DB that
+already has the unique index self-heals on the next `schema.sql` apply.)
 
 ### 2. Backfill — not required
 
