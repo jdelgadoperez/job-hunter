@@ -633,6 +633,64 @@ describe("remote and country persistence", () => {
   });
 });
 
+describe("country backfill on migrate", () => {
+  it("fills country for now-parseable locations, leaves bare cities NULL, and is idempotent", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jobhunter-country-backfill-"));
+    const dbPath = join(dir, "legacy.db");
+    try {
+      // A minimal legacy postings table WITH a country column but NULL values, mimicking rows the
+      // old parser couldn't resolve. (The country column already exists on any DB that ran a prior
+      // migrate; we set it NULL here to represent unresolved rows.)
+      const raw = new Database(dbPath);
+      raw.exec(`
+        CREATE TABLE postings (
+          id TEXT PRIMARY KEY, company TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL,
+          source TEXT NOT NULL, description TEXT NOT NULL, location TEXT, posted_at TEXT,
+          fetched_at TEXT NOT NULL, last_seen_scan INTEGER, expired_at TEXT, country TEXT
+        );
+      `);
+      const insert = raw.prepare(
+        "INSERT INTO postings (id, company, title, url, source, description, location, fetched_at, country) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+      );
+      const t = "2026-01-01T00:00:00.000Z";
+      insert.run("p-tx", "acme", "Eng", "https://a/1", "greenhouse", "", "Austin, Texas", t);
+      insert.run("p-sf", "acme", "Eng", "https://a/2", "greenhouse", "", "San Francisco", t);
+      insert.run("p-empty", "acme", "Eng", "https://a/3", "greenhouse", "", "", t);
+      raw.close();
+
+      // Reopen through Repository — migrate() runs and backfills country.
+      new Repository(dbPath);
+
+      const check = new Database(dbPath);
+      const country = (id: string) =>
+        (
+          check.prepare("SELECT country FROM postings WHERE id = ?").get(id) as {
+            country: string | null;
+          }
+        ).country;
+      expect(country("p-tx")).toBe("US");
+      expect(country("p-sf")).toBeNull();
+      expect(country("p-empty")).toBeNull();
+      check.close();
+
+      // Idempotent: a second migrate() (via re-open) leaves the same values.
+      new Repository(dbPath);
+      const check2 = new Database(dbPath);
+      expect(
+        (
+          check2.prepare("SELECT country FROM postings WHERE id = ?").get("p-tx") as {
+            country: string | null;
+          }
+        ).country,
+      ).toBe("US");
+      check2.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("listScoredPostings — remote filter and resolved remote on the wire", () => {
   function seedWithRemote(
     repo: Repository,
