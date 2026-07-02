@@ -507,6 +507,23 @@ describe("scorer tagging + listPostingsForScoring", () => {
     repo.close();
   });
 
+  it("round-trips the heuristic-location-penalized scorer tag", () => {
+    const repo = newRepo();
+    const p = makePosting("location-penalized", "Backend Engineer");
+    repo.savePosting(p);
+    repo.saveMatchResult(
+      p.id,
+      { score: 40, matchedSkills: [], missingSkills: [] },
+      "heuristic-location-penalized",
+    );
+
+    const candidates = repo.listPostingsForScoring({ minHeuristic: 30 });
+    const candidate = candidates.find((c) => c.posting.id === p.id);
+
+    expect(candidate?.scorer).toBe("heuristic-location-penalized");
+    repo.close();
+  });
+
   it("excludes expired postings from scoring candidates", () => {
     const repo = newRepo();
     const p = makePosting("p", "Backend Engineer");

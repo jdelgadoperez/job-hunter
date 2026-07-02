@@ -36,9 +36,14 @@ export type ListMatchesOptions = {
 /**
  * How a stored match score was produced. `heuristic-remote-penalized` marks a heuristic score that
  * already had the remote penalty applied, so a later remote-only run skips it instead of penalizing
- * it again (the penalty is applied exactly once).
+ * it again (the penalty is applied exactly once). `heuristic-location-penalized` marks the same idea
+ * for the off-country location penalty, kept distinct so each penalty's idempotency guard stays precise.
  */
-export type ScorerTag = "heuristic" | "llm" | "heuristic-remote-penalized";
+export type ScorerTag =
+  | "heuristic"
+  | "llm"
+  | "heuristic-remote-penalized"
+  | "heuristic-location-penalized";
 
 /** A posting eligible for LLM scoring: its heuristic score plus whether the LLM already scored it. */
 export type ScoringCandidate = {
@@ -65,6 +70,7 @@ export type ScanRecord = {
 function normalizeScorerTag(scorer: string | null): ScorerTag {
   if (scorer === "llm") return "llm";
   if (scorer === "heuristic-remote-penalized") return "heuristic-remote-penalized";
+  if (scorer === "heuristic-location-penalized") return "heuristic-location-penalized";
   return "heuristic";
 }
 
