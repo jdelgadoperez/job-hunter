@@ -109,4 +109,9 @@ describe("isOffCountryNonStarter", () => {
   it("false for an unknown-country role (never dropped)", () => {
     expect(isOffCountryNonStarter({ location: "San Francisco", remote: false }, home)).toBe(false);
   });
+  it("false when home country is blank/whitespace only", () => {
+    expect(
+      isOffCountryNonStarter({ country: "UK", location: "London", remote: false }, "   "),
+    ).toBe(false);
+  });
 });
