@@ -334,7 +334,16 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
           </div>
 
           {scanRunning ? (
-            <p className="mt-2 text-xs text-faint">Waiting for the scan to finish…</p>
+            <p
+              className="mt-3 flex items-center gap-2 rounded-md bg-info-surface px-3 py-2 text-sm text-info"
+              aria-live="polite"
+            >
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-info"
+              />
+              Waiting for the scan to finish — deep-scoring is paused until it's done.
+            </p>
           ) : null}
 
           {previewData ? (
