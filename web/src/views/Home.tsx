@@ -223,6 +223,31 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
         first.
       </p>
 
+      {running && scoreStatus.data ? (
+        <div className="mt-3" aria-live="polite">
+          {scoreStatus.data.total ? (
+            // Decorative bar; the live text in the header conveys progress to assistive tech.
+            <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded bg-subtle">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{
+                  width: `${Math.round(
+                    (100 * (scoreStatus.data.current ?? 0)) / scoreStatus.data.total,
+                  )}%`,
+                }}
+              />
+            </div>
+          ) : null}
+          {scoreStatus.data.recent.length > 0 ? (
+            <ul className="mt-2 max-h-32 overflow-auto rounded bg-code-bg p-2 font-mono text-xs text-code-fg">
+              {scoreStatus.data.recent.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       {!hasKey ? (
         <p className="mt-3 text-sm text-warning">
           Add an Anthropic API key in Settings to enable deep-scoring.

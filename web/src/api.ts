@@ -162,6 +162,9 @@ export type ScorePreview = z.infer<typeof ScorePreviewSchema>;
 const ScoreJobStatusSchema = z.object({
   state: ScanJobStateSchema,
   message: z.string().nullable(),
+  current: z.number().nullable(),
+  total: z.number().nullable(),
+  recent: z.array(z.string()),
   counts: ScoreStageCountsSchema.nullable(),
   estimate: CostEstimateSchema.nullable(),
   abortedOnLimit: z.boolean(),

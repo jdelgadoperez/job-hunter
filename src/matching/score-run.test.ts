@@ -1,3 +1,4 @@
+import type { ScoreProgressEvent } from "@app/domain/score-progress";
 import type { JobPosting, MatchResult, SkillProfile, Warning } from "@app/domain/types";
 import type { ScorerTag, ScoringCandidate } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
@@ -132,6 +133,56 @@ describe("runScoreRun", () => {
         scorer: "llm",
       },
     ]);
+  });
+
+  it("emits progress events: planning, triaging, triaged, one scoring tick per survivor, done", async () => {
+    const candidates = [
+      candidate("a", "Staff Engineer", 80),
+      candidate("b", "Backend Engineer", 60),
+      candidate("c", "Sales Rep", 10), // below floor — not triaged/scored
+    ];
+    const { repo } = fakeRepo(candidates);
+    const events: ScoreProgressEvent[] = [];
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: baseOptions,
+      onProgress: (event) => events.push(event),
+    });
+
+    const eligible = outcome.counts.afterHeuristic; // 2 survive the floor
+    expect(events[0]).toEqual({ kind: "planning" });
+    expect(events).toContainEqual({ kind: "triaging", total: eligible });
+    expect(events).toContainEqual({ kind: "triaged", kept: eligible, total: eligible });
+
+    // One scoring tick per deep-scored survivor, counter rising 1..N (completion order).
+    const scoring = events.filter((e) => e.kind === "scoring");
+    expect(scoring).toHaveLength(outcome.counts.deepScored);
+    expect(scoring.map((e) => (e.kind === "scoring" ? e.index : -1))).toEqual(
+      Array.from({ length: outcome.counts.deepScored }, (_, i) => i + 1),
+    );
+    for (const e of scoring) {
+      if (e.kind === "scoring") expect(e.total).toBe(outcome.counts.deepScored);
+    }
+    expect(events.at(-1)).toEqual({ kind: "done", deepScored: outcome.counts.deepScored });
+  });
+
+  it("emits no scoring events on a dry run", async () => {
+    const candidates = [candidate("a", "Staff Engineer", 80)];
+    const events: ScoreProgressEvent[] = [];
+    await runScoreRun({
+      repo: fakeRepo(candidates).repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, dryRun: true },
+      onProgress: (event) => events.push(event),
+    });
+    expect(events.filter((e) => e.kind === "scoring")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "planning")).toHaveLength(0);
   });
 
   it("skips already-LLM-scored postings unless rescore is set", async () => {

@@ -1,3 +1,5 @@
+import { style } from "@app/cli/style";
+import { formatScoreProgress, type ScoreProgressEvent } from "@app/domain/score-progress";
 import type { Warning } from "@app/domain/types";
 import { createAbortingScorer } from "@app/matching/aborting-scorer";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
@@ -37,7 +39,7 @@ async function runDeepScore(
   repo: Repository,
   options: ScoreRunOptions,
   dryRun: boolean,
-  onStage?: (message: string) => void,
+  onProgress?: (event: ScoreProgressEvent) => void,
 ): Promise<ScoreResult> {
   const profile = repo.getLatestProfile();
   if (!profile) throw new Error("No profile yet. Upload a resume first.");
@@ -52,7 +54,6 @@ async function runDeepScore(
   const warnings: Warning[] = [];
   const heuristic = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
 
-  onStage?.("Planning…");
   const rawClient = provider.createClient({ apiKey, model });
   const scorer = createAbortingScorer({
     client: rawClient,
@@ -67,7 +68,6 @@ async function runDeepScore(
     (warning) => warnings.push(warning),
   );
 
-  if (!dryRun) onStage?.("Scoring…");
   const outcome = await runScoreRun({
     repo,
     profile,
@@ -83,6 +83,7 @@ async function runDeepScore(
       cost: provider.cost,
     },
     onWarning: (warning) => warnings.push(warning),
+    ...(onProgress ? { onProgress } : {}),
   });
 
   return {
@@ -93,11 +94,31 @@ async function runDeepScore(
   };
 }
 
-/** Build a background deep-score runner for the given options (real LLM calls). Smoke-only. */
+/** Log every Nth per-posting scoring tick to the terminal, so a large run stays readable. Stage
+ * events (planning/triaging/triaged/done) always log — only the high-frequency scoring ticks are
+ * throttled. The UI status still updates on every event; this throttle is terminal-only. */
+const SCORING_LOG_EVERY = 10;
+
+/** Should this event be echoed to the terminal? Always yes for non-scoring events; for scoring
+ * ticks, only every Nth and the final one (so the last "[Y/Y]" line always prints). Exported for
+ * unit testing — it's pure, unlike the rest of this network-bound (smoke-only) module. */
+export function shouldLogToTerminal(event: ScoreProgressEvent): boolean {
+  if (event.kind !== "scoring") return true;
+  return event.index % SCORING_LOG_EVERY === 0 || event.index === event.total;
+}
+
+/** Build a background deep-score runner for the given options (real LLM calls). Smoke-only.
+ * Mirrors `createScanRun`: forwards each progress event to the job status AND echoes it to the
+ * server console as `[score] …` (scoring ticks throttled to every Nth for readability). */
 export function createScoreRun(repo: Repository) {
   return (options: ScoreRunOptions): ScoreRunner =>
-    (onStage) =>
-      runDeepScore(repo, options, false, onStage);
+    (onProgress) =>
+      runDeepScore(repo, options, false, (event) => {
+        onProgress(event);
+        if (shouldLogToTerminal(event)) {
+          console.log(`${style.dim("[score]")} ${formatScoreProgress(event)}`);
+        }
+      });
 }
 
 /** Synchronous dry-run: the plan + cost estimate, with zero LLM calls. */

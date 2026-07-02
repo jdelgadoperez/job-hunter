@@ -131,6 +131,9 @@ describe("api response validation", () => {
     const status = {
       state: "running",
       message: "Starting…",
+      current: null,
+      total: null,
+      recent: [],
       counts: null,
       estimate: null,
       abortedOnLimit: false,

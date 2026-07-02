@@ -1,3 +1,4 @@
+import type { ScoreProgressEvent } from "@app/domain/score-progress";
 import type { JobPosting, MatchResult, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { errorMessage } from "@app/net/error-message";
 import type { ScorerTag, ScoringCandidate } from "@app/storage/repository";
@@ -66,8 +67,9 @@ export async function runScoreRun(deps: {
   scorer: Scorer;
   options: ScoreOptions;
   onWarning?: (warning: Warning) => void;
+  onProgress?: (event: ScoreProgressEvent) => void;
 }): Promise<ScoreOutcome> {
-  const { repo, profile, triager, scorer, options, onWarning } = deps;
+  const { repo, profile, triager, scorer, options, onWarning, onProgress } = deps;
   const warnings: Warning[] = [];
   const warn = (message: string) => {
     const warning = { source: WARNING_SOURCE, message };
@@ -136,6 +138,8 @@ export async function runScoreRun(deps: {
     return { counts, estimate, warnings, abortedOnLimit: false };
   }
 
+  onProgress?.({ kind: "planning" });
+
   for (const c of nonRemoteToPenalize) {
     repo.saveMatchResult(c.posting.id, applyRemotePenalty(c.current), "heuristic-remote-penalized");
   }
@@ -149,6 +153,8 @@ export async function runScoreRun(deps: {
     ...(c.posting.location ? { location: c.posting.location } : {}),
   }));
 
+  onProgress?.({ kind: "triaging", total: items.length });
+
   let keptIds: Set<string>;
   try {
     ({ keptIds } = await triager.triage(profile, items));
@@ -161,6 +167,7 @@ export async function runScoreRun(deps: {
   }
 
   const survivors = eligible.filter((c) => keptIds.has(c.posting.id));
+  onProgress?.({ kind: "triaged", kept: survivors.length, total: items.length });
 
   // Stage 5 — deep score concurrently (bounded). Once a usage-limit error surfaces we stop launching
   // new work; scores already in flight are allowed to finish (no point discarding completed work).
@@ -176,6 +183,14 @@ export async function runScoreRun(deps: {
           const result = await scoreOne(scorer, profile, candidate.posting);
           repo.saveMatchResult(candidate.posting.id, result, "llm");
           counts.deepScored += 1;
+          // Concurrent loop: `index` is the completion count (how many are done), not launch order,
+          // so the counter rises monotonically 1..survivors.length as scores land.
+          onProgress?.({
+            kind: "scoring",
+            index: counts.deepScored,
+            total: survivors.length,
+            title: candidate.posting.title,
+          });
         } catch (error) {
           if (isUsageLimitError(error)) {
             abortedOnLimit = true;
@@ -192,6 +207,8 @@ export async function runScoreRun(deps: {
         `${survivors.length - counts.deepScored} remaining were not scored`,
     );
   }
+
+  onProgress?.({ kind: "done", deepScored: counts.deepScored });
 
   return { counts, estimate, warnings, abortedOnLimit };
 }

@@ -1,4 +1,5 @@
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
+import type { ScoreProgressEvent } from "@app/domain/score-progress";
 import type { SkillProfile, Warning } from "@app/domain/types";
 import type { UpdateStatus } from "@app/runtime/version";
 import type { Repository } from "@app/storage/repository";
@@ -20,10 +21,11 @@ export type ScoreRunOptions = { remoteOnly: boolean; limit: number };
 
 /**
  * The deep-score seam. Production wires this to the real LLM pipeline (`runScoreRun`), so it's
- * smoke-only; tests inject a fake. `onStage` carries coarse progress lines for the job status
- * (the LLM pipeline has no per-item progress). Returns the outcome the job manager snapshots.
+ * smoke-only; tests inject a fake. `onProgress` carries the structured `ScoreProgressEvent` stream
+ * (planning → triaging → per-posting scoring ticks → done) for the job status + terminal log, the
+ * same way `ScanRunner` carries `ScanProgressEvent`. Returns the outcome the job manager snapshots.
  */
-export type ScoreRunner = (onStage: (message: string) => void) => Promise<ScoreResult>;
+export type ScoreRunner = (onProgress: (event: ScoreProgressEvent) => void) => Promise<ScoreResult>;
 
 /** Everything `createApp` needs, all injectable so route handlers are unit-tested offline. */
 export type ServerDeps = {
