@@ -80,4 +80,41 @@ describe("HttpPostingFeed", () => {
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]?.source).toBe("feed");
   });
+
+  it("maps a feed row's company_id to companyId", async () => {
+    const body = JSON.stringify([
+      {
+        id: "a",
+        company: "Acme",
+        title: "T",
+        url: "u",
+        source: "s",
+        description: "d",
+        fetched_at: "2026-07-02T00:00:00Z",
+        company_id: "abc123def4567890",
+      },
+    ]);
+    const { fetcher } = recordingFetcher(ok(body));
+    const { postings } = await new HttpPostingFeed(opts(fetcher)).fetch();
+    expect(postings[0]?.companyId).toBe("abc123def4567890");
+  });
+
+  it("validates and maps a feed row that lacks company_id (old worker) to undefined", async () => {
+    const body = JSON.stringify([
+      {
+        id: "a",
+        company: "Acme",
+        title: "T",
+        url: "u",
+        source: "s",
+        description: "d",
+        fetched_at: "2026-07-02T00:00:00Z",
+        // no company_id
+      },
+    ]);
+    const { fetcher } = recordingFetcher(ok(body));
+    const result = await new HttpPostingFeed(opts(fetcher)).fetch();
+    expect(result.warnings).toEqual([]); // did NOT degrade to a warning/empty result
+    expect(result.postings[0]?.companyId).toBeUndefined();
+  });
 });
