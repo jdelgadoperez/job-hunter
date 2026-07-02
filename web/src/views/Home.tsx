@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useEffect, useState } from "react";
 import type { CompanyRef, ScorePreview } from "../api";
-import { Button, Card, Loading } from "../components/ui";
+import { Button, Card, LiveStatus, Loading } from "../components/ui";
 import {
   useLatestScan,
   useProfile,
@@ -110,12 +110,14 @@ export function Home() {
 
         {running ? (
           <div className="mt-3" aria-live="polite">
-            <p className="text-sm text-muted">
-              {status?.message ?? "Working…"}{" "}
-              <span className="text-faint">
-                · <ElapsedTimer startedAt={startedAt} />s
-              </span>
-            </p>
+            <LiveStatus
+              message={status?.message ?? "Working…"}
+              meta={
+                <>
+                  · <ElapsedTimer startedAt={startedAt} />s
+                </>
+              }
+            />
             {status?.total ? (
               // Decorative bar; the live text above conveys progress to assistive tech.
               <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded bg-subtle">
@@ -217,7 +219,6 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
     <Card>
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-fg">3 · Deep-score with Claude</h2>
-        {running ? <span className="text-sm text-faint">{scoreStatus.data?.message}</span> : null}
       </div>
       <p className="mt-1 text-xs text-faint">
         Re-rank matches with the LLM for sharper relevance. Costs money — preview the estimate
@@ -228,6 +229,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
 
       {running && scoreStatus.data ? (
         <div className="mt-3" aria-live="polite">
+          <LiveStatus message={scoreStatus.data.message ?? "Scoring…"} />
           {scoreStatus.data.total ? (
             // Decorative bar; the live text in the header conveys progress to assistive tech.
             <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded bg-subtle">

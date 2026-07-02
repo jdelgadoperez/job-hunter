@@ -69,6 +69,24 @@ export function Loading({ label = "Loading…" }: { label?: string }) {
   );
 }
 
+/**
+ * Inline "work in progress" indicator: a pulsing indigo dot plus the live message in the app's
+ * active (primary) color, so a running scan/score reads as alive rather than fading into the
+ * surrounding body copy. Trailing `meta` (elapsed time, counts) stays quiet in the faint token to
+ * keep the emphasis hierarchy — the message is loud, its metadata is not.
+ */
+export function LiveStatus({ message, meta }: { message: string; meta?: ReactNode }) {
+  return (
+    <p className="flex items-center gap-2 text-sm font-medium text-primary">
+      <span aria-hidden="true" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" />
+      <span>
+        {message}
+        {meta ? <span className="ml-1 font-normal text-faint">{meta}</span> : null}
+      </span>
+    </p>
+  );
+}
+
 export function ErrorNote({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error);
   return (
