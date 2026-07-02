@@ -15,6 +15,7 @@ export type PostingRow = {
   location: string | null;
   remote: boolean | null;
   country: string | null;
+  company_id: string | null;
   posted_at: string | Date | null;
   fetched_at: string | Date;
 };
@@ -30,6 +31,7 @@ export type PostingInsert = {
   location: string | null;
   remote: boolean | null;
   country: string | null;
+  company_id: string | null;
   posted_at: string | null;
   fetched_at: string;
 };
@@ -46,6 +48,7 @@ export function postingToRow(posting: JobPosting): PostingInsert {
     location: posting.location ?? null,
     remote: posting.remote ?? null,
     country: posting.country ?? null,
+    company_id: posting.companyId ?? null,
     posted_at: posting.postedAt ? posting.postedAt.toISOString() : null,
     fetched_at: posting.fetchedAt.toISOString(),
   };
@@ -63,6 +66,7 @@ export function rowToPosting(row: PostingRow): JobPosting {
     ...(row.location ? { location: row.location } : {}),
     ...(row.remote == null ? {} : { remote: row.remote }),
     ...(row.country ? { country: row.country } : {}),
+    ...(row.company_id ? { companyId: row.company_id } : {}),
     ...(row.posted_at ? { postedAt: new Date(row.posted_at) } : {}),
     fetchedAt: new Date(row.fetched_at),
   };

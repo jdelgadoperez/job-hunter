@@ -39,6 +39,15 @@ describe("postgres mappers", () => {
     expect(restored).toEqual(original);
   });
 
+  it("round-trips companyId, and maps a null company_id to undefined", () => {
+    const withId = postingToRow({ ...posting({ id: "a" }), companyId: "abc123def4567890" });
+    expect(withId.company_id).toBe("abc123def4567890");
+    const back = rowToPosting({ ...withId, company_id: "abc123def4567890" } as PostingRow);
+    expect(back.companyId).toBe("abc123def4567890");
+    const noId = rowToPosting({ ...withId, company_id: null } as PostingRow);
+    expect(noId.companyId).toBeUndefined();
+  });
+
   it("coerces driver-supplied Date timestamps the same as ISO strings", () => {
     // The postgres driver hands back Date objects for timestamptz; reads must handle that too.
     const fetchedAt = new Date("2026-06-26T12:00:00.000Z");
@@ -52,6 +61,7 @@ describe("postgres mappers", () => {
       location: null,
       remote: null,
       country: null,
+      company_id: null,
       posted_at: new Date("2026-06-20T00:00:00.000Z"),
       fetched_at: fetchedAt,
     };

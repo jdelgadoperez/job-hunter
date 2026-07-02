@@ -1,3 +1,4 @@
+import { makeCompanyId } from "@app/discovery/company-id";
 import type { DirectoryDiff, ScanStore } from "@app/discovery/scan-store";
 import type { JobPosting } from "@app/domain/types";
 import type { CompanyRef } from "@app/storage/repository";
@@ -64,16 +65,24 @@ export class PostgresScanStore implements ScanStore {
     // `last_seen_at` is omitted from the column list so new rows take the column's `default now()`;
     // the conflict branch refreshes it explicitly.
     const companyRows = companies.map((c) => ({
+      id: makeCompanyId(c.careersUrl),
       careers_url: c.careersUrl,
       name: c.name ?? null,
       first_seen_scan: scanId,
       last_seen_scan: scanId,
     }));
-    const companyColumns = ["careers_url", "name", "first_seen_scan", "last_seen_scan"] as const;
+    const companyColumns = [
+      "id",
+      "careers_url",
+      "name",
+      "first_seen_scan",
+      "last_seen_scan",
+    ] as const;
     for (const batch of chunk(companyRows, INSERT_CHUNK_SIZE)) {
       await this.sql`
         INSERT INTO companies ${this.sql(batch, ...companyColumns)}
         ON CONFLICT (careers_url) DO UPDATE SET
+          id = excluded.id,
           name = excluded.name,
           last_seen_scan = excluded.last_seen_scan,
           last_seen_at = now()`;
@@ -86,10 +95,10 @@ export class PostgresScanStore implements ScanStore {
     const r = postingToRow(posting);
     await this.sql`
       INSERT INTO postings
-        (id, company, title, url, source, description, location, remote, country,
+        (id, company, title, url, source, description, location, remote, country, company_id,
          posted_at, fetched_at, last_seen_scan, expired_at)
       VALUES (${r.id}, ${r.company}, ${r.title}, ${r.url}, ${r.source}, ${r.description},
-         ${r.location}, ${r.remote}, ${r.country},
+         ${r.location}, ${r.remote}, ${r.country}, ${r.company_id},
          ${r.posted_at}, ${r.fetched_at}, ${scanId}, NULL)
       ON CONFLICT (id) DO UPDATE SET
         company = excluded.company,
@@ -100,6 +109,7 @@ export class PostgresScanStore implements ScanStore {
         location = excluded.location,
         remote = excluded.remote,
         country = excluded.country,
+        company_id = excluded.company_id,
         posted_at = excluded.posted_at,
         fetched_at = excluded.fetched_at,
         last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
@@ -127,6 +137,7 @@ export class PostgresScanStore implements ScanStore {
       "location",
       "remote",
       "country",
+      "company_id",
       "posted_at",
       "fetched_at",
       "last_seen_scan",
@@ -143,6 +154,7 @@ export class PostgresScanStore implements ScanStore {
           location = excluded.location,
           remote = excluded.remote,
           country = excluded.country,
+          company_id = excluded.company_id,
           posted_at = excluded.posted_at,
           fetched_at = excluded.fetched_at,
           last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
@@ -153,7 +165,7 @@ export class PostgresScanStore implements ScanStore {
 
   async listLivePostingsNotSeen(scanId: number): Promise<JobPosting[]> {
     const rows = await this.sql<PostingRow[]>`
-      SELECT id, company, title, url, source, description, location, remote, country, posted_at, fetched_at
+      SELECT id, company, title, url, source, description, location, remote, country, company_id, posted_at, fetched_at
       FROM postings
       WHERE expired_at IS NULL AND (last_seen_scan IS NULL OR last_seen_scan != ${scanId})`;
     return rows.map(rowToPosting);
