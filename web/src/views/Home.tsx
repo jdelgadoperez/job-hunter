@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useState } from "react";
 import type { CompanyRef, ScorePreview } from "../api";
 import { Button, Card, LiveStatus, Loading } from "../components/ui";
@@ -48,10 +49,12 @@ export function Home() {
   const startedAt = running ? status?.startedAt : null;
 
   const [fileError, setFileError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
     // Pre-flight checks so a wrong-type or oversized file fails instantly instead of after an
     // upload round-trip. The server enforces both too (the source of truth); this is just UX.
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -83,17 +86,31 @@ export function Home() {
         ) : (
           <p className="mt-1 text-sm text-muted">No profile yet — upload a resume to build one.</p>
         )}
-        <label className="mt-3 inline-block">
-          <span className="sr-only">Upload resume</span>
-          <input
-            type="file"
-            accept=".txt,.md,.pdf,.docx"
-            onChange={onFile}
-            disabled={upload.isPending}
-            className="text-sm"
-          />
-        </label>
-        {upload.isPending ? <span className="ml-2 text-sm text-faint">Parsing…</span> : null}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label
+            className={`inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted transition hover:bg-subtle hover:text-fg focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1 focus-within:ring-offset-surface ${
+              upload.isPending ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+            }`}
+          >
+            <Upload size={16} aria-hidden="true" />
+            <span>{skills.length > 0 ? "Replace resume" : "Choose resume"}</span>
+            <input
+              type="file"
+              accept=".txt,.md,.pdf,.docx"
+              onChange={onFile}
+              disabled={upload.isPending}
+              className="sr-only"
+            />
+          </label>
+          {fileName ? (
+            <span className="text-sm text-faint" title={fileName}>
+              {fileName}
+            </span>
+          ) : (
+            <span className="text-xs text-faint">.txt, .md, .pdf, or .docx</span>
+          )}
+          {upload.isPending ? <span className="text-sm text-faint">Parsing…</span> : null}
+        </div>
         {fileError ? <p className="mt-2 text-sm text-danger">{fileError}</p> : null}
         {upload.isError ? <p className="mt-2 text-sm text-danger">{String(upload.error)}</p> : null}
       </Card>
