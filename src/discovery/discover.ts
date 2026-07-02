@@ -30,6 +30,8 @@ export type DiscoverDeps = {
   settings: SettingsReader;
   /** Lead sources to run; defaults to the production registry. Injected for tests. */
   sources?: LeadSource[];
+  /** Normalized careers URLs to exclude from the retry pass (still attempted on the main pass). */
+  skipRetryFor?: Set<string>;
 };
 
 export type DiscoverResult = {
@@ -144,9 +146,9 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     return { ok: true, postings };
   };
 
-  let collected: { lead: CompanyLead; result: ConnectorResult }[];
+  const failed: { lead: CompanyLead; result: Extract<ConnectorResult, { ok: false }> }[] = [];
   try {
-    collected = await Promise.all(
+    const collected = await Promise.all(
       leads.map(async (lead) => {
         await waitTurn();
         return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
@@ -168,20 +170,63 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         });
       }),
     );
+
+    for (const { lead, result } of collected) {
+      if (!result.ok) {
+        failed.push({ lead, result });
+        continue;
+      }
+      for (const posting of result.postings) {
+        byId.set(posting.id, posting);
+      }
+    }
+
+    if (failed.length > 0) {
+      const skipRetryFor = deps.skipRetryFor ?? new Set<string>();
+      const toRetry = failed.filter(
+        ({ lead }) => !skipRetryFor.has(normalizeCareersUrl(lead.careersUrl)),
+      );
+      const retried = await Promise.all(
+        toRetry.map(async ({ lead }) => {
+          await waitTurn();
+          return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+            try {
+              return { lead, result: await fetchLead(lead) };
+            } catch (error) {
+              return { lead, result: { ok: false, warning: errorMessage(error) } };
+            }
+          });
+        }),
+      );
+      const retriedUrls = new Set(toRetry.map(({ lead }) => normalizeCareersUrl(lead.careersUrl)));
+      for (const { lead, result } of retried) {
+        if (!result.ok) {
+          warnings.push({
+            source: lead.company,
+            message: result.warning,
+            careersUrl: lead.careersUrl,
+          });
+          continue;
+        }
+        for (const posting of result.postings) {
+          byId.set(posting.id, posting);
+        }
+      }
+      // Anything skipped (in skipRetryFor) keeps its original main-pass warning.
+      for (const { lead, result } of failed) {
+        if (retriedUrls.has(normalizeCareersUrl(lead.careersUrl))) continue;
+        warnings.push({
+          source: lead.company,
+          message: result.warning,
+          careersUrl: lead.careersUrl,
+        });
+      }
+    }
   } finally {
     // Release the shared headless browser (if the run used the browser fallback) once, after all
-    // renders are done — rather than launching and closing one per company.
+    // renders are done — main pass AND retry pass — rather than launching and closing one per
+    // company or per pass.
     await renderer.dispose?.();
-  }
-
-  for (const { lead, result } of collected) {
-    if (!result.ok) {
-      warnings.push({ source: lead.company, message: result.warning });
-      continue;
-    }
-    for (const posting of result.postings) {
-      byId.set(posting.id, posting);
-    }
   }
 
   const skipped = leads.filter((lead) => isUnscrapableHost(lead.careersUrl));

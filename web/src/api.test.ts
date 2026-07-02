@@ -157,4 +157,36 @@ describe("api response validation", () => {
       /no anthropic key/i,
     );
   });
+
+  it("parses a needs-attention list", async () => {
+    const entries = [
+      {
+        careersUrl: "https://boom.com/careers",
+        company: "Boom",
+        message: "render crashed",
+        consecutiveFailures: 5,
+      },
+    ];
+    mockFetchOnce(entries);
+
+    await expect(api.getNeedsAttention()).resolves.toEqual(entries);
+  });
+
+  it("retryFailedScan treats both 202 and 409 as a valid scan-status body", async () => {
+    const status = {
+      state: "running",
+      message: null,
+      current: null,
+      total: null,
+      count: null,
+      warnings: [],
+      error: null,
+      startedAt: "2026-06-30T00:00:00.000Z",
+      finishedAt: null,
+      recent: [],
+    };
+    mockFetchOnce(status, { ok: false, status: 409 });
+
+    await expect(api.retryFailedScan()).resolves.toEqual(status);
+  });
 });

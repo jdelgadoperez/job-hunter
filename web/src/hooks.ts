@@ -72,6 +72,10 @@ export function useManualReviewCompanies() {
   });
 }
 
+export function useNeedsAttention() {
+  return useQuery({ queryKey: ["companies", "needs-attention"], queryFn: api.getNeedsAttention });
+}
+
 export function useAddCompany() {
   const qc = useQueryClient();
   return useMutation({
@@ -166,6 +170,14 @@ export function useStartScan() {
     // POST /api/scan returns as soon as the background job starts, so this status is always
     // "running" (or "idle" on a 409) — never "done". Scan completion is detected by useScanStatus's
     // poll and invalidates ["matches"] from Home, so there's nothing to refresh here.
+    onSuccess: (status) => qc.setQueryData(["scan-status"], status),
+  });
+}
+
+export function useRetryFailedScan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.retryFailedScan,
     onSuccess: (status) => qc.setQueryData(["scan-status"], status),
   });
 }

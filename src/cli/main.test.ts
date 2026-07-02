@@ -168,6 +168,57 @@ describe("scan command", () => {
     expect(repo.listScoredPostings(0)).toHaveLength(1);
     repo.close();
   });
+
+  it("--retry-failed scopes discovery to the needs-attention list only", async () => {
+    seedProfile();
+    const repo = openDb();
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+        ["https://boom.com/careers"],
+      );
+    }
+    repo.close();
+    h.postings = [posting("1")];
+
+    await runCli("scan", "--retry-failed");
+
+    expect(logged()).toContain("Scanned and scored 1");
+  });
+
+  it("--retry-failed with an empty needs-attention list is a no-op", async () => {
+    seedProfile();
+
+    await runCli("scan", "--retry-failed");
+
+    expect(logged()).toContain("Nothing needs attention");
+  });
+
+  it("runs --retry-failed as a retry-scope scan", async () => {
+    seedProfile();
+    const repo = openDb();
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://flaky.example/careers", company: "Flaky", message: "timeout" }],
+        ["https://flaky.example/careers"],
+      );
+    }
+    repo.close();
+    h.postings = [];
+
+    await runCli("scan", "--retry-failed");
+
+    const verifyRepo = openDb();
+    // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+    const scansDb = verifyRepo["db"];
+    const latestScan = scansDb.prepare("SELECT kind FROM scans ORDER BY id DESC LIMIT 1").get() as {
+      kind: string;
+    };
+    expect(latestScan.kind).toBe("retry");
+    verifyRepo.close();
+  });
 });
 
 describe("settingsWithEnvKey", () => {

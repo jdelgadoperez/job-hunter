@@ -371,6 +371,184 @@ describe("discover", () => {
   });
 });
 
+describe("discover retry pass", () => {
+  it("retries a company that failed the main pass, and it succeeds this time", async () => {
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") {
+          renderCalls += 1;
+          if (renderCalls === 1) throw new Error("render crashed");
+          return JSONLD_HTML;
+        }
+        return JSONLD_HTML;
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+    );
+
+    const { postings, warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // Failed once, succeeded on retry — no warning, and the posting made it through.
+    expect(renderCalls).toBe(2);
+    expect(warnings).toHaveLength(0);
+    expect(postings.map((p) => p.title)).toEqual(["Operations Lead"]);
+  });
+
+  it("keeps a per-company warning (with careersUrl) when a company fails both the main pass and the retry", async () => {
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") throw new Error("render crashed");
+        return JSONLD_HTML;
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Boom", url: "https://boom.com/careers" },
+        { name: "Initech", url: "https://initech.com/careers" },
+      ]),
+    );
+
+    const { postings, warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.source).toBe("Boom");
+    expect(warnings[0]?.careersUrl).toBe("https://boom.com/careers");
+    // The other company's posting still comes through despite Boom's persistent failure.
+    expect(postings.map((p) => p.title)).toEqual(["Operations Lead"]);
+  });
+
+  it("does not retry source-level failures or the unscrapable-host skip notice", async () => {
+    const bad: LeadSource = {
+      name: "bad-source",
+      fetch: async () => ({ leads: [], warnings: [{ source: "bad-source", message: "boom" }] }),
+    };
+    const rendered: string[] = [];
+    const renderer: PageRenderer = {
+      async render(url) {
+        rendered.push(url);
+        return JSONLD_HTML;
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "BigCo", url: "https://www.linkedin.com/company/bigco/jobs/" },
+        { name: "Initech", url: "https://initech.com/careers" },
+      ]),
+    );
+
+    const { warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [bad, new AirtableSource()],
+    });
+
+    // Source-level failure has no careersUrl — never retried.
+    const sourceWarning = warnings.find((w) => w.source === "bad-source");
+    expect(sourceWarning?.careersUrl).toBeUndefined();
+    // The unscrapable-host summary warning also has no careersUrl.
+    const skipWarning = warnings.find((w) => w.source === "directory");
+    expect(skipWarning?.careersUrl).toBeUndefined();
+    // LinkedIn is never rendered (skip, not a failure) — only Initech's careers page renders once.
+    expect(rendered).toEqual(["https://initech.com/careers"]);
+  });
+
+  it("bounds concurrency in the retry pass", async () => {
+    const companies = Array.from({ length: 6 }, (_, i) => ({
+      name: `Company${i}`,
+      url: `https://company${i}.example.com/careers`,
+    }));
+    const attempts = new Map<string, number>();
+    let inFlight = 0;
+    let peak = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        const attempt = (attempts.get(url) ?? 0) + 1;
+        attempts.set(url, attempt);
+        // First attempt (main pass) fails immediately, forcing every lead into the retry pass.
+        if (attempt === 1) throw new Error("render crashed");
+        // Second attempt (retry pass) is observed for concurrency.
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        try {
+          await sleep(5);
+          return JSONLD_HTML;
+        } finally {
+          inFlight -= 1;
+        }
+      },
+    };
+    const reader = new FakeSharedViewReader(airtableData(companies));
+
+    const { warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      concurrency: 2,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // All six leads failed the main pass and succeeded on retry — no warnings left over.
+    expect(warnings).toHaveLength(0);
+    expect(peak).toBeLessThanOrEqual(2);
+  });
+
+  it("skips the retry pass for a company in skipRetryFor, but still attempts it on the main pass", async () => {
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") {
+          renderCalls += 1;
+          throw new Error("render crashed");
+        }
+        return JSONLD_HTML;
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+    );
+
+    const { warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+      skipRetryFor: new Set(["https://boom.com/careers"]),
+    });
+
+    // Attempted once (main pass) — the retry pass skipped it, so renderCalls stops at 1.
+    expect(renderCalls).toBe(1);
+    expect(warnings[0]?.careersUrl).toBe("https://boom.com/careers");
+  });
+});
+
 /** Minimal deps for the fan-out tests — no real network/browser needed. */
 function baseDeps() {
   const fetcher: Fetcher = {

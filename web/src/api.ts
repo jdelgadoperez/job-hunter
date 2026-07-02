@@ -59,6 +59,14 @@ export type Skill = z.infer<typeof SkillSchema>;
 const CompanyRefSchema = z.object({ careersUrl: z.string(), name: z.string().optional() });
 export type CompanyRef = z.infer<typeof CompanyRefSchema>;
 
+const NeedsAttentionEntrySchema = z.object({
+  careersUrl: z.string(),
+  company: z.string(),
+  message: z.string(),
+  consecutiveFailures: z.number(),
+});
+export type NeedsAttentionEntry = z.infer<typeof NeedsAttentionEntrySchema>;
+
 /** A finished scan's outcome: counts plus the directory delta vs. the previous scan. */
 const ScanRecordSchema = z.object({
   id: z.number(),
@@ -112,7 +120,9 @@ const ScanJobStatusSchema = z.object({
   current: z.number().nullable(),
   total: z.number().nullable(),
   count: z.number().nullable(),
-  warnings: z.array(z.object({ source: z.string(), message: z.string() })),
+  warnings: z.array(
+    z.object({ source: z.string(), message: z.string(), careersUrl: z.string().optional() }),
+  ),
   error: z.string().nullable(),
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
@@ -217,6 +227,8 @@ export const api = {
   getCompanies: () => request("/api/companies", z.array(TrackedCompanySchema)),
   getManualReviewCompanies: () =>
     request("/api/companies/manual-review", z.array(CompanyRefSchema)),
+  getNeedsAttention: () =>
+    request("/api/companies/needs-attention", z.array(NeedsAttentionEntrySchema)),
   addCompany: (careersUrl: string, name?: string) =>
     request("/api/companies", z.array(TrackedCompanySchema), {
       method: "POST",
@@ -259,6 +271,14 @@ export const api = {
   // (already running) carry the current job status, so neither is an error here.
   startScan: async (): Promise<ScanJobStatus> => {
     const res = await fetch("/api/scan", { method: "POST" });
+    if (res.status === 202 || res.status === 409 || res.ok) {
+      return ScanJobStatusSchema.parse(await res.json());
+    }
+    throw new Error(`${res.status} ${res.statusText}`);
+  },
+  // Same 202/409-both-ok semantics as startScan — either way the body is the current job status.
+  retryFailedScan: async (): Promise<ScanJobStatus> => {
+    const res = await fetch("/api/scan/retry-failed", { method: "POST" });
     if (res.status === 202 || res.status === 409 || res.ok) {
       return ScanJobStatusSchema.parse(await res.json());
     }

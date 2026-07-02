@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DiscoverDeps } from "@app/discovery/discover";
 import { resolvePostingFeed } from "@app/discovery/feed/resolve-feed";
+import type { ScanScope } from "@app/discovery/scan-store";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
@@ -48,12 +50,32 @@ export type ScoreCliOptions = {
   dryRun: boolean;
 };
 
-export async function runScanCommand(repo: Repository, log: Logger): Promise<void> {
+export async function runScanCommand(
+  repo: Repository,
+  log: Logger,
+  retryFailed: boolean,
+): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
     log(style.warn("No profile yet. Run `job-hunter profile <resume-file>` first."));
     process.exitCode = 1;
     return;
+  }
+
+  let trackedCompanies = repo.listTrackedCompanies();
+  let sources: DiscoverDeps["sources"] | undefined;
+  if (retryFailed) {
+    const needsAttention = repo.listNeedsAttention();
+    if (needsAttention.length === 0) {
+      log(style.dim("Nothing needs attention — every company scanned cleanly recently."));
+      return;
+    }
+    trackedCompanies = needsAttention.map((c) => ({ careersUrl: c.careersUrl, name: c.company }));
+    // Scope the *local crawl* to just these companies, not the full directory. Known limitation:
+    // when a remote feed is configured (hybrid mode), the shared feed is still pulled whole — only
+    // the local crawl is scoped here, so a feed user's `--retry-failed` run also re-scores feed
+    // postings. Scoping the feed too needs a stable company key on postings (tracked separately).
+    sources = [];
   }
 
   const dictionary = repo.getSkillDictionary();
@@ -62,6 +84,7 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
   const fetcher = new HttpFetcher();
   // Hybrid remote mode when a feed is configured: pull the shared feed + crawl only tracked companies.
   const feed = resolvePostingFeed(repo, fetcher);
+  const scanScope: ScanScope | undefined = retryFailed ? "retry" : undefined;
 
   const result = await runScan(
     {
@@ -69,6 +92,7 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
       profile,
       scorer,
       ...(feed ? { feed } : {}),
+      ...(scanScope ? { scope: scanScope } : {}),
       // Live status so a scan is never silent: directory read, per-company, scoring.
       // Dimmed as secondary chatter — the final summary stands out in full color.
       onProgress: (event) => log(style.dim(formatProgress(event))),
@@ -77,8 +101,9 @@ export async function runScanCommand(repo: Repository, log: Logger): Promise<voi
         renderer: new PlaywrightRenderer(),
         sharedViewReader: new PlaywrightSharedViewReader(),
         shareUrl: resolveShareUrl(),
-        trackedCompanies: repo.listTrackedCompanies(),
+        trackedCompanies,
         settings: settingsWithEnvKey(repo),
+        ...(sources ? { sources } : {}),
       },
     },
     // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.
@@ -226,7 +251,7 @@ export async function main(): Promise<void> {
         });
         break;
       case "scan":
-        await runScanCommand(repo, log);
+        await runScanCommand(repo, log, command.retryFailed);
         break;
       case "score":
         await runScoreCommand(

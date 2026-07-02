@@ -76,6 +76,7 @@ export function createApp(deps: ServerDeps): Hono {
     repo,
     jobs,
     runScan,
+    retryFailedScan,
     scoreJobs,
     createScoreRun,
     previewScore,
@@ -137,6 +138,10 @@ export function createApp(deps: ServerDeps): Hono {
       repo.listDirectoryCompanies().filter((company) => isUnscrapableHost(company.careersUrl)),
     ),
   );
+
+  // Companies with repeated per-company scan failures (>=5 consecutive), for the dashboard's
+  // "needs attention" surface.
+  app.get("/api/companies/needs-attention", (c) => c.json(repo.listNeedsAttention()));
 
   // Track a company by its careers-page URL. Validated as an http(s) URL so a typo doesn't become
   // a phantom lead. Upserts by URL; returns the updated list.
@@ -277,6 +282,13 @@ export function createApp(deps: ServerDeps): Hono {
   // Either way the body is the current job status, so the client can begin polling immediately.
   app.post("/api/scan", (c) => {
     const started = jobs.start(runScan);
+    return c.json(jobs.getStatus(), started ? 202 : 409);
+  });
+
+  // Rescan only the companies currently in the "needs attention" list (>=5 consecutive failures).
+  // Same single-flight 202/409 contract as POST /api/scan.
+  app.post("/api/scan/retry-failed", (c) => {
+    const started = jobs.start(retryFailedScan);
     return c.json(jobs.getStatus(), started ? 202 : 409);
   });
 

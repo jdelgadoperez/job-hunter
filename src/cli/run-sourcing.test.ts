@@ -47,8 +47,16 @@ function airtableData(companies: { name: string; url: string }[]): unknown {
  * A ScanStore with no real DB — captures what sourcing writes. Crucially has NO saveMatchResult.
  * `batched: true` adds the optional `savePostings` so sourcing takes the bulk-write path; `batchCalls`
  * records each batch (so a test can assert one call per chunk rather than one per posting).
+ * `onListLivePostingsNotSeen` / `onExpireStalePostings` are spies a test can pass in to observe
+ * whether the retry-scope path skips the liveness recheck and expiry calls.
  */
-function fakeStore(opts: { batched?: boolean } = {}): {
+function fakeStore(
+  opts: {
+    batched?: boolean;
+    onListLivePostingsNotSeen?: () => void;
+    onExpireStalePostings?: () => void;
+  } = {},
+): {
   store: ScanStore;
   saved: JobPosting[];
   batchCalls: JobPosting[][];
@@ -66,9 +74,15 @@ function fakeStore(opts: { batched?: boolean } = {}): {
     savePosting: (posting) => {
       saved.push(posting);
     },
-    listLivePostingsNotSeen: () => [],
+    listLivePostingsNotSeen: () => {
+      opts.onListLivePostingsNotSeen?.();
+      return [];
+    },
     markPostingExpired: () => false,
-    expireStalePostings: () => 0,
+    expireStalePostings: () => {
+      opts.onExpireStalePostings?.();
+      return 0;
+    },
     finishScan: (_id, summary) => {
       finished.push({ postingsSeen: summary.postingsSeen, companiesSeen: summary.companiesSeen });
     },
@@ -231,6 +245,25 @@ describe("runSourcing", () => {
     });
 
     expect(events).toContainEqual({ kind: "persisting", total: outcome.postings.length });
+  });
+
+  it("skips liveness re-check and expiry on a retry-scope sourcing run", async () => {
+    const calls: string[] = [];
+    const { store } = fakeStore({
+      onListLivePostingsNotSeen: () => calls.push("recheck"),
+      onExpireStalePostings: () => calls.push("expire"),
+    });
+
+    const outcome = await runSourcing({
+      repo: store,
+      scope: "retry",
+      discoverDeps: discoverDeps({}, []),
+    });
+
+    expect(calls).not.toContain("recheck");
+    expect(calls).not.toContain("expire");
+    expect(outcome.expired).toBe(0);
+    expect(outcome.removedCompanies).toEqual([]);
   });
 });
 

@@ -1,3 +1,4 @@
+import type { ScanScope } from "@app/discovery/scan-store";
 import { normalizeCareersUrl, normalizeSkill } from "@app/domain/normalize";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import { resolvePostingRemote } from "@app/matching/remote-filter";
@@ -106,6 +107,13 @@ export class Repository {
     );
     if (!matchColumns.has("scorer")) {
       this.db.exec("ALTER TABLE match_results ADD COLUMN scorer TEXT");
+    }
+
+    const scanColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(scans)").all() as { name: string }[]).map((c) => c.name),
+    );
+    if (!scanColumns.has("kind")) {
+      this.db.exec("ALTER TABLE scans ADD COLUMN kind TEXT NOT NULL DEFAULT 'full'");
     }
 
     // Create indexes now that every referenced column is guaranteed to exist (above + base schema).
@@ -438,9 +446,13 @@ export class Repository {
     }));
   }
 
-  /** Open a new scan run and return its sequential id (drives the diff + posting expiry). */
-  startScan(): number {
-    const info = this.db.prepare("INSERT INTO scans (started_at) VALUES (datetime('now'))").run();
+  /** Open a new scan run of the given `kind` and return its sequential id (drives the diff +
+   * posting expiry). A `"retry"` scan is a scoped rescan and is excluded from the staleness clock
+   * that `expireStalePostings` reads (see there). */
+  startScan(kind: ScanScope = "full"): number {
+    const info = this.db
+      .prepare("INSERT INTO scans (started_at, kind) VALUES (datetime('now'), ?)")
+      .run(kind);
     return Number(info.lastInsertRowid);
   }
 
@@ -451,7 +463,9 @@ export class Repository {
   recordDirectory(
     scanId: number,
     companiesIn: CompanyRef[],
+    options: { computeRemoved?: boolean } = {},
   ): { newCompanies: CompanyRef[]; removedCompanies: CompanyRef[] } {
+    const computeRemoved = options.computeRemoved ?? true;
     // Normalized so case/trailing-slash/query-string variants of the same URL update one row
     // instead of the `PRIMARY KEY` admitting a near-duplicate (see `normalizeCareersUrl`).
     const companies = companiesIn.map((c) => ({
@@ -471,9 +485,10 @@ export class Repository {
     const prevScan = prevRow.id;
     const isBaseline = existing.length === 0;
 
-    const newCompanies = isBaseline ? [] : companies.filter((c) => !existingUrls.has(c.careersUrl));
+    const newCompanies =
+      !computeRemoved || isBaseline ? [] : companies.filter((c) => !existingUrls.has(c.careersUrl));
     const removedCompanies =
-      isBaseline || prevScan === null
+      !computeRemoved || isBaseline || prevScan === null
         ? []
         : existing
             .filter((e) => e.last_seen_scan === prevScan && !currentUrls.has(e.careers_url))
@@ -496,15 +511,97 @@ export class Repository {
   }
 
   /**
-   * Mark postings not seen for `staleAfter` consecutive scans as expired (they vanished from their
-   * board). Postings never stamped by a scan (legacy rows) are left alone. Returns how many expired.
+   * Record this scan's per-company failures (final, post-retry warnings with a `careersUrl`).
+   * A company already in `failed_leads` gets its `consecutive_failures` incremented and message
+   * updated; a new failure is inserted at 1. Deletion is scoped to `attemptedUrls` — the set of
+   * companies actually crawled this run: a row is cleared only when its company was attempted this
+   * run AND is absent from `failures` (i.e. it recovered). Rows for companies NOT attempted this run
+   * (e.g. everything outside a scoped `--retry-failed` rescan) are left untouched, so a scoped run
+   * never wipes accumulated failure history for companies it didn't crawl.
+   */
+  recordScanFailures(
+    scanId: number,
+    failures: { careersUrl: string; company: string; message: string }[],
+    attemptedUrls: Iterable<string>,
+  ): void {
+    const normalized = failures.map((f) => ({
+      ...f,
+      careersUrl: normalizeCareersUrl(f.careersUrl),
+    }));
+    const currentUrls = new Set(normalized.map((f) => f.careersUrl));
+    const attemptedSet = new Set(Array.from(attemptedUrls, (url) => normalizeCareersUrl(url)));
+
+    const existing = this.db.prepare("SELECT careers_url FROM failed_leads").all() as {
+      careers_url: string;
+    }[];
+    const toDelete = existing.filter(
+      (e) => attemptedSet.has(e.careers_url) && !currentUrls.has(e.careers_url),
+    );
+
+    const upsert = this.db.prepare(
+      `INSERT INTO failed_leads (careers_url, company, message, consecutive_failures, last_failed_scan)
+       VALUES (@careersUrl, @company, @message, 1, @scanId)
+       ON CONFLICT(careers_url) DO UPDATE SET
+         company = excluded.company,
+         message = excluded.message,
+         consecutive_failures = failed_leads.consecutive_failures + 1,
+         last_failed_scan = excluded.last_failed_scan`,
+    );
+    const del = this.db.prepare("DELETE FROM failed_leads WHERE careers_url = ?");
+
+    const transaction = this.db.transaction(() => {
+      for (const row of toDelete) del.run(row.careers_url);
+      for (const f of normalized) upsert.run({ ...f, scanId });
+    });
+    transaction();
+  }
+
+  /** Companies with `consecutive_failures >= threshold`, for the "Needs attention" CLI/UI surfaces. */
+  listNeedsAttention(
+    threshold = 5,
+  ): { careersUrl: string; company: string; message: string; consecutiveFailures: number }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT careers_url, company, message, consecutive_failures FROM failed_leads
+         WHERE consecutive_failures >= ? ORDER BY consecutive_failures DESC, careers_url`,
+      )
+      .all(threshold) as {
+      careers_url: string;
+      company: string | null;
+      message: string;
+      consecutive_failures: number;
+    }[];
+    return rows.map((row) => ({
+      careersUrl: row.careers_url,
+      company: row.company ?? row.careers_url,
+      message: row.message,
+      consecutiveFailures: row.consecutive_failures,
+    }));
+  }
+
+  /** Just the normalized URLs at/over `threshold` — for `discover()`'s retry pass to skip. */
+  listRetrySkipUrls(threshold = 5): string[] {
+    return this.listNeedsAttention(threshold).map((row) => row.careersUrl);
+  }
+
+  /**
+   * Mark postings not seen for `staleAfter` consecutive **full** scans as expired (they vanished
+   * from their board). Postings never stamped by a scan (legacy rows) are left alone. Returns how
+   * many expired.
+   *
+   * Staleness counts only full scans newer than a posting's `last_seen_scan`, so any number of
+   * scoped `"retry"` scans in between never advances the clock (a scoped run refreshes only the
+   * companies it crawls, and must not push untouched postings toward expiry).
    */
   expireStalePostings(currentScanId: number, staleAfter = 2): number {
     return this.db
       .prepare(
         `UPDATE postings SET expired_at = datetime('now')
          WHERE expired_at IS NULL AND last_seen_scan IS NOT NULL
-           AND (? - last_seen_scan) >= ?`,
+           AND (
+             SELECT COUNT(*) FROM scans
+             WHERE kind = 'full' AND id > postings.last_seen_scan AND id <= ?
+           ) >= ?`,
       )
       .run(currentScanId, staleAfter).changes;
   }

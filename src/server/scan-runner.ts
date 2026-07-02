@@ -57,3 +57,54 @@ export function createScanRunner(repo: Repository): ScanRunner {
     return { count: result.count, warnings: result.warnings };
   };
 }
+
+/**
+ * Scoped scan runner for `POST /api/scan/retry-failed`: crawls only the companies currently in the
+ * "needs attention" list (repeated per-company failures), not the full directory. Mirrors
+ * `createScanRunner` but fixes `trackedCompanies`/`sources` to the scoped list.
+ */
+export function createRetryFailedScanRunner(repo: Repository): ScanRunner {
+  return async (onProgress) => {
+    const profile = repo.getLatestProfile();
+    if (!profile) throw new Error("No profile yet. Upload a resume first.");
+
+    const needsAttention = repo.listNeedsAttention();
+    if (needsAttention.length === 0) {
+      return { count: 0, warnings: [] };
+    }
+
+    const dictionary = repo.getSkillDictionary();
+    const scorer = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
+    const fetcher = new HttpFetcher();
+    const feed = resolvePostingFeed(repo, fetcher);
+
+    const result = await runScan(
+      {
+        repo,
+        profile,
+        scorer,
+        ...(feed ? { feed } : {}),
+        scope: "retry",
+        onProgress: (event) => {
+          onProgress(event);
+          console.log(`${style.dim("[scan]")} ${formatProgress(event)}`);
+        },
+        discoverDeps: {
+          fetcher,
+          renderer: new PlaywrightRenderer(),
+          sharedViewReader: new PlaywrightSharedViewReader(),
+          shareUrl: resolveShareUrl(),
+          trackedCompanies: needsAttention.map((c) => ({
+            careersUrl: c.careersUrl,
+            name: c.company,
+          })),
+          sources: [],
+          settings: settingsWithEnvKey(repo),
+        },
+      },
+      (message) => console.log(`${style.dim("[scan]")} ${message}`),
+    );
+
+    return { count: result.count, warnings: result.warnings };
+  };
+}

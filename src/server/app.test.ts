@@ -48,6 +48,7 @@ function makeApp(overrides: Partial<ServerDeps> = {}) {
     repo,
     jobs: new ScanJobManager(),
     runScan: async () => ({ count: 0, warnings: [] }),
+    retryFailedScan: async () => ({ count: 0, warnings: [] }),
     scoreJobs: new ScoreJobManager(),
     createScoreRun: () => async () => fakeScoreResult(),
     previewScore: async () => fakeScoreResult(),
@@ -366,6 +367,29 @@ describe("companies", () => {
   });
 });
 
+describe("GET /api/companies/needs-attention", () => {
+  it("returns the needs-attention list", async () => {
+    // listNeedsAttention's default threshold is 5 consecutive failures, so record 5 scans' worth
+    // (mirrors the loop pattern used in src/cli/main.test.ts for the same threshold).
+    for (let scanId = 1; scanId <= 5; scanId += 1) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+        ["https://boom.com/careers"],
+      );
+    }
+    const res = await makeApp().request("/api/companies/needs-attention");
+    expect(await json(res)).toEqual([
+      {
+        careersUrl: "https://boom.com/careers",
+        company: "Boom",
+        message: "timeout",
+        consecutiveFailures: 5,
+      },
+    ]);
+  });
+});
+
 describe("GET /api/profile", () => {
   it("returns null when no profile exists", async () => {
     expect(await json(await makeApp().request("/api/profile"))).toBeNull();
@@ -654,6 +678,23 @@ describe("scan jobs", () => {
     const status = await pollUntilSettled(app);
     expect(status.state).toBe("error");
     expect(status.error).toContain("no profile yet");
+  });
+});
+
+describe("POST /api/scan/retry-failed", () => {
+  it("starts the retry-failed scan job (202) and reports 409 if already running", async () => {
+    const jobs = new ScanJobManager();
+    const app = makeApp({
+      jobs,
+      retryFailedScan: async () => ({ count: 0, warnings: [] }),
+    });
+    const first = await app.request("/api/scan/retry-failed", { method: "POST" });
+    expect(first.status).toBe(202);
+
+    // Force "running" by starting a long job directly, then confirm the second call 409s.
+    jobs.start(() => new Promise(() => {})); // never resolves within the test
+    const second = await app.request("/api/scan/retry-failed", { method: "POST" });
+    expect(second.status).toBe(409);
   });
 });
 

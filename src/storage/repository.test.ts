@@ -202,6 +202,175 @@ describe("incremental scans — directory diff", () => {
     ]);
     repo.close();
   });
+
+  it("does not report removed companies when computeRemoved is false", () => {
+    const repo = newRepo();
+    const scan1 = repo.startScan("full");
+    repo.recordDirectory(scan1, [
+      { careersUrl: "https://a.example/careers" },
+      { careersUrl: "https://b.example/careers" },
+    ]);
+    const scan2 = repo.startScan("retry");
+    const diff = repo.recordDirectory(scan2, [{ careersUrl: "https://a.example/careers" }], {
+      computeRemoved: false,
+    });
+    expect(diff.removedCompanies).toEqual([]);
+    expect(diff.newCompanies).toEqual([]);
+    // But company A was still upserted/refreshed this scan (last_seen_scan advanced).
+    // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+    const a = repo["db"]
+      .prepare("SELECT last_seen_scan FROM companies WHERE careers_url = ?")
+      .get("https://a.example/careers") as { last_seen_scan: number };
+    expect(a.last_seen_scan).toBe(scan2);
+    repo.close();
+  });
+});
+
+describe("scan kind", () => {
+  it("records the scan kind, defaulting to full", () => {
+    const repo = newRepo();
+    const fullId = repo.startScan();
+    const retryId = repo.startScan("retry");
+    const kindOf = (id: number) =>
+      // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+      (repo["db"].prepare("SELECT kind FROM scans WHERE id = ?").get(id) as { kind: string }).kind;
+    expect(kindOf(fullId)).toBe("full");
+    expect(kindOf(retryId)).toBe("retry");
+    repo.close();
+  });
+});
+
+describe("failed leads", () => {
+  it("inserts a new row at consecutive_failures=1 on first failure", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "render crashed" }],
+      ["https://boom.com/careers"],
+    );
+    expect(repo.listNeedsAttention(1)).toEqual([
+      {
+        careersUrl: "https://boom.com/careers",
+        company: "Boom",
+        message: "render crashed",
+        consecutiveFailures: 1,
+      },
+    ]);
+    repo.close();
+  });
+
+  it("increments consecutive_failures on repeated failure across scans", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+      ["https://boom.com/careers"],
+    );
+    repo.recordScanFailures(
+      2,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout again" }],
+      ["https://boom.com/careers"],
+    );
+    const [row] = repo.listNeedsAttention(1);
+    expect(row?.consecutiveFailures).toBe(2);
+    expect(row?.message).toBe("timeout again");
+    repo.close();
+  });
+
+  it("deletes the row when a previously-failing company recovers on a full scan that attempted it", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+      ["https://boom.com/careers"],
+    );
+    // Boom recovered: this scan attempted it (full scan, so attemptedUrls includes it) but it's
+    // absent from the failures list.
+    repo.recordScanFailures(2, [], ["https://boom.com/careers"]);
+    expect(repo.listNeedsAttention(1)).toEqual([]);
+    repo.close();
+  });
+
+  it("a scoped rescan does not delete failure rows for companies it didn't crawl", () => {
+    const repo = newRepo();
+    const companyAUrl = "https://a.com/careers";
+    const companyBUrl = "https://b.com/careers";
+
+    // Full scans 1-3: both A and B fail every time, so B accumulates a sub-threshold history.
+    const fullScanAttemptedUrls = [companyAUrl, companyBUrl];
+    for (let scanId = 1; scanId <= 3; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [
+          { careersUrl: companyAUrl, company: "A", message: "timeout" },
+          { careersUrl: companyBUrl, company: "B", message: "timeout" },
+        ],
+        fullScanAttemptedUrls,
+      );
+    }
+    const seededB = repo.listNeedsAttention(1).find((row) => row.careersUrl === companyBUrl);
+    const seededBFailureCount = seededB?.consecutiveFailures;
+
+    // Scoped retry-failed rescan: only A was attempted (B was never crawled this run), and A
+    // recovered (absent from the failures list).
+    repo.recordScanFailures(4, [], [companyAUrl]);
+
+    const rows = repo.listNeedsAttention(1);
+    const rowForA = rows.find((row) => row.careersUrl === companyAUrl);
+    const rowForB = rows.find((row) => row.careersUrl === companyBUrl);
+
+    // A was attempted and recovered: its row is gone.
+    expect(rowForA).toBeUndefined();
+    // B was never attempted this run: its row and accumulated failure count are untouched.
+    expect(rowForB?.consecutiveFailures).toBe(seededBFailureCount);
+    repo.close();
+  });
+
+  it("listNeedsAttention only returns rows at or above the threshold", () => {
+    const repo = newRepo();
+    for (let scanId = 1; scanId <= 3; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "timeout" }],
+        ["https://boom.com/careers"],
+      );
+    }
+    expect(repo.listNeedsAttention(5)).toEqual([]);
+    expect(repo.listNeedsAttention(3)).toHaveLength(1);
+    repo.close();
+  });
+
+  it("listRetrySkipUrls returns only the normalized URLs at or above the threshold", () => {
+    const repo = newRepo();
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://Boom.com/careers/", company: "Boom", message: "timeout" }],
+        ["https://Boom.com/careers/"],
+      );
+    }
+    expect(repo.listRetrySkipUrls(5)).toEqual(["https://boom.com/careers"]);
+    repo.close();
+  });
+
+  it("normalizes careers URLs so casing/trailing-slash variants collapse to one row", () => {
+    const repo = newRepo();
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://Boom.com/careers/", company: "Boom", message: "a" }],
+      ["https://Boom.com/careers/"],
+    );
+    repo.recordScanFailures(
+      2,
+      [{ careersUrl: "https://boom.com/CAREERS", company: "Boom", message: "b" }],
+      ["https://boom.com/CAREERS"],
+    );
+    const rows = repo.listNeedsAttention(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.careersUrl).toBe("https://boom.com/careers");
+    expect(rows[0]?.consecutiveFailures).toBe(2);
+    repo.close();
+  });
 });
 
 describe("incremental scans — posting expiry", () => {
@@ -237,6 +406,26 @@ describe("incremental scans — posting expiry", () => {
     repo.saveMatchResult("legacy", { score: 90, matchedSkills: [], missingSkills: [] });
     expect(repo.expireStalePostings(99)).toBe(0);
     expect(repo.listScoredPostings(0)).toHaveLength(1);
+    repo.close();
+  });
+
+  it("counts only full scans toward staleness, so retry scans never expire healthy postings", () => {
+    const repo = newRepo();
+    // Full scan #1: a healthy posting is seen.
+    const scan1 = repo.startScan("full");
+    repo.savePosting(postingWith("p1"), scan1);
+
+    // Two scoped retry scans happen (e.g. the user iterates on flaky companies).
+    repo.startScan("retry");
+    repo.startScan("retry");
+    // Even though the raw scanId gap is now >= 2, only 0 FULL scans have elapsed since scan1,
+    // so nothing is stale.
+    expect(repo.expireStalePostings(repo.startScan("retry"))).toBe(0);
+
+    // A genuine second AND third full scan (that don't re-see p1) DO make it stale.
+    repo.startScan("full");
+    const laterFull = repo.startScan("full");
+    expect(repo.expireStalePostings(laterFull)).toBe(1);
     repo.close();
   });
 });
