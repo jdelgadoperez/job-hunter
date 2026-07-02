@@ -196,13 +196,14 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
 
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [limit, setLimit] = useState(100);
+  const [rescore, setRescore] = useState(false);
 
   const running = scoreStatus.data?.state === "running";
   const done = scoreStatus.data?.state === "done" ? scoreStatus.data : null;
   const errored = scoreStatus.data?.state === "error" ? scoreStatus.data : null;
   const previewData: ScorePreview | undefined = preview.data;
 
-  const options = { remoteOnly, limit };
+  const options = { remoteOnly, limit, rescore };
   const blocked = !hasKey || scanRunning || running;
 
   function runPreview() {
@@ -220,8 +221,9 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
       </div>
       <p className="mt-1 text-xs text-faint">
         Re-rank matches with the LLM for sharper relevance. Costs money — preview the estimate
-        first. Only postings not already deep-scored are scored, so re-running picks up new roles
-        without paying to re-score the same ones.
+        first. By default only postings not already deep-scored are scored, so re-running picks up
+        new roles without paying to re-score the same ones. Tick “Re-score already-scored” to score
+        everything again.
       </p>
 
       {running && scoreStatus.data ? (
@@ -265,6 +267,16 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
                 disabled={blocked}
               />
               Remote only
+            </label>
+            <label className="flex items-center gap-1 text-sm text-muted">
+              <input
+                type="checkbox"
+                className="control"
+                checked={rescore}
+                onChange={(e) => setRescore(e.target.checked)}
+                disabled={blocked}
+              />
+              Re-score already-scored
             </label>
             <label className="flex items-center gap-1 text-sm text-muted">
               Limit

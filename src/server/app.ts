@@ -341,8 +341,9 @@ async function parseScoreOptions(c: {
   const body = await c.req.json().catch(() => null);
   const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
   const remoteOnly = record.remoteOnly === true;
+  const rescore = record.rescore === true;
   const rawLimit = Number(record.limit);
   const limit =
     Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : DEFAULT_SCORE_LIMIT;
-  return { remoteOnly, limit };
+  return { remoteOnly, limit, rescore };
 }

@@ -17,7 +17,7 @@ export type ScanSummary = { count: number; warnings: Warning[] };
 export type ScanRunner = (onProgress: (event: ScanProgressEvent) => void) => Promise<ScanSummary>;
 
 /** Options for a deep-score run, surfaced from the dashboard. */
-export type ScoreRunOptions = { remoteOnly: boolean; limit: number };
+export type ScoreRunOptions = { remoteOnly: boolean; limit: number; rescore: boolean };
 
 /**
  * The deep-score seam. Production wires this to the real LLM pipeline (`runScoreRun`), so it's
