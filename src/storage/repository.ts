@@ -2,6 +2,7 @@ import { makeCompanyId } from "@app/discovery/company-id";
 import type { ScanScope } from "@app/discovery/scan-store";
 import { normalizeCareersUrl, normalizeSkill } from "@app/domain/normalize";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
+import { parseCountry } from "@app/matching/location-filter";
 import { resolvePostingRemote } from "@app/matching/remote-filter";
 import Database from "better-sqlite3";
 import { INDEXES, SCHEMA } from "./schema";
@@ -160,6 +161,23 @@ export class Repository {
       for (const row of rows) setLeadCompanyId.run(makeCompanyId(row.careers_url), row.careers_url);
     });
     backfillLeads(leadsNeedingId);
+
+    // Re-derive country for legacy postings the improved parser can now resolve. Only rows with a
+    // NULL country and a non-empty location are considered; genuinely-unknown locations stay NULL.
+    // Idempotent: once a row's country is set it no longer matches `country IS NULL`.
+    const postingsNeedingCountry = this.db
+      .prepare(
+        "SELECT id, location FROM postings WHERE country IS NULL AND location IS NOT NULL AND location != ''",
+      )
+      .all() as { id: string; location: string }[];
+    const setPostingCountry = this.db.prepare("UPDATE postings SET country = ? WHERE id = ?");
+    const backfillCountries = this.db.transaction((rows: { id: string; location: string }[]) => {
+      for (const row of rows) {
+        const country = parseCountry(row.location);
+        if (country !== undefined) setPostingCountry.run(country, row.id);
+      }
+    });
+    backfillCountries(postingsNeedingCountry);
 
     // Drop a pre-existing UNIQUE idx_companies_id from the initial (buggy) companyId release: it
     // fails to build on any DB whose companies table holds careers_url near-duplicates that share a
