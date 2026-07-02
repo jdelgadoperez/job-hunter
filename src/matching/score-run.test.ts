@@ -547,3 +547,118 @@ describe("runScoreRun — remote partition (remoteOnly=true)", () => {
     expect(saved).toHaveLength(2); // capped, not all 5
   });
 });
+
+describe("runScoreRun — off-country partition (homeCountry set)", () => {
+  it("excludes a foreign on-site role from the LLM and penalizes it", async () => {
+    const foreignOnsite = candidate("uk-onsite", "London Job", 80, {
+      location: "London, UK",
+      remote: false,
+    });
+    const { repo, saved } = fakeRepo([foreignOnsite]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, homeCountry: "US" },
+    });
+
+    // Never deep-scored (no "llm" save for its id).
+    expect(saved.some((s) => s.id === "uk-onsite" && s.scorer === "llm")).toBe(false);
+
+    // Saved with the location penalty applied.
+    const penalized = saved.find((s) => s.id === "uk-onsite");
+    expect(penalized?.scorer).toBe("heuristic-location-penalized");
+    expect(penalized?.result.score).toBe(
+      Math.max(0, Math.round(foreignOnsite.heuristicScore * REMOTE_PENALTY_FACTOR)),
+    );
+  });
+
+  it("lets a foreign REMOTE role and an unknown-country role reach the LLM", async () => {
+    const foreignRemote = candidate("uk-remote", "Remote London Job", 70, {
+      location: "London, UK",
+      remote: true,
+    });
+    const unknown = candidate("unknown", "Unknown Job", 75, {
+      location: "San Francisco",
+      remote: false,
+    });
+    const { repo, saved } = fakeRepo([foreignRemote, unknown]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, homeCountry: "US" },
+    });
+
+    // Both reach the LLM deep-score.
+    expect(saved.find((s) => s.id === "uk-remote")?.scorer).toBe("llm");
+    expect(saved.find((s) => s.id === "unknown")?.scorer).toBe("llm");
+    // Neither is location-penalized.
+    expect(saved.some((s) => s.scorer === "heuristic-location-penalized")).toBe(false);
+  });
+
+  it("applies the location penalty exactly once across repeated runs (no compounding)", async () => {
+    const already = candidate("uk-pen", "London Job", 48, {
+      location: "London, UK",
+      remote: false,
+      scorer: "heuristic-location-penalized",
+    });
+    const { repo, saved } = fakeRepo([already]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, homeCountry: "US" },
+    });
+
+    expect(saved).toHaveLength(0); // already penalized → not re-penalized
+  });
+
+  it("homeCountry unset leaves a foreign on-site role going through the LLM (no penalty)", async () => {
+    const foreignOnsite = candidate("uk-nohome", "London Job", 80, {
+      location: "London, UK",
+      remote: false,
+    });
+    const { repo, saved } = fakeRepo([foreignOnsite]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: baseOptions,
+    });
+
+    expect(saved.find((s) => s.id === "uk-nohome")?.scorer).toBe("llm");
+    expect(saved.some((s) => s.scorer === "heuristic-location-penalized")).toBe(false);
+  });
+
+  it("penalizes a foreign non-remote role exactly once under remoteOnly + homeCountry (single tag)", async () => {
+    // The role is non-remote, so the remote gate already routes it to nonRemotePenalized (tagged
+    // heuristic-remote-penalized). Because offCountry derives from afterRemote, it can't also land
+    // in the off-country partition — so there must be exactly ONE save with the remote tag.
+    const foreignOnsite = candidate("uk-both", "London Job", 60, {
+      location: "London, UK",
+      remote: false,
+    });
+    const { repo, saved } = fakeRepo([foreignOnsite]);
+
+    await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, remoteOnly: true, homeCountry: "US" },
+    });
+
+    const forId = saved.filter((s) => s.id === "uk-both");
+    expect(forId).toHaveLength(1);
+    expect(forId[0]?.scorer).toBe("heuristic-remote-penalized");
+  });
+});

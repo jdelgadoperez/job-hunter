@@ -116,6 +116,7 @@ function outcome(overrides: Partial<ScoreOutcome["counts"]> = {}): ScoreOutcome 
     triageTitles: 82,
     deepScored: 0,
     remotePenalized: 0,
+    locationPenalized: 0,
     ...overrides,
   };
   return {

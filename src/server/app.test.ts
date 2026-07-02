@@ -26,6 +26,7 @@ function fakeScoreResult(overrides: Partial<ScoreResult> = {}): ScoreResult {
       triageTitles: 0,
       deepScored: 0,
       remotePenalized: 0,
+      locationPenalized: 0,
     },
     estimate: {
       triageTitles: 0,
