@@ -222,10 +222,18 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
         <h2 className="font-semibold text-fg">3 · Deep-score with Claude</h2>
       </div>
       <p className="mt-1 text-xs text-faint">
-        Re-rank matches with the LLM for sharper relevance. Costs money — preview the estimate
-        first. By default only postings not already deep-scored are scored, so re-running picks up
-        new roles without paying to re-score the same ones. Tick “Re-score already-scored” to score
-        everything again.
+        Score postings with Claude — it reads the full job description against your resume for
+        sharper relevance than the keyword pre-filter. Costs money — preview the estimate first. By
+        default only postings not already deep-scored are scored, so re-running picks up new roles
+        without paying to re-score the same ones. Tick “Re-score already-scored” to score everything
+        again.
+      </p>
+      <p className="mt-1 text-xs text-faint">
+        <span className="font-semibold text-muted">Limit</span> caps how many postings this run
+        scores — highest heuristic matches first — so you can control the cost per run. It counts
+        only postings that will actually be scored (already-scored ones are skipped unless you
+        re-score), so if you have a large backlog, run it repeatedly with the limit you’re
+        comfortable paying for and each run works further down the list.
       </p>
 
       {running && scoreStatus.data ? (
