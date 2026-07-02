@@ -1,6 +1,7 @@
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
+import { makeCompanyId } from "./company-id";
 import type { PageRenderer } from "./connectors/browser";
 import { discover } from "./discover";
 import { FakeSharedViewReader } from "./sources/airtable";
@@ -140,6 +141,31 @@ describe("discover", () => {
     // Concurrency never exceeds the cap, and work genuinely overlapped.
     expect(gauge.max).toBeLessThanOrEqual(2);
     expect(gauge.max).toBeGreaterThan(1);
+  });
+
+  it("stamps each posting with its company's companyId", async () => {
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+    );
+    const fetcher = new GaugedFetcher(
+      {
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
+      },
+      new Gauge(),
+    );
+
+    const { postings } = await discover({
+      fetcher,
+      renderer: new GaugedRenderer("", "", new Gauge()),
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    const posting = postings[0];
+    expect(posting?.companyId).toBe(makeCompanyId("https://boards.greenhouse.io/acme"));
   });
 
   it("disposes the renderer once after the run, even when a render throws", async () => {

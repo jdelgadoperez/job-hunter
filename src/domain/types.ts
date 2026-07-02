@@ -21,6 +21,9 @@ export type JobPosting = {
   country?: string;
   postedAt?: Date;
   fetchedAt: Date;
+  /** Stable id of the company this posting belongs to (hash of the company's normalized careers
+   * URL). Optional: legacy DB rows and feed rows from an old worker lack it. */
+  companyId?: string;
 };
 
 export type MatchResult = {

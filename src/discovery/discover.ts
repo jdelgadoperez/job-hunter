@@ -5,6 +5,7 @@ import type { SettingsReader } from "@app/matching/resolve-settings";
 import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
 import pLimit from "p-limit";
+import { makeCompanyId } from "./company-id";
 import { BrowserConnector, type PageRenderer } from "./connectors/browser";
 import type { ConnectorResult } from "./connectors/types";
 import { resolveAts } from "./resolve-ats";
@@ -177,7 +178,7 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         continue;
       }
       for (const posting of result.postings) {
-        byId.set(posting.id, posting);
+        byId.set(posting.id, { ...posting, companyId: makeCompanyId(lead.careersUrl) });
       }
     }
 
@@ -209,7 +210,7 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
           continue;
         }
         for (const posting of result.postings) {
-          byId.set(posting.id, posting);
+          byId.set(posting.id, { ...posting, companyId: makeCompanyId(lead.careersUrl) });
         }
       }
       // Anything skipped (in skipRetryFor) keeps its original main-pass warning.
