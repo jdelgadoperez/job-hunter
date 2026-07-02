@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useState } from "react";
 import type { CompanyRef, ScorePreview } from "../api";
-import { Button, Card, LiveStatus, Loading } from "../components/ui";
+import { Button, Card, LiveStatus, Loading, ProgressBar } from "../components/ui";
 import { formatCount } from "../format";
 import {
   useLatestScan,
@@ -142,13 +142,7 @@ export function Home() {
               }
             />
             {status?.total ? (
-              // Decorative bar; the live text above conveys progress to assistive tech.
-              <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded bg-subtle">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{ width: `${Math.round((100 * (status.current ?? 0)) / status.total)}%` }}
-                />
-              </div>
+              <ProgressBar current={status.current ?? 0} total={status.total} />
             ) : null}
             {status && status.recent.length > 0 ? (
               <ul className="mt-2 max-h-32 overflow-auto rounded bg-code-bg p-2 font-mono text-xs text-code-fg">
@@ -262,17 +256,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
         <div className="mt-3" aria-live="polite">
           <LiveStatus message={scoreStatus.data.message ?? "Scoring…"} />
           {scoreStatus.data.total ? (
-            // Decorative bar; the live text in the header conveys progress to assistive tech.
-            <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded bg-subtle">
-              <div
-                className="h-full bg-primary transition-all"
-                style={{
-                  width: `${Math.round(
-                    (100 * (scoreStatus.data.current ?? 0)) / scoreStatus.data.total,
-                  )}%`,
-                }}
-              />
-            </div>
+            <ProgressBar current={scoreStatus.data.current ?? 0} total={scoreStatus.data.total} />
           ) : null}
           {scoreStatus.data.recent.length > 0 ? (
             <ul className="mt-2 max-h-32 overflow-auto rounded bg-code-bg p-2 font-mono text-xs text-code-fg">

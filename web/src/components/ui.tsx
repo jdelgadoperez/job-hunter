@@ -42,6 +42,24 @@ export function Button({
   );
 }
 
+/**
+ * Decorative progress bar shared by the scan and deep-score panels. Purely visual — the live
+ * text/status conveys progress to assistive tech, so the bar is aria-hidden. The width is clamped to
+ * 0–100% so a `current` that briefly exceeds `total` (or a zero `total`) can't overflow the track.
+ */
+export function ProgressBar({ current, total }: { current: number; total: number }) {
+  const pct = total > 0 ? Math.min(100, Math.max(0, Math.round((100 * current) / total))) : 0;
+  return (
+    <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded bg-subtle">
+      <div
+        data-testid="progress-fill"
+        className="h-full bg-primary transition-all"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 /** Score thresholds shared by the ScorePill tone and the Matches default floor, so the "relevant"
  *  bar and the badge colors stay in sync if the scoring scale ever changes. */
 export const SCORE_THRESHOLDS = { strong: 80, relevant: 50 } as const;
