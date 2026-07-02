@@ -1,4 +1,7 @@
+import { makeCompanyId } from "@app/discovery/company-id";
 import type { PageRenderer } from "@app/discovery/connectors/browser";
+import type { DiscoverDeps } from "@app/discovery/discover";
+import { FakePostingFeed } from "@app/discovery/feed/posting-feed";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
 import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
@@ -12,6 +15,7 @@ import {
   listMatches,
   runProfile,
   runScan,
+  runSourcing,
   trackAdd,
   trackList,
   trackRemove,
@@ -63,6 +67,43 @@ function airtableData(companies: { name: string; url: string }[]): unknown {
       },
     },
   };
+}
+
+function makePosting(overrides: Partial<JobPosting> & { id: string }): JobPosting {
+  return {
+    company: "FeedCo",
+    title: "Remote Engineer",
+    url: `https://example.test/${overrides.id}`,
+    source: "feed",
+    description: "from the shared feed",
+    fetchedAt: new Date("2026-06-26T00:00:00Z"),
+    ...overrides,
+  };
+}
+
+/** A `DiscoverDeps` that crawls no directory and no tracked companies — used when a test only cares
+ * about the feed side of `sourceFromFeedAndTracked`. */
+function fakeDiscoverDeps(_opts: { postings: JobPosting[] } = { postings: [] }): DiscoverDeps {
+  return {
+    fetcher: new RouteFetcher({}),
+    renderer: new NullRenderer(),
+    sharedViewReader: new FakeSharedViewReader(airtableData([])),
+    shareUrl: "https://airtable.com/appX/shrX/tblX",
+    delayMs: 0,
+    settings: { getSetting: () => undefined },
+    sources: [],
+  };
+}
+
+/** Seed `careersUrl` past the needs-attention threshold (5x `recordScanFailures`). */
+function seedNeedsAttention(repo: Repository, careersUrl: string, company = "Boom"): void {
+  for (let scanId = 1; scanId <= 5; scanId++) {
+    repo.recordScanFailures(
+      scanId,
+      [{ careersUrl, company, message: "prior failure" }],
+      [careersUrl],
+    );
+  }
 }
 
 function outcome(overrides: Partial<ScoreOutcome["counts"]> = {}): ScoreOutcome {
@@ -575,6 +616,92 @@ describe("runScan + listMatches", () => {
     );
 
     expect(repo.listNeedsAttention(1)).toEqual([]);
+    repo.close();
+  });
+
+  it("scopes the feed to needs-attention companyIds on a retry scan", async () => {
+    const repo = newRepo();
+    const wantUrl = "https://boards.lever.co/boom";
+    const otherUrl = "https://boards.greenhouse.io/acme";
+    const feed = new FakePostingFeed({
+      postings: [
+        { ...makePosting({ id: "boom1" }), companyId: makeCompanyId(wantUrl) },
+        { ...makePosting({ id: "acme1" }), companyId: makeCompanyId(otherUrl) },
+      ],
+      warnings: [],
+    });
+    seedNeedsAttention(repo, wantUrl);
+
+    const outcome = await runSourcing({
+      repo,
+      feed,
+      discoverDeps: fakeDiscoverDeps({ postings: [] }),
+      scope: "retry",
+      companyIdFilter: new Set([makeCompanyId(wantUrl)]),
+    });
+
+    const ids = outcome.postings.map((p) => p.id);
+    expect(ids).toContain("boom1");
+    expect(ids).not.toContain("acme1");
+    repo.close();
+  });
+
+  it("does not filter feed postings on a full scan", async () => {
+    const repo = newRepo();
+    const feed = new FakePostingFeed({
+      postings: [{ ...makePosting({ id: "acme1" }), companyId: makeCompanyId("https://x/y") }],
+      warnings: [],
+    });
+
+    const outcome = await runSourcing({
+      repo,
+      feed,
+      discoverDeps: fakeDiscoverDeps({ postings: [] }),
+    });
+
+    expect(outcome.postings.map((p) => p.id)).toContain("acme1");
+    repo.close();
+  });
+
+  it("does not drop a feed posting with no companyId on a full scan", async () => {
+    const repo = newRepo();
+    const feed = new FakePostingFeed({
+      postings: [makePosting({ id: "no-company-id" })],
+      warnings: [],
+    });
+
+    const outcome = await runSourcing({
+      repo,
+      feed,
+      discoverDeps: fakeDiscoverDeps({ postings: [] }),
+    });
+
+    expect(outcome.postings.map((p) => p.id)).toContain("no-company-id");
+    repo.close();
+  });
+
+  it("clears a feed-recovered company from failed_leads", async () => {
+    const repo = newRepo();
+    const url = "https://boards.lever.co/boom";
+    seedNeedsAttention(repo, url);
+    const feed = new FakePostingFeed({
+      postings: [{ ...makePosting({ id: "boom1" }), companyId: makeCompanyId(url) }],
+      warnings: [],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        feed,
+        discoverDeps: fakeDiscoverDeps({ postings: [] }),
+        scope: "retry",
+      },
+      capture().log,
+    );
+
+    expect(repo.listNeedsAttention().map((c) => c.careersUrl)).not.toContain(url);
     repo.close();
   });
 });

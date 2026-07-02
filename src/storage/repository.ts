@@ -1,3 +1,4 @@
+import { makeCompanyId } from "@app/discovery/company-id";
 import type { ScanScope } from "@app/discovery/scan-store";
 import { normalizeCareersUrl, normalizeSkill } from "@app/domain/normalize";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
@@ -116,7 +117,52 @@ export class Repository {
       this.db.exec("ALTER TABLE scans ADD COLUMN kind TEXT NOT NULL DEFAULT 'full'");
     }
 
-    // Create indexes now that every referenced column is guaranteed to exist (above + base schema).
+    const companyColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(companies)").all() as { name: string }[]).map(
+        (c) => c.name,
+      ),
+    );
+    if (!companyColumns.has("id")) {
+      this.db.exec("ALTER TABLE companies ADD COLUMN id TEXT");
+    }
+    if (!postingColumns.has("company_id")) {
+      this.db.exec("ALTER TABLE postings ADD COLUMN company_id TEXT");
+    }
+    const failedLeadColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(failed_leads)").all() as { name: string }[]).map(
+        (c) => c.name,
+      ),
+    );
+    if (!failedLeadColumns.has("company_id")) {
+      this.db.exec("ALTER TABLE failed_leads ADD COLUMN company_id TEXT");
+    }
+
+    // Backfill the two columns fully derivable from careers_url, before the unique index on
+    // companies.id is created below (an index over unpopulated ids would still work, since SQLite
+    // unique indexes allow multiple NULLs, but populating first keeps the index meaningful and
+    // surfaces any accidental id collisions immediately).
+    const companiesNeedingId = this.db
+      .prepare("SELECT careers_url FROM companies WHERE id IS NULL")
+      .all() as { careers_url: string }[];
+    const setCompanyId = this.db.prepare("UPDATE companies SET id = ? WHERE careers_url = ?");
+    const backfillCompanies = this.db.transaction((rows: { careers_url: string }[]) => {
+      for (const row of rows) setCompanyId.run(makeCompanyId(row.careers_url), row.careers_url);
+    });
+    backfillCompanies(companiesNeedingId);
+
+    const leadsNeedingId = this.db
+      .prepare("SELECT careers_url FROM failed_leads WHERE company_id IS NULL")
+      .all() as { careers_url: string }[];
+    const setLeadCompanyId = this.db.prepare(
+      "UPDATE failed_leads SET company_id = ? WHERE careers_url = ?",
+    );
+    const backfillLeads = this.db.transaction((rows: { careers_url: string }[]) => {
+      for (const row of rows) setLeadCompanyId.run(makeCompanyId(row.careers_url), row.careers_url);
+    });
+    backfillLeads(leadsNeedingId);
+
+    // Create indexes now that every referenced column is guaranteed to exist (above + base schema)
+    // and the companies.id backfill above has populated ids for the unique index on companies(id).
     this.db.exec(INDEXES);
   }
 
@@ -142,10 +188,10 @@ export class Repository {
     this.db
       .prepare(
         `INSERT INTO postings
-           (id, company, title, url, source, description, location, remote, country,
+           (id, company, title, url, source, description, location, remote, country, company_id,
             posted_at, fetched_at, last_seen_scan, expired_at)
          VALUES (@id, @company, @title, @url, @source, @description, @location, @remote, @country,
-            @postedAt, @fetchedAt, @scanId, NULL)
+            @companyId, @postedAt, @fetchedAt, @scanId, NULL)
          ON CONFLICT(id) DO UPDATE SET
            company = excluded.company,
            title = excluded.title,
@@ -155,6 +201,7 @@ export class Repository {
            location = excluded.location,
            remote = excluded.remote,
            country = excluded.country,
+           company_id = excluded.company_id,
            posted_at = excluded.posted_at,
            fetched_at = excluded.fetched_at,
            last_seen_scan = COALESCE(excluded.last_seen_scan, postings.last_seen_scan),
@@ -171,6 +218,7 @@ export class Repository {
         location: posting.location ?? null,
         remote: posting.remote === undefined ? null : posting.remote ? 1 : 0,
         country: posting.country ?? null,
+        companyId: posting.companyId ?? null,
         postedAt: posting.postedAt?.toISOString() ?? null,
         fetchedAt: posting.fetchedAt.toISOString(),
         scanId,
@@ -495,15 +543,22 @@ export class Repository {
             .map((e) => ({ careersUrl: e.careers_url, ...(e.name ? { name: e.name } : {}) }));
 
     const upsert = this.db.prepare(
-      `INSERT INTO companies (careers_url, name, first_seen_scan, last_seen_scan, last_seen_at)
-       VALUES (@url, @name, @scanId, @scanId, datetime('now'))
+      `INSERT INTO companies (careers_url, id, name, first_seen_scan, last_seen_scan, last_seen_at)
+       VALUES (@url, @id, @name, @scanId, @scanId, datetime('now'))
        ON CONFLICT(careers_url) DO UPDATE SET
          name = excluded.name,
          last_seen_scan = excluded.last_seen_scan,
          last_seen_at = excluded.last_seen_at`,
     );
     const upsertMany = this.db.transaction((rows: CompanyRef[]) => {
-      for (const c of rows) upsert.run({ url: c.careersUrl, name: c.name ?? null, scanId });
+      for (const c of rows) {
+        upsert.run({
+          url: c.careersUrl,
+          id: makeCompanyId(c.careersUrl),
+          name: c.name ?? null,
+          scanId,
+        });
+      }
     });
     upsertMany(companies);
 
@@ -539,9 +594,11 @@ export class Repository {
     );
 
     const upsert = this.db.prepare(
-      `INSERT INTO failed_leads (careers_url, company, message, consecutive_failures, last_failed_scan)
-       VALUES (@careersUrl, @company, @message, 1, @scanId)
+      `INSERT INTO failed_leads
+         (careers_url, company_id, company, message, consecutive_failures, last_failed_scan)
+       VALUES (@careersUrl, @companyId, @company, @message, 1, @scanId)
        ON CONFLICT(careers_url) DO UPDATE SET
+         company_id = excluded.company_id,
          company = excluded.company,
          message = excluded.message,
          consecutive_failures = failed_leads.consecutive_failures + 1,
@@ -551,7 +608,9 @@ export class Repository {
 
     const transaction = this.db.transaction(() => {
       for (const row of toDelete) del.run(row.careers_url);
-      for (const f of normalized) upsert.run({ ...f, scanId });
+      for (const f of normalized) {
+        upsert.run({ ...f, companyId: makeCompanyId(f.careersUrl), scanId });
+      }
     });
     transaction();
   }

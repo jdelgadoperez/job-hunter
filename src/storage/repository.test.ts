@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { makeCompanyId } from "@app/discovery/company-id";
 import type { JobPosting, MatchResult, SkillProfile } from "@app/domain/types";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
@@ -860,6 +861,51 @@ describe("schema indexes", () => {
     repo.close();
     expect(indexNamesAt(dbPath)).toEqual(expect.arrayContaining(EXPECTED_INDEXES));
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("companyId columns", () => {
+  it("backfills companies.id and failed_leads.company_id on migrate", () => {
+    const repo = newRepo();
+    const scan = repo.startScan();
+    repo.recordDirectory(scan, [{ careersUrl: "https://boards.greenhouse.io/acme", name: "Acme" }]);
+    // seed a failed_leads row (5x per the threshold precedent used elsewhere in this file)
+    for (let i = 0; i < 5; i++) {
+      repo.recordScanFailures(
+        repo.startScan(),
+        [{ careersUrl: "https://boards.lever.co/boom", company: "Boom", message: "x" }],
+        ["https://boards.lever.co/boom"],
+      );
+    }
+    // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+    const companyRow = repo["db"]
+      .prepare("SELECT id FROM companies WHERE careers_url = ?")
+      .get("https://boards.greenhouse.io/acme") as { id: string };
+    // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+    const leadRow = repo["db"]
+      .prepare("SELECT company_id FROM failed_leads WHERE careers_url = ?")
+      .get("https://boards.lever.co/boom") as { company_id: string };
+    expect(companyRow.id).toBe(makeCompanyId("https://boards.greenhouse.io/acme"));
+    expect(leadRow.company_id).toBe(makeCompanyId("https://boards.lever.co/boom"));
+    repo.close();
+  });
+
+  it("persists companyId on savePosting and leaves a companyId-less posting NULL", () => {
+    const repo = newRepo();
+    const scan = repo.startScan();
+    repo.savePosting({ ...makePosting("p1", "Engineer"), companyId: "abc123def4567890" }, scan);
+    repo.savePosting(makePosting("p2", "Engineer")); // no companyId
+    // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+    const p1 = repo["db"].prepare("SELECT company_id FROM postings WHERE id = ?").get("p1") as {
+      company_id: string | null;
+    };
+    // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+    const p2 = repo["db"].prepare("SELECT company_id FROM postings WHERE id = ?").get("p2") as {
+      company_id: string | null;
+    };
+    expect(p1.company_id).toBe("abc123def4567890");
+    expect(p2.company_id).toBeNull();
+    repo.close();
   });
 });
 

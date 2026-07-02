@@ -1,3 +1,4 @@
+import { makeCompanyId } from "@app/discovery/company-id";
 import { type DiscoverDeps, discover } from "@app/discovery/discover";
 import type { PostingFeed } from "@app/discovery/feed/posting-feed";
 import type { ScanScope, ScanStore } from "@app/discovery/scan-store";
@@ -111,6 +112,17 @@ export type SourcingDeps = {
    * expiry, and the scan is recorded as a retry so it's excluded from the staleness clock.
    * Defaults to `"full"` (the normal whole-directory scan and the hosted worker). */
   scope?: ScanScope;
+  /**
+   * On a `"retry"` scan, restricts the shared feed to postings whose `companyId` is in this set (the
+   * needs-attention companies). A posting with no `companyId` is never matched — `undefined` means
+   * "unknown", not "wildcard". Absent (the full-scan default) applies no filtering.
+   */
+  companyIdFilter?: Set<string>;
+  /**
+   * The needs-attention companies the filter above was built from, so the feed side can report which
+   * of them actually recovered this run (see `SourcingOutcome.recoveredFromFeed`).
+   */
+  needsAttention?: CompanyRef[];
 };
 
 /** Result of a sourcing run: the postings + companies seen, the directory diff, and expiry count. */
@@ -122,6 +134,9 @@ export type SourcingOutcome = {
   newCompanies: CompanyRef[];
   removedCompanies: CompanyRef[];
   expired: number;
+  /** Needs-attention companies whose postings reappeared in the shared feed this run — cleared from
+   * `failed_leads` by `runScan` even though they weren't locally crawled. */
+  recoveredFromFeed?: CompanyRef[];
 };
 
 /**
@@ -139,8 +154,14 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
 
   // Remote mode (feed set): pull the shared feed AND crawl only tracked companies locally. Otherwise
   // run the full local crawl. Both yield postings + the companies to snapshot + any warnings.
-  const { postings, companies, warnings } = feed
-    ? await sourceFromFeedAndTracked(feed, deps.discoverDeps, onProgress)
+  const { postings, companies, warnings, recoveredFromFeed } = feed
+    ? await sourceFromFeedAndTracked(
+        feed,
+        deps.discoverDeps,
+        onProgress,
+        deps.companyIdFilter,
+        deps.needsAttention,
+      )
     : await sourceFromFullCrawl(deps.discoverDeps, onProgress);
 
   // A scoped retry only crawls a subset, so the whole-directory removed-diff would flag every
@@ -185,10 +206,15 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
     ...diff,
   });
 
-  return { scanId, postings, companies, warnings, expired, ...diff };
+  return { scanId, postings, companies, warnings, expired, recoveredFromFeed, ...diff };
 }
 
-type SourceResult = { postings: JobPosting[]; companies: CompanyLead[]; warnings: Warning[] };
+type SourceResult = {
+  postings: JobPosting[];
+  companies: CompanyLead[];
+  warnings: Warning[];
+  recoveredFromFeed?: CompanyRef[];
+};
 
 /** Full local crawl: the directory sources + tracked companies (today's default behavior). */
 async function sourceFromFullCrawl(
@@ -204,20 +230,44 @@ async function sourceFromFullCrawl(
  * `sources: []` makes `collectLeads` contribute just the tracked companies, so the client skips the
  * shared directory the cloud worker already crawls. Feed + local postings merge by id (a posting in
  * both — e.g. a tracked company also in the feed — collapses to one).
+ *
+ * `companyIdFilter`, when present (a `"retry"` scan), restricts the feed to postings belonging to
+ * needs-attention companies: a posting passes only when it carries a `companyId` AND that id is in
+ * the filter. A posting with no `companyId` is dropped under a filter — NULL means "unknown", never
+ * "wildcard" — but a full scan (no filter) never drops feed postings, companyId or not.
+ * `needsAttention` (the same companies the filter was built from) lets us report which of them
+ * actually reappeared in the (filtered) feed this run, so `runScan` can clear them from
+ * `failed_leads` even though they weren't locally crawled.
  */
 async function sourceFromFeedAndTracked(
   feed: PostingFeed,
   discoverDeps: DiscoverDeps,
   onProgress?: (event: ScanProgressEvent) => void,
+  companyIdFilter?: Set<string>,
+  needsAttention?: CompanyRef[],
 ): Promise<SourceResult> {
   const feedResult = await feed.fetch();
+  const feedPostings = companyIdFilter
+    ? feedResult.postings.filter(
+        (p) => p.companyId !== undefined && companyIdFilter.has(p.companyId),
+      )
+    : feedResult.postings;
   const local = await discover({ ...discoverDeps, sources: [], onProgress });
   const byId = new Map<string, JobPosting>();
-  for (const posting of [...feedResult.postings, ...local.postings]) byId.set(posting.id, posting);
+  for (const posting of [...feedPostings, ...local.postings]) byId.set(posting.id, posting);
+
+  const feedCompanyIds = new Set(
+    feedPostings.map((p) => p.companyId).filter((id) => id !== undefined),
+  );
+  const recoveredFromFeed = needsAttention?.filter((c) =>
+    feedCompanyIds.has(makeCompanyId(c.careersUrl)),
+  );
+
   return {
     postings: [...byId.values()],
     companies: local.companies ?? [],
     warnings: [...feedResult.warnings, ...local.warnings],
+    ...(recoveredFromFeed ? { recoveredFromFeed } : {}),
   };
 }
 
@@ -234,12 +284,22 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
   // `--retry-failed` run is the opposite: those companies are exactly what we want to retry, so
   // the skip-list is empty there.
   const skipRetryFor = scope === "full" ? new Set(repo.listRetrySkipUrls()) : new Set<string>();
+
+  // A retry scan scopes the shared feed to exactly the needs-attention companies, so it never
+  // re-surfaces unrelated feed postings under a scoped rescan. Derived here (not by the caller) so
+  // both scoped entry points (the CLI's `--retry-failed` and the scheduled retry runner) get this
+  // for free without passing anything extra.
+  const needsAttention = scope === "retry" ? repo.listNeedsAttention() : [];
+  const companyIdFilter =
+    scope === "retry" ? new Set(needsAttention.map((c) => makeCompanyId(c.careersUrl))) : undefined;
+
   const sourced = await runSourcing({
     repo,
     discoverDeps: { ...deps.discoverDeps, skipRetryFor },
     ...(deps.feed ? { feed: deps.feed } : {}),
     scope,
     onProgress,
+    ...(companyIdFilter ? { companyIdFilter, needsAttention } : {}),
   });
 
   onProgress?.({ kind: "scoring", total: sourced.postings.length });
@@ -260,12 +320,15 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
     // `Warning.source` carries the company label for careersUrl-bearing per-company warnings,
     // set by `discover()` from `lead.company`.
     .map((w) => ({ careersUrl: w.careersUrl, company: w.source, message: w.message }));
+  // "Attempted" includes companies actually crawled AND needs-attention companies that recovered
+  // via the (filtered) shared feed without being locally crawled — both are "we now know this
+  // company's status this run" and should be eligible for a failed_leads clear.
+  const attemptedUrls = [
+    ...sourced.companies.map((c) => c.careersUrl),
+    ...(sourced.recoveredFromFeed ?? []).map((c) => c.careersUrl),
+  ];
   try {
-    repo.recordScanFailures(
-      sourced.scanId,
-      perCompanyFailures,
-      sourced.companies.map((c) => c.careersUrl),
-    );
+    repo.recordScanFailures(sourced.scanId, perCompanyFailures, attemptedUrls);
   } catch (error) {
     // Failures degrade, never crash: the scan itself already succeeded by this point.
     log(style.warn(`  ! Failed to record scan-failure history: ${errorMessage(error)}`));

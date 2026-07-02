@@ -65,3 +65,8 @@ create policy "anon reads companies" on companies for select to anon using (true
 -- Idempotent column additions for databases that predate these columns.
 alter table postings add column if not exists remote boolean;
 alter table postings add column if not exists country text;
+
+alter table companies add column if not exists id text;
+create unique index if not exists companies_id_idx on companies (id);
+alter table postings add column if not exists company_id text;
+create index if not exists postings_company_id_idx on postings (company_id);

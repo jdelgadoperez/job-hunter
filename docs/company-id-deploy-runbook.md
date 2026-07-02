@@ -1,0 +1,59 @@
+# companyId — Worker/Feed Deploy Runbook
+
+This is a coordinated manual deploy — there is no CI runner for the Supabase schema or the
+hosted worker. The local half (SQLite `companyId` + local retry scoping) works as soon as the PR
+merges. The feed-scoping payoff — retry scoping across the shared feed, not just the local crawl —
+only activates once the hosted worker starts emitting `company_id` on `postings` rows in Supabase.
+
+**Ordering note (read first):** shipping the local client before the worker has run is SAFE.
+`FeedRow.company_id` is `.nullish()` in the zod schema, so retry feed-scoping simply no-ops on rows
+that don't have it yet — it degrades to local-crawl-only scoping, not a crash. **Never make
+`FeedRow.company_id` required.** Doing so would fail zod validation on every row written by an
+old (not-yet-redeployed) worker and silently zero out the entire feed for every user until the
+worker catches up.
+
+## Steps, in order
+
+### 1. Apply the additive schema to Supabase
+
+```bash
+psql "$DATABASE_URL" -f src/backend/schema.sql
+```
+
+`DATABASE_URL` is the service-role Postgres connection string. The migration is additive and
+idempotent (`add column if not exists`), so it's safe to re-run. It adds:
+
+- `companies.id` plus its unique index
+- `postings.company_id` plus its index
+
+### 2. Backfill — not required
+
+No manual backfill step is required. `companies.id` self-heals via `recordDirectory`'s upsert
+(`id = excluded.id` in the `ON CONFLICT` clause) on the very next worker scan, and
+`postings.company_id` is stamped on new and re-crawled postings going forward. Legacy posting rows
+that predate this change stay `NULL` — feed-scoping treats `NULL` as "unknown, not excluded," so
+this is safe.
+
+If you want `companies.id` populated immediately rather than waiting for the next scheduled scan,
+that would require a one-off Node script using the app's `makeCompanyId`. No such script is shipped
+with this change — treat it as an optional follow-up only if there's a concrete need to populate ids
+ahead of the next scan.
+
+### 3. Deploy and run the worker
+
+Deploy the updated worker code, then run it at least once (ideally twice, to confirm the second
+run re-stamps `company_id` on postings the first run already touched):
+
+```bash
+npm run scan:worker
+```
+
+This is `node --import tsx src/backend/scanner/main.ts`. After it completes, feed `postings` rows
+start carrying `company_id`.
+
+### 4. Local client
+
+The local client changes ship in the same PR as this backend work — there's nothing to deploy
+separately. Retry feed-scoping activates automatically the first time a client fetches feed rows
+that carry `company_id`. Until the worker has run, the client keeps working exactly as before
+(local-crawl-only scoping); there's no error state to watch for.
