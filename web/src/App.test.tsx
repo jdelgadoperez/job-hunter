@@ -28,6 +28,7 @@ function bodyFor(url: string): unknown {
       hasAnthropicKey: false,
       scorerModel: null,
       scorerProvider: null,
+      homeCountry: null,
       hasTheMuseKey: false,
       feedUrl: null,
       hasFeedKey: false,

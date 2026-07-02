@@ -9,6 +9,7 @@ export function Settings() {
 
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
+  const [homeCountry, setHomeCountry] = useState("");
   const [theMuseKey, setTheMuseKey] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
   const [feedKey, setFeedKey] = useState("");
@@ -18,6 +19,7 @@ export function Settings() {
   useEffect(() => {
     if (settings.data) {
       setModel(settings.data.scorerModel ?? "");
+      setHomeCountry(settings.data.homeCountry ?? "");
       setFeedUrl(settings.data.feedUrl ?? "");
     }
   }, [settings.data]);
@@ -27,7 +29,7 @@ export function Settings() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const payload: SettingsUpdate = { scorerModel: model, feedUrl };
+    const payload: SettingsUpdate = { scorerModel: model, feedUrl, homeCountry };
     if (apiKey.trim()) payload.anthropicApiKey = apiKey.trim();
     if (theMuseKey.trim()) payload.theMuseApiKey = theMuseKey.trim();
     if (feedKey.trim()) payload.feedKey = feedKey.trim();
@@ -75,6 +77,18 @@ export function Settings() {
             value={model}
             onChange={(e) => edited(setModel)(e.target.value)}
             placeholder="claude-sonnet-5"
+            className="input"
+          />
+        </Field>
+        <Field
+          label="Home country"
+          hint="Your country (e.g. US). Foreign on-site roles are ranked lower and skipped when deep-scoring. Auto-filled from your resume when possible."
+        >
+          <input
+            type="text"
+            value={homeCountry}
+            onChange={(e) => edited(setHomeCountry)(e.target.value)}
+            placeholder="US"
             className="input"
           />
         </Field>
