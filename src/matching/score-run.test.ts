@@ -209,6 +209,34 @@ describe("runScoreRun", () => {
     expect(forced.saved.length).toBe(1);
   });
 
+  it("applies the limit to UNSCORED postings, not the already-scored top slice", async () => {
+    // Regression: the query returns rows best-heuristic-first, and already-scored rows cluster at the
+    // top. If the cap were applied before dropping already-scored, `limit` would be spent re-covering
+    // that top slice and score fewer NEW postings than requested. Here the two highest-heuristic rows
+    // are already scored; with limit=2 the run must still deep-score 2 UNSCORED postings, not 0.
+    const candidates = [
+      candidate("scored-1", "Already A", 95, { alreadyLlmScored: true }),
+      candidate("scored-2", "Already B", 90, { alreadyLlmScored: true }),
+      candidate("new-1", "Fresh A", 85),
+      candidate("new-2", "Fresh B", 80),
+      candidate("new-3", "Fresh C", 75),
+    ];
+    const { repo, saved } = fakeRepo(candidates);
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, limit: 2 },
+    });
+
+    // limit=2 → the top 2 UNSCORED (new-1, new-2) are scored; the already-scored top slice is skipped.
+    expect(outcome.counts.deepScored).toBe(2);
+    expect(outcome.counts.alreadyScoredSkipped).toBe(2);
+    expect(saved.map((s) => s.id)).toEqual(["new-1", "new-2"]);
+  });
+
   it("partitions remote vs non-remote when remoteOnly is on (unknown location treated as remote)", async () => {
     const candidates = [
       candidate("remote", "Engineer A", 70, { location: "Remote - US" }),

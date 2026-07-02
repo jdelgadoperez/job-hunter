@@ -99,10 +99,16 @@ export async function runScoreRun(deps: {
     nonRemotePenalized = [];
   }
 
-  const capped = afterRemote.slice(0, options.limit);
-
-  const eligible = options.rescore ? capped : capped.filter((c) => !c.alreadyLlmScored);
-  const alreadyScoredSkipped = capped.length - eligible.length;
+  // Drop already-LLM-scored postings BEFORE applying the cap (unless --rescore). Order matters:
+  // the query returns rows best-heuristic-first, and already-scored rows cluster at the top (they
+  // were the best matches, scored on a prior run). Capping first would spend the limit re-covering
+  // that already-scored top slice, so a larger --limit could score FEWER new postings. Filtering
+  // first makes `limit` mean "up to N postings not yet scored", which is what the user expects.
+  const notYetScored = options.rescore
+    ? afterRemote
+    : afterRemote.filter((c) => !c.alreadyLlmScored);
+  const alreadyScoredSkipped = afterRemote.length - notYetScored.length;
+  const eligible = notYetScored.slice(0, options.limit);
 
   // Determine which non-remote postings get a penalized heuristic score (the actual save happens
   // after the dry-run gate). These never reach the triager or LLM, so there's no cost and no
@@ -120,7 +126,8 @@ export async function runScoreRun(deps: {
     inDb,
     afterRemote: afterRemote.length,
     afterHeuristic: gated.length,
-    afterCap: capped.length,
+    // Postings that will actually be scored this run (already-scored dropped first, then capped).
+    afterCap: eligible.length,
     alreadyScoredSkipped,
     triageTitles: eligible.length,
     deepScored: 0,
