@@ -22,9 +22,27 @@ const COUNTRY_ALIASES: Record<string, string> = {
   germany: "Germany",
   deutschland: "Germany",
   france: "France",
+  india: "India",
+  ireland: "Ireland",
+  singapore: "Singapore",
+  australia: "Australia",
+  brazil: "Brazil",
+  brasil: "Brazil",
+  spain: "Spain",
+  españa: "Spain",
+  mexico: "Mexico",
+  méxico: "Mexico",
+  netherlands: "Netherlands",
+  japan: "Japan",
+  switzerland: "Switzerland",
+  colombia: "Colombia",
+  "united arab emirates": "United Arab Emirates",
+  uae: "United Arab Emirates",
+  türkiye: "Türkiye",
+  turkey: "Türkiye",
 };
 
-// Two-letter US state codes → US. (Lowercased.)
+// US: two-letter state codes AND full state names → US. (Lowercased.)
 const US_STATES = new Set(
   (
     "al ak az ar ca co ct de fl ga hi id il in ia ks ky la me md ma mi mn ms mo mt ne nv nh nj " +
@@ -32,8 +50,82 @@ const US_STATES = new Set(
   ).split(" "),
 );
 
-// Canadian province/territory codes → Canada. (Lowercased.)
+// Full US state names (lowercased), mapped to US. Kept separate from the 2-letter codes so both
+// "TX" and "Texas" resolve. "district of columbia" and "washington d.c." cover DC's full forms.
+const US_STATE_NAMES = new Set([
+  "alabama",
+  "alaska",
+  "arizona",
+  "arkansas",
+  "california",
+  "colorado",
+  "connecticut",
+  "delaware",
+  "florida",
+  "georgia",
+  "hawaii",
+  "idaho",
+  "illinois",
+  "indiana",
+  "iowa",
+  "kansas",
+  "kentucky",
+  "louisiana",
+  "maine",
+  "maryland",
+  "massachusetts",
+  "michigan",
+  "minnesota",
+  "mississippi",
+  "missouri",
+  "montana",
+  "nebraska",
+  "nevada",
+  "new hampshire",
+  "new jersey",
+  "new mexico",
+  "new york",
+  "north carolina",
+  "north dakota",
+  "ohio",
+  "oklahoma",
+  "oregon",
+  "pennsylvania",
+  "rhode island",
+  "south carolina",
+  "south dakota",
+  "tennessee",
+  "texas",
+  "utah",
+  "vermont",
+  "virginia",
+  "washington",
+  "west virginia",
+  "wisconsin",
+  "wyoming",
+  "district of columbia",
+  "washington d.c.",
+]);
+
+// Canada: province/territory codes AND full names → Canada. (Lowercased.)
 const CA_PROVINCES = new Set("ab bc mb nb nl ns nt nu on pe qc sk yt".split(" "));
+
+const CA_PROVINCE_NAMES = new Set([
+  "alberta",
+  "british columbia",
+  "manitoba",
+  "new brunswick",
+  "newfoundland and labrador",
+  "nova scotia",
+  "northwest territories",
+  "nunavut",
+  "ontario",
+  "prince edward island",
+  "quebec",
+  "québec",
+  "saskatchewan",
+  "yukon",
+]);
 
 function normalizeToken(token: string): string {
   return token.trim().toLowerCase();
@@ -55,8 +147,8 @@ export function parseCountry(location?: string): string | undefined {
     const key = normalizeToken(token);
     const alias = COUNTRY_ALIASES[key];
     if (alias !== undefined) return alias;
-    if (US_STATES.has(key)) return "US";
-    if (CA_PROVINCES.has(key)) return "Canada";
+    if (US_STATES.has(key) || US_STATE_NAMES.has(key)) return "US";
+    if (CA_PROVINCES.has(key) || CA_PROVINCE_NAMES.has(key)) return "Canada";
   }
   return undefined;
 }

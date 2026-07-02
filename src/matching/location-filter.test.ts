@@ -18,6 +18,34 @@ describe("parseCountry", () => {
     ["Paris, France", "France"],
     ["Anywhere", undefined],
     ["Distributed", undefined],
+    // Full US state names → US
+    ["Austin, Texas", "US"],
+    ["Los Angeles, California", "US"],
+    ["New York, New York", "US"],
+    ["Seattle, Washington", "US"],
+    // Full Canadian province names → Canada
+    ["Vancouver, British Columbia", "Canada"],
+    ["Toronto, Ontario", "Canada"],
+    // New country aliases
+    ["Bangalore, India", "India"],
+    ["Dublin, Ireland", "Ireland"],
+    ["Singapore, Singapore", "Singapore"],
+    ["São Paulo, Brazil - Remote", "Brazil"],
+    ["Barcelona, Spain", "Spain"],
+    ["Mexico City, Mexico", "Mexico"],
+    ["Amsterdam, Netherlands", "Netherlands"],
+    ["Tokyo, Japan", "Japan"],
+    ["Dubai, United Arab Emirates - Remote", "United Arab Emirates"],
+    ["Ankara, Türkiye - Remote", "Türkiye"],
+    ["Zurich, Switzerland", "Switzerland"],
+    ["Bogotá, Colombia", "Colombia"],
+    ["Sydney, Australia", "Australia"],
+    // Bare cities and ambiguous strings STILL unknown (never guess)
+    ["San Francisco", undefined],
+    ["London", undefined],
+    ["Barcelona", undefined],
+    ["2 Locations", undefined],
+    ["Home based - Worldwide", undefined],
   ];
 
   for (const [input, expected] of cases) {
