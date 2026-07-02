@@ -108,6 +108,11 @@ export function Home() {
             {running ? "Scanning…" : "Scan now"}
           </Button>
         </div>
+        <p className="mt-1 text-xs text-faint">
+          Find open roles from the stillhiring.today directory and your tracked companies, then give
+          each a fast, free keyword score against your resume. Free and safe to re-run often — deep-
+          scoring with Claude (step 3) is the paid, sharper pass on top of these results.
+        </p>
 
         {running ? (
           <div className="mt-3" aria-live="polite">
