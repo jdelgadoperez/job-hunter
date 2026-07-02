@@ -5,6 +5,9 @@
  * never guessed and never silently dropped from an unfiltered list.
  */
 
+import type { JobPosting } from "@app/domain/types";
+import { resolvePostingRemote } from "./remote-filter";
+
 // Canonical label per country, keyed by every alias we accept (lowercased). ISO-2 where it reads
 // well in a dropdown ("US", "UK", "CA"), full name otherwise. Extend as new feeds appear.
 const COUNTRY_ALIASES: Record<string, string> = {
@@ -184,4 +187,28 @@ export function parseCountry(location?: string): string | undefined {
     }
   }
   return undefined;
+}
+
+/** The posting's country: the structured field when present, else parsed from its location text. */
+export function resolvePostingCountry(
+  posting: Pick<JobPosting, "country" | "location">,
+): string | undefined {
+  if (posting.country !== undefined) return posting.country;
+  return parseCountry(posting.location);
+}
+
+/**
+ * Whether a posting is a clear off-country non-starter given the user's home country: it has a
+ * KNOWN country different from home AND is not remote. Unknown-country and remote roles are never
+ * non-starters (never guessed away). Returns false when no home country is set (feature off).
+ */
+export function isOffCountryNonStarter(
+  posting: Pick<JobPosting, "country" | "location" | "remote">,
+  homeCountry: string | undefined,
+): boolean {
+  if (homeCountry === undefined || homeCountry.trim() === "") return false;
+  const country = resolvePostingCountry(posting);
+  if (country === undefined) return false; // unknown → keep
+  if (country === homeCountry) return false; // in-country → keep
+  return !resolvePostingRemote(posting); // foreign: non-starter only if not remote
 }

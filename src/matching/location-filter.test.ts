@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCountry } from "./location-filter";
+import { isOffCountryNonStarter, parseCountry, resolvePostingCountry } from "./location-filter";
 
 describe("parseCountry", () => {
   const cases: Array<[string | undefined, string | undefined]> = [
@@ -70,4 +70,43 @@ describe("parseCountry", () => {
       expect(parseCountry(input)).toBe(expected);
     });
   }
+});
+
+describe("resolvePostingCountry", () => {
+  it("prefers the structured country over the parsed location", () => {
+    expect(resolvePostingCountry({ country: "UK", location: "Austin, Texas" })).toBe("UK");
+  });
+  it("falls back to parsing the location when no structured country", () => {
+    expect(resolvePostingCountry({ location: "Austin, Texas" })).toBe("US");
+  });
+  it("returns undefined for an unparseable location", () => {
+    expect(resolvePostingCountry({ location: "San Francisco" })).toBeUndefined();
+  });
+});
+
+describe("isOffCountryNonStarter", () => {
+  const home = "US";
+  it("false when no home country is set", () => {
+    expect(
+      isOffCountryNonStarter({ country: "UK", location: "London", remote: false }, undefined),
+    ).toBe(false);
+  });
+  it("false for an in-country on-site role", () => {
+    expect(isOffCountryNonStarter({ country: "US", location: "Austin", remote: false }, home)).toBe(
+      false,
+    );
+  });
+  it("true for a known-foreign on-site role", () => {
+    expect(isOffCountryNonStarter({ country: "UK", location: "London", remote: false }, home)).toBe(
+      true,
+    );
+  });
+  it("false for a foreign REMOTE role (remote is kept)", () => {
+    expect(isOffCountryNonStarter({ country: "UK", location: "London", remote: true }, home)).toBe(
+      false,
+    );
+  });
+  it("false for an unknown-country role (never dropped)", () => {
+    expect(isOffCountryNonStarter({ location: "San Francisco", remote: false }, home)).toBe(false);
+  });
 });
