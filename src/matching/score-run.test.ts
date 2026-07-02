@@ -661,4 +661,33 @@ describe("runScoreRun — off-country partition (homeCountry set)", () => {
     expect(forId).toHaveLength(1);
     expect(forId[0]?.scorer).toBe("heuristic-remote-penalized");
   });
+
+  it("scores fewer titles (saves tokens) when homeCountry excludes foreign on-site roles", async () => {
+    const makeCandidates = () => [
+      candidate("us-home", "Austin Job", 80, { location: "Austin, Texas", remote: false }),
+      candidate("uk-onsite", "London Job", 78, { location: "London, UK", remote: false }),
+    ];
+
+    const withoutHome = await runScoreRun({
+      repo: fakeRepo(makeCandidates()).repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: baseOptions,
+    });
+    const withHome = await runScoreRun({
+      repo: fakeRepo(makeCandidates()).repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, homeCountry: "US" },
+    });
+
+    // The UK on-site role is triaged/deep-scored without a home country, excluded with one.
+    expect(withHome.counts.triageTitles).toBeLessThan(withoutHome.counts.triageTitles);
+    expect(withoutHome.counts.triageTitles - withHome.counts.triageTitles).toBe(1);
+    expect(withHome.counts.locationPenalized).toBe(1);
+    // The in-country role is still triaged/scored in both.
+    expect(withHome.counts.triageTitles).toBe(1);
+  });
 });
