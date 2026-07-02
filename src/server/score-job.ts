@@ -119,6 +119,12 @@ export class ScoreJobManager {
   private onProgress(event: ScoreProgressEvent): void {
     this.status = { ...this.status, message: formatScoreProgress(event) };
     if (event.kind === "triaging") this.status.total = event.total;
+    if (event.kind === "triaged") {
+      // Switch the progress-bar denominator to the post-triage survivor count now, so it doesn't
+      // stay at the pre-triage total and then snap when the first score lands.
+      this.status.total = event.kept;
+      this.status.current = 0;
+    }
     if (event.kind === "scoring") {
       this.status.current = event.index;
       this.status.total = event.total;

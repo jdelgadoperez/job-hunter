@@ -160,6 +160,23 @@ describe("ScoreJobManager", () => {
     expect(status.message).toContain("Deep-scored 2");
   });
 
+  it("updates total to the kept count on triaged, before scoring starts", async () => {
+    // Guards against a progress-bar denominator jump: triaging reports the pre-triage count, but the
+    // bar should switch to the post-triage survivor count as soon as triage finishes — not snap to it
+    // only when the first score lands.
+    const jobs = new ScoreJobManager();
+    const { runner, emit } = progressRunner();
+    jobs.start(runner);
+
+    emit({ kind: "triaging", total: 100 });
+    expect(jobs.getStatus().total).toBe(100);
+
+    emit({ kind: "triaged", kept: 20, total: 100 });
+    const status = jobs.getStatus();
+    expect(status.total).toBe(20);
+    expect(status.current).toBe(0);
+  });
+
   it("caps the recent list at 8 entries", async () => {
     const jobs = new ScoreJobManager();
     const { runner, resolve, emit } = progressRunner();
