@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS postings (
   location TEXT,
   remote INTEGER,
   country TEXT,
+  company_id TEXT,
   posted_at TEXT,
   fetched_at TEXT NOT NULL,
   -- Incremental-scan bookkeeping: the scan that last saw this posting, and when it was judged gone.
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS tracked_companies (
 CREATE TABLE IF NOT EXISTS failed_leads (
   careers_url TEXT PRIMARY KEY,
   company TEXT,
+  company_id TEXT,
   message TEXT NOT NULL,
   consecutive_failures INTEGER NOT NULL DEFAULT 1,
   last_failed_scan INTEGER NOT NULL
@@ -77,6 +79,7 @@ CREATE TABLE IF NOT EXISTS scans (
 -- Snapshot of every company seen in the directory (or tracked), so successive scans can diff it.
 CREATE TABLE IF NOT EXISTS companies (
   careers_url TEXT PRIMARY KEY,
+  id TEXT,
   name TEXT,
   first_seen_scan INTEGER NOT NULL,
   last_seen_scan INTEGER NOT NULL,
@@ -94,4 +97,6 @@ export const INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_postings_expired_at ON postings(expired_at);
 CREATE INDEX IF NOT EXISTS idx_postings_last_seen_scan ON postings(last_seen_scan);
 CREATE INDEX IF NOT EXISTS idx_match_results_score ON match_results(score);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_id ON companies(id);
+CREATE INDEX IF NOT EXISTS idx_postings_company_id ON postings(company_id);
 `;
