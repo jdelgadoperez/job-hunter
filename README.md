@@ -10,10 +10,12 @@ companies you choose to track; ranks every posting against your resume with a **
 heuristic**; and can then **deep-score** the best matches with Claude. Ranked matches save to a
 local database — all on your own machine.
 
-Scanning is split into two steps: a free **`scan`** (discover + heuristic score) and an optional,
-budget-aware **`score`** (LLM triage → deep score of the strongest postings). It runs as both a
-command-line tool and a local web dashboard (`job-hunter serve`) — a React app with light and dark
-themes, served over a small local HTTP API. Both work against the same local database.
+Scanning is split into two steps: a free **scan** (discover + heuristic score) and an optional,
+budget-aware **deep-score** (LLM triage → deep score of the strongest postings). The primary
+interface is a local **web dashboard** (`job-hunter serve`) — a React app with light and dark
+themes — where you upload your resume, run scans, deep-score with Claude, and browse ranked matches.
+A full **command-line tool** drives the same pipeline for scripting and automation. Both work against
+the same local database.
 
 > **Privacy:** everything runs locally by default. Your resume and matches live in a SQLite file on
 > your machine; nothing is uploaded except the job postings you scan and (if you run `score`) the
@@ -57,12 +59,18 @@ updating, non-interactive/env-var usage, the manual (do-it-by-hand) path, and tr
 
 ## Usage
 
-Run commands with `npm run cli -- <command>` (the `--` passes flags through):
+**The dashboard is the primary way to use job-hunter.** Run `npm run cli -- serve` and open the
+local web app to upload your resume, run scans, deep-score with Claude (with a cost preview and live
+progress), and browse ranked matches — all point-and-click. The CLI below drives the same pipeline
+for scripting, automation, and power users; anything you can do on the dashboard you can also do from
+the terminal.
+
+Run CLI commands with `npm run cli -- <command>` (the `--` passes flags through):
 
 ```bash
 npm run cli -- scan                       # discover + free heuristic score, store matches (live status)
 npm run cli -- score --dry-run            # preview the LLM deep-score plan + estimated cost (no spend)
-npm run cli -- score --limit 50           # LLM triage + deep-score the best postings from the last scan
+npm run cli -- score --limit 50           # LLM triage + deep-score up to 50 postings not yet scored
 npm run cli -- list --min-score 70        # show matches scoring 70+
 npm run cli -- list --remote-only         # only remote matches
 npm run cli -- list --country US          # only matches in a country (parsed from the posting location)
@@ -79,10 +87,17 @@ npm run cli -- --version
 
 **Two-step scanning.** `scan` is free — it discovers postings and scores them with the offline
 heuristic. `score` then spends LLM budget only on the best of those: it ranks by heuristic score,
-batch-triages titles, deep-scores the survivors (bounded by `--min-heuristic` and `--limit`), skips
-postings already LLM-scored (unless `--rescore`), and aborts cleanly if it hits your provider usage
-limit. `score --dry-run` prints the plan and estimated cost without calling the LLM. LLM scoring is
-**CLI-only** today — the dashboard shows heuristic scores until you run `score`.
+respects `--min-heuristic`, skips postings already LLM-scored (unless `--rescore`), then caps the
+remainder at `--limit` — so raising `--limit` always scores more new postings, never fewer, and
+re-running works down a large backlog. It batch-triages titles, deep-scores the survivors, and
+aborts cleanly if it hits your provider usage limit. `score --dry-run` prints the plan and estimated
+cost without calling the LLM.
+
+**Deep-score from the dashboard or the CLI.** The dashboard's "3 · Deep-score with Claude" panel is
+the easiest way in — Preview for a cost estimate, a Limit input, Remote-only and Re-score toggles,
+and a live progress bar. The `score` command does the same from the terminal. Both share the same
+budget-aware pipeline, skip already-scored postings by default, and report live progress as postings
+score.
 
 **Remote preference (changed behavior).** With `config remote on`, non-remote postings are no longer
 dropped from scoring — they're kept but **ranked lower** (a penalized heuristic score) and skip the
@@ -188,12 +203,13 @@ Override the location with the `JOB_HUNTER_HOME` environment variable.
 
 ## Status & roadmap
 
-**Shipped:** the CLI (`scan`, `score`, `config`, `list`, `profile`, `track`, with colored output and
-per-command help) and the web dashboard (resume upload, one-click background scans, ranked match
-browsing with save/dismiss, in-app skill/dictionary and company editing, and light/dark themes) —
-plus incremental scans with directory diffing and posting expiry, per-posting liveness re-checks, and
-smooth in-place updates. Scanning is split into a free `scan` and a budget-aware `score` (heuristic
-gate → batch LLM triage → concurrent deep score). Discovery fans out over multiple lead sources
+**Shipped:** the web dashboard (resume upload, one-click background scans and in-dashboard
+deep-scoring — both with live progress — ranked match browsing with save/dismiss, in-app
+skill/dictionary and company editing, and light/dark themes) and a full CLI covering the same
+pipeline (`scan`, `score`, `config`, `list`, `profile`, `track`, with colored output and per-command
+help) — plus incremental scans with directory diffing and posting expiry, per-posting liveness
+re-checks, and smooth in-place updates. Scanning is split into a free `scan` and a budget-aware
+`score` (heuristic gate → batch LLM triage → concurrent deep score). Discovery fans out over multiple lead sources
 (stillhiring.today, Remotive, and the key-gated The Muse) and resolves 11 ATS platforms (Greenhouse,
 Lever, Ashby, Workday, Rippling, Recruitee, SmartRecruiters, BambooHR, UKG, Breezy, Workable) with a
 JSON-LD / browser fallback.
