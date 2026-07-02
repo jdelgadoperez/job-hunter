@@ -158,3 +158,36 @@ describe("Matches empty state", () => {
     );
   });
 });
+
+describe("Matches count header", () => {
+  const solo: PostingSeed = { id: "a", title: "Staff Platform Engineer", company: "Acme" };
+  const seeds: PostingSeed[] = [solo, { id: "b", title: "Frontend Engineer", company: "Globex" }];
+
+  it("shows the number of matches in the current view", async () => {
+    mockMatches(seeds.map(scored));
+    renderMatches();
+
+    // Default mount keeps minScore=50, so the count is filter-scoped.
+    await waitFor(() =>
+      expect(screen.getByText(/Showing/)).toHaveTextContent(
+        `Showing ${seeds.length} matches at the current filters`,
+      ),
+    );
+  });
+
+  it("uses the singular noun for a single match", async () => {
+    mockMatches([scored(solo)]);
+    renderMatches();
+
+    await waitFor(() => expect(screen.getByText(/Showing/)).toHaveTextContent(/1 match\b/));
+    expect(screen.queryByText(/1 matches/)).not.toBeInTheDocument();
+  });
+
+  it("omits the count header when there are no matches", async () => {
+    mockMatches([]);
+    renderMatches();
+
+    await waitFor(() => expect(screen.getByText(/clearing filters/i)).toBeInTheDocument());
+    expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
+  });
+});

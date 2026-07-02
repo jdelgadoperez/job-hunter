@@ -319,6 +319,14 @@ export function Matches() {
         ) : null}
       </div>
 
+      {matches.data && matches.data.length > 0 ? (
+        <p className="text-sm text-muted">
+          Showing <span className="font-semibold text-fg">{matches.data.length}</span>{" "}
+          {matches.data.length === 1 ? "match" : "matches"}
+          {filtersAreActive ? " at the current filters" : ""}
+        </p>
+      ) : null}
+
       {matches.isPending ? (
         <Loading label="Loading matches…" />
       ) : matches.isError ? (
