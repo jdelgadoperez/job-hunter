@@ -138,6 +138,22 @@ Ran `npm run smoke:advisor` against the live API with a beta-enabled key. Findin
    - **Caching note:** the forced runs read the cached prefix (`cache_read_input_tokens` in the tens
      of thousands), so caching isn't the problem — the non-termination and per-iteration forcing are.
 
+6. **⛔ RE-PROBE — "available, not forced, let the agent decide" is also inert, even on hard scores.**
+   The natural follow-up: maybe the advisor is skipped only because the test posting is an *obvious*
+   match — give the agent a genuinely ambiguous score and explicit permission to consult, and it might
+   reach for the advisor on its own. Tested directly: added a HARD scenario (a backend/data-engineering
+   candidate — Python/Django/Airflow/Spark — against a *senior frontend design-systems* role, a real
+   transferable-skills judgment call) with a scoring instruction that **explicitly permits** consulting
+   an advisor for borderline calls. Ran it unforced on both pairs. Result: **the agent consulted the
+   advisor 0 times on all four unforced runs** (both easy, both hard). On the hard case it scored the
+   candidate **12 and 18** with crisp, correct rationales ("the gap is too wide", "not a generalist
+   role") — the model was *confident*, so it correctly saw nothing to consult about. The lesson: for
+   single-posting scoring the model reaches a well-calibrated answer in one shot; there is no
+   deliberation phase where a second opinion changes the outcome, so "let the agent decide whether to
+   consult" reliably resolves to "don't." Making the tool merely available buys nothing but surface
+   area. (Reproduce: `npm run smoke:advisor` — watch for the `★ AGENT SELF-CONSULTED` vs `○ did NOT
+   consult` lines.)
+
 ## Verdict: do NOT adopt the advisor tool for the deep-score step (as designed)
 
 Phase 0 is **conclusive, and the answer is no** — but for a better reason than the original blockers:
@@ -146,8 +162,9 @@ Phase 0 is **conclusive, and the answer is no** — but for a better reason than
   output composes on `beta.messages.parse` (unforced), and both model pairs are valid (no `400`).
 - But the workload is a **fundamental mismatch** for the tool. Scoring one posting against a resume is
   single-turn with nothing to plan — exactly the case the docs call a weak fit. In practice:
-  - **Unforced**, the executor never consults the advisor → Sonnet-solo quality at Sonnet-solo cost
-    (finding 4). The tool is inert.
+  - **Unforced** — even "available, not forced, agent decides" — the agent consults the advisor
+    **zero times**, on easy *and* genuinely-hard/ambiguous scores where consulting was explicitly
+    invited (findings 4 and 6) → Sonnet-solo quality at Sonnet-solo cost. The tool is inert.
   - **Forced**, the consult spins up a non-terminating agentic loop that never returns
     `parsed_output` and runs the Opus advisor 4–23× hotter than the executor (finding 5). The tool is
     actively harmful to both correctness and cost.
