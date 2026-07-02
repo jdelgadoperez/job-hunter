@@ -46,6 +46,17 @@ describe("parseCountry", () => {
     ["Barcelona", undefined],
     ["2 Locations", undefined],
     ["Home based - Worldwide", undefined],
+    // Signal embedded as a whole word in a multi-word token
+    ["Remote US", "US"],
+    ["Remote U.S.", "US"],
+    ["US West", "US"],
+    ["Remote - US East", "US"],
+    ["Remote - US Central", "US"],
+    ["Remote Canada", "Canada"],
+    // Semicolon splits multi-location; last country wins (end-first)
+    ["APAC - Australia; Singapore", "Singapore"],
+    // Whole-word only: a token containing "business" must NOT match "us"
+    ["Business Development, Remote", undefined],
   ];
 
   for (const [input, expected] of cases) {

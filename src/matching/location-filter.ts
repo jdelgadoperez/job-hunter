@@ -131,12 +131,24 @@ function normalizeToken(token: string): string {
   return token.trim().toLowerCase();
 }
 
+// Resolve a single normalized token/word against the alias + state/province sets. Returns the
+// canonical country or undefined. Whole-string match only (callers pass already-split words), so
+// "business" can never resolve via a substring of "us".
+function resolveKey(key: string): string | undefined {
+  const alias = COUNTRY_ALIASES[key];
+  if (alias !== undefined) return alias;
+  if (US_STATES.has(key) || US_STATE_NAMES.has(key)) return "US";
+  if (CA_PROVINCES.has(key) || CA_PROVINCE_NAMES.has(key)) return "Canada";
+  return undefined;
+}
+
 export function parseCountry(location?: string): string | undefined {
   if (location === undefined || location.trim() === "") return undefined;
 
-  // Split on commas / parens / dashes so "Remote - US" and "Berlin, Germany" both surface the tail.
+  // Split on commas / parens / dashes / slashes / semicolons so "Remote - US" and
+  // "Berlin, Germany" and "Australia; Singapore" all surface their parts.
   const tokens = location
-    .split(/[,()\-–—/]/)
+    .split(/[,()\-–—/;]/)
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
 
@@ -144,11 +156,16 @@ export function parseCountry(location?: string): string | undefined {
   for (let i = tokens.length - 1; i >= 0; i--) {
     const token = tokens[i];
     if (token === undefined) continue;
-    const key = normalizeToken(token);
-    const alias = COUNTRY_ALIASES[key];
-    if (alias !== undefined) return alias;
-    if (US_STATES.has(key) || US_STATE_NAMES.has(key)) return "US";
-    if (CA_PROVINCES.has(key) || CA_PROVINCE_NAMES.has(key)) return "Canada";
+    // 1) Whole-token match first, so multi-word aliases ("united arab emirates", "british columbia")
+    //    and multi-word state names ("new york") resolve before word-splitting can break them apart.
+    const wholeToken = resolveKey(normalizeToken(token));
+    if (wholeToken !== undefined) return wholeToken;
+    // 2) Otherwise scan each whitespace-separated word (still whole-word exact).
+    const words = token.split(/\s+/).filter((w) => w.length > 0);
+    for (const word of words) {
+      const byWord = resolveKey(normalizeToken(word));
+      if (byWord !== undefined) return byWord;
+    }
   }
   return undefined;
 }
