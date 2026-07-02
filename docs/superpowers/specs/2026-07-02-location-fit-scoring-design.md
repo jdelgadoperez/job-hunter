@@ -27,15 +27,14 @@ flag when present, else falls back to a free-text regex. The connectors set that
   regex `/\b(remote|anywhere|distributed|work from home|wfh)\b/i`, which does NOT match "Hybrid" — so
   no false positive there, though a location like "ATX OR NYC" correctly yields `false`.
 
-Ashby is the outlier. Ashby's posting API is believed to expose a workplace/location-type field
-(`workplaceType`, values like `"Remote"` / `"Hybrid"` / `"On-site"`) alongside `isRemote` — the same
-kind of signal Lever and Rippling already use. **This must be verified against a live Ashby response
-before implementation**: the committed fixture (`__fixtures__/ashby.json`) predates the remote work
-and contains neither `isRemote` nor `workplaceType` (both null), so it can't confirm the field name
-or values. The first implementation task is a live probe (via `smoke:*` or a one-off fetch of a board
-known to have a hybrid role) to capture the real field, then refresh the fixture with a hybrid
-example. If Ashby's field name/values differ from the assumption, the mapping adapts to what the
-probe shows — the *principle* (don't treat Hybrid as Remote) is fixed; the exact field is verified.
+Ashby is the outlier. **Confirmed against a live Ashby response** (SafeLease board, the exact company
+from the bug report, 2026-07-02): every job carries a `workplaceType` field with values `"OnSite"`,
+`"Remote"`, or `"Hybrid"`, and **every Hybrid role has `isRemote: true`** — e.g. "Full Stack Software
+Engineer" · location "ATX OR NYC" · `isRemote: true` · `workplaceType: "Hybrid"` (the screenshot
+role). So `workplaceType` is the authoritative signal; the correct mapping is
+`remote: workplaceType === "Remote"` (note the value is `"OnSite"`, no hyphen, not `"On-site"`). The
+committed fixture (`__fixtures__/ashby.json`) predates the remote work and has neither field, so it
+must be refreshed with a real hybrid example as part of the fix.
 
 ## Scope decisions (from brainstorming)
 
@@ -53,14 +52,13 @@ probe shows — the *principle* (don't treat Hybrid as Remote) is fixed; the exa
 
 ### 1. Fix Ashby remote/hybrid detection (`connectors/schemas.ts`, `connectors/ashby.ts`)
 
-- **Verify first** (see §Context): probe a live Ashby board for the real hybrid signal, then refresh
-  `__fixtures__/ashby.json` with a hybrid example carrying that field.
-- Add the confirmed workplace field (assumed `workplaceType: z.string().optional()`) to `AshbyJob`
-  (`schemas.ts:38-46`).
+- Add `workplaceType: z.string().optional()` to `AshbyJob` (`schemas.ts:38-46`).
 - In `ashby.ts`, replace `remote: job.isRemote` with a helper mirroring `leverRemote`:
-  prefer the workplace field when present (`remote: workplaceType === "Remote"`), else fall back to
-  `isRemote`. Hybrid/On-site → `false`. Extract as `ashbyRemote(workplaceType, isRemote)` for testing.
-  (Adapt the exact field name/values to what the probe confirmed.)
+  prefer `workplaceType` when present (`remote: workplaceType === "Remote"`), else fall back to
+  `isRemote`. `"Hybrid"` / `"OnSite"` → `false`. Extract as `ashbyRemote(workplaceType, isRemote)`
+  for testing. (Values confirmed live: `"OnSite"` | `"Remote"` | `"Hybrid"`.)
+- Refresh `__fixtures__/ashby.json` with a real hybrid job (from the SafeLease probe) so the
+  connector test exercises the actual shape.
 - Lever and Rippling are already correct — no change; a regression test documents the contract.
 - Net effect: `resolvePostingRemote` becomes trustworthy for Ashby-sourced hybrids.
 
