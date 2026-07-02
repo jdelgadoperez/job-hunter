@@ -8,3 +8,4 @@ export const THE_MUSE_KEY_SETTING = "theMuseApiKey";
 // mode: pull the cloud feed + crawl only tracked companies. `feedKey` is the Supabase anon key.
 export const FEED_URL_SETTING = "feedUrl";
 export const FEED_KEY_SETTING = "feedKey";
+export const HOME_COUNTRY_SETTING = "homeCountry";

@@ -4,7 +4,12 @@ import {
   type LlmProviderConfig,
   type LlmProviderId,
 } from "./llm-providers";
-import { ANTHROPIC_KEY_SETTING, MODEL_SETTING, PROVIDER_SETTING } from "./settings-keys";
+import {
+  ANTHROPIC_KEY_SETTING,
+  HOME_COUNTRY_SETTING,
+  MODEL_SETTING,
+  PROVIDER_SETTING,
+} from "./settings-keys";
 
 // Re-exported so existing importers (and tests) can keep reaching these via resolve-settings.
 export { MODEL_SETTING, PROVIDER_SETTING } from "./settings-keys";
@@ -59,4 +64,10 @@ export function resolveApiKey(
 export function resolveScorerModel(settings: SettingsReader, provider: LlmProviderConfig): string {
   const model = settings.getSetting(MODEL_SETTING)?.trim();
   return model ? model : provider.defaultModel;
+}
+
+/** The user's home country label (e.g. "US"), or undefined when unset/blank (feature off). */
+export function resolveHomeCountry(settings: SettingsReader): string | undefined {
+  const value = settings.getSetting(HOME_COUNTRY_SETTING)?.trim();
+  return value ? value : undefined;
 }
