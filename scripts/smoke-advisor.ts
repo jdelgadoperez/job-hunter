@@ -11,7 +11,10 @@
  *      prompt and try to get back a schema-validated `LlmMatchPayload` from a request that also
  *      carries the advisor tool. Two variants, in order:
  *        (a) `beta.messages.parse` + `betaZodOutputFormat(MatchPayloadSchema)` → `parsed_output`
- *            (the beta-endpoint mirror of what `AnthropicLlmClient.score()` does today).
+ *            (the beta-endpoint mirror of what `AnthropicLlmClient.score()` does today). Run twice:
+ *            unforced, then with `tool_choice` forcing the advisor consult — because a single-turn
+ *            score has "nothing to plan", so unforced the executor typically skips the advisor
+ *            (advisor tokens: 0) and only the forced run exercises it.
  *        (b) fallback: `beta.messages.create` + read the final text block + `safeParse`.
  *   2. Is the model pair accepted? Runs `claude-sonnet-5` + `claude-opus-4-8` (the target pair)
  *      and `claude-sonnet-4-6` + `claude-opus-4-8` (the fully-documented fallback). An invalid
@@ -107,9 +110,24 @@ function logPayload(payload: LlmMatchPayload): void {
   console.log(`  rationale: ${payload.rationale}`);
 }
 
-/** Variant (a): the structured-output path — beta.messages.parse + betaZodOutputFormat. */
-async function tryParsePath(client: Anthropic, executor: string, advisor: string): Promise<void> {
-  console.log("  [variant a] beta.messages.parse + betaZodOutputFormat …");
+/**
+ * Variant (a): the structured-output path — beta.messages.parse + betaZodOutputFormat.
+ *
+ * When `forceAdvisor` is set, adds `tool_choice: { type: "tool", name: "advisor" }` to force the
+ * consult. Without it, a single-turn score has "nothing to plan" and the executor typically skips
+ * the advisor entirely (advisor tokens: 0) — so the forced run is the one that actually exercises
+ * the Opus advisor and yields a real `advisor_message` token split. Forcing tool use cannot combine
+ * with extended thinking (the API 400s), so `thinking` stays disabled — which the scorer already does.
+ */
+async function tryParsePath(
+  client: Anthropic,
+  executor: string,
+  advisor: string,
+  forceAdvisor: boolean,
+): Promise<void> {
+  console.log(
+    `  [variant a${forceAdvisor ? " · forced advisor" : ""}] beta.messages.parse + betaZodOutputFormat …`,
+  );
   const { system, messages } = scoreInputs();
   const response = await client.beta.messages.parse({
     model: executor,
@@ -118,6 +136,7 @@ async function tryParsePath(client: Anthropic, executor: string, advisor: string
     thinking: { type: "disabled" },
     output_config: { effort: "low", format: betaZodOutputFormat(MatchPayloadSchema) },
     tools: [advisorTool(advisor)],
+    ...(forceAdvisor ? { tool_choice: { type: "tool" as const, name: "advisor" } } : {}),
     system,
     messages,
   });
@@ -179,24 +198,36 @@ async function main(): Promise<void> {
 
   for (const { executor, advisor } of PAIRS) {
     console.log(`\n=== executor=${executor}  advisor=${advisor} ===`);
-    try {
-      await tryParsePath(client, executor, advisor);
-    } catch (error) {
-      console.log("  [variant a] failed:", error instanceof Error ? error.message : String(error));
+    // Unforced first (proves composition; shows whether the executor consults the advisor on its
+    // own — for single-turn scoring it typically won't), then forced (the run that actually
+    // exercises the advisor and yields a real advisor_message token split).
+    for (const forceAdvisor of [false, true]) {
       try {
-        await tryCreatePath(client, executor, advisor);
-      } catch (createError) {
+        await tryParsePath(client, executor, advisor, forceAdvisor);
+      } catch (error) {
         console.log(
-          "  [variant b] also failed:",
-          createError instanceof Error ? createError.message : String(createError),
+          `  [variant a${forceAdvisor ? " · forced advisor" : ""}] failed:`,
+          error instanceof Error ? error.message : String(error),
         );
+        // Only probe the manual-parse fallback on the unforced path; if forcing is what broke,
+        // the failure itself is the finding, not a parse-mechanism question.
+        if (!forceAdvisor) {
+          try {
+            await tryCreatePath(client, executor, advisor);
+          } catch (createError) {
+            console.log(
+              "  [variant b] also failed:",
+              createError instanceof Error ? createError.message : String(createError),
+            );
+          }
+        }
       }
     }
   }
 
   console.log(
-    "\nDone. Record the answers (which variant worked, the token split, any 400) back into " +
-      "docs/advisor-tool-scoring-exploration.md so Phase 1 starts from facts.",
+    "\nDone. Record the answers (which variant worked, whether the FORCED run produced a non-zero " +
+      "advisor_message token split, and any 400) back into docs/advisor-tool-scoring-exploration.md.",
   );
 }
 

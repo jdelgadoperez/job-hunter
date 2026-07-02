@@ -87,6 +87,56 @@ helper works under `client.beta.messages.create`. If they don't compose, the fal
 `messages.parse` for this path and validate manually with `MatchPayloadSchema.safeParse` — which the
 `LlmScorer` boundary **already does** as belt-and-suspenders, so degrading gracefully is cheap.
 
+## Phase 0 results (live run, 2026-07-02)
+
+Ran `npm run smoke:advisor` against the live API with a beta-enabled key. Findings:
+
+1. **✅ Structured output composes — no fallback needed.** Variant (a),
+   `client.beta.messages.parse` + `betaZodOutputFormat(MatchPayloadSchema)` + the advisor tool in
+   `tools`, returned a populated `parsed_output` (a valid `LlmMatchPayload`) on **both** model pairs.
+   Variant (b) — manual `safeParse` — was never reached. So Phase 1 keeps the exact parse-based shape
+   the scorer uses today; the only change is switching to the `beta.messages.*` namespace and adding
+   the beta flag + tool. The `LlmClient` seam is untouched.
+2. **✅ Both model pairs accepted (no `400`).** `claude-sonnet-5` + `claude-opus-4-8` (score 90) and
+   `claude-sonnet-4-6` + `claude-opus-4-8` (score 88) both succeeded. The 90-vs-88 gap is ordinary
+   model variance, **not** an advisor effect — see finding 4.
+3. **✅ Prompt caching survives.** The `cache_control: { type: "ephemeral" }` system prefix cached
+   normally (`cache_creation_input_tokens` = 1693 / 1154 on the two runs). Advisor mode does not
+   disturb our system-block caching.
+4. **⚠️ CRITICAL — the advisor was never actually consulted.** On both runs
+   `usage.iterations[]` held a **single `type: "message"` entry and zero `advisor_message`
+   entries** (advisor output tokens: 0). The advisor tool was *available* but the executor **chose
+   not to call it** — scoring one posting is single-turn with nothing to plan, exactly the case the
+   [docs flag as a weak fit](https://platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool#when-to-use-it)
+   ("weaker fit for single-turn Q&A — nothing to plan"). So these runs produced **Sonnet-solo
+   quality at Sonnet-solo cost**, not the Opus-advised quality the whole idea depends on. Merely
+   attaching the tool does nothing for our workload.
+
+### What finding 4 means for Phase 1
+To get any advisor value on the deep-score call we must **force the consult** with
+`tool_choice: { type: "tool", name: "advisor" }` (documented under
+[Forcing tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool)).
+Consequences to design around:
+
+- **Forced tool use cannot combine with extended thinking** (the docs return `400` if both are set).
+  Our scorer already sends `thinking: { type: "disabled" }`, so we're compatible — but Phase 1 must
+  keep thinking disabled on the advisor path and add a test/assertion guarding that.
+- With the consult forced, `usage.iterations[]` **will** carry an `advisor_message` entry, so the
+  `UsageAccumulator` change (sum `advisor_message` output tokens for advisor spend, keep top-level
+  `usage` for executor spend) becomes load-bearing — re-run the probe **with `tool_choice` forced**
+  to capture the real executor/advisor token split before wiring the accountant.
+- **Phase 2 measurement only makes sense with the consult forced.** An unforced A/B would compare
+  Sonnet-solo to Sonnet-solo. The real comparison is: Sonnet-solo vs. Sonnet-executor-+-forced-Opus-
+  advisor vs. Opus-solo.
+
+**Net:** the two blockers this exploration set out to clear (structured-output composition, valid
+pair) are both **green**. But Phase 0 surfaced a third, larger design fact — an unforced advisor is a
+no-op for single-turn scoring — that moves "force the advisor consult" from a detail to the crux of
+whether this is worth doing at all. Recommended immediate follow-up: extend the probe with
+`tool_choice: { type: "tool", name: "advisor" }` and re-run, to confirm a forced consult (a) still
+returns valid structured output and (b) produces a non-trivial `advisor_message` token split, before
+committing to Phase 1.
+
 ## Cost & quality
 
 - **vs. pure Sonnet (today's default):** advisor mode costs *more* per deep score — you pay for the
