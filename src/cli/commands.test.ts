@@ -170,6 +170,18 @@ describe("formatScorePlan", () => {
     });
     expect(text).not.toMatch(/non-remote/i);
   });
+
+  it("lists the already-scored skip before the cap, matching the pipeline order", () => {
+    // already-scored postings are dropped BEFORE the limit is applied, so the plan must read as a
+    // coherent decreasing funnel (skip, then cap the remainder) rather than cap-then-skip, which
+    // implies more postings were considered than actually fit the cap window.
+    const text = formatScorePlan(outcome(), { remoteOnly: false, limit: 100, dryRun: true });
+    const skippedAt = text.indexOf("Already LLM-scored");
+    const cappedAt = text.indexOf("Cap (--limit");
+    expect(skippedAt).toBeGreaterThan(-1);
+    expect(cappedAt).toBeGreaterThan(-1);
+    expect(skippedAt).toBeLessThan(cappedAt);
+  });
 });
 
 describe("track commands", () => {
