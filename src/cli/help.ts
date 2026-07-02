@@ -27,7 +27,7 @@ export const COMMANDS: CommandHelp[] = [
     options: [
       [
         "--retry-failed",
-        "Rescan only companies that have failed to fetch on several consecutive scans (the 'needs attention' list), instead of the full directory. Note: when a remote feed is configured, the shared feed is still pulled in full — only the local crawl is scoped.",
+        "Rescan only companies that have failed to fetch on several consecutive scans (the 'needs attention' list), instead of the full directory. Note: when a remote feed is configured, the feed is scoped to these needs-attention companies once the shared worker emits company ids.",
       ],
     ],
     examples: ["job-hunter scan", "job-hunter scan --retry-failed"],
