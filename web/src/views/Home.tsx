@@ -220,7 +220,8 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
       </div>
       <p className="mt-1 text-xs text-faint">
         Re-rank matches with the LLM for sharper relevance. Costs money — preview the estimate
-        first.
+        first. Only postings not already deep-scored are scored, so re-running picks up new roles
+        without paying to re-score the same ones.
       </p>
 
       {running && scoreStatus.data ? (
