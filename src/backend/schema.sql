@@ -67,6 +67,13 @@ alter table postings add column if not exists remote boolean;
 alter table postings add column if not exists country text;
 
 alter table companies add column if not exists id text;
-create unique index if not exists companies_id_idx on companies (id);
+-- companies.id is NOT unique: distinct careers_url rows can normalize to the same companyId
+-- (case/trailing-slash/query-string near-duplicates), so id is intentionally many-to-one with
+-- careers_url. An earlier release created this index as UNIQUE; drop it unconditionally before
+-- recreating non-unique, because `create index if not exists` matches by NAME only (not by
+-- definition) and would leave a pre-existing unique index in place. Mirrors the SQLite migrate()
+-- self-heal. `drop index if exists` is a no-op on a fresh DB.
+drop index if exists companies_id_idx;
+create index if not exists companies_id_idx on companies (id);
 alter table postings add column if not exists company_id text;
 create index if not exists postings_company_id_idx on postings (company_id);

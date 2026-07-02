@@ -97,6 +97,6 @@ export const INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_postings_expired_at ON postings(expired_at);
 CREATE INDEX IF NOT EXISTS idx_postings_last_seen_scan ON postings(last_seen_scan);
 CREATE INDEX IF NOT EXISTS idx_match_results_score ON match_results(score);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_id ON companies(id);
+CREATE INDEX IF NOT EXISTS idx_companies_id ON companies(id);
 CREATE INDEX IF NOT EXISTS idx_postings_company_id ON postings(company_id);
 `;

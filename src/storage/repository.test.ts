@@ -890,6 +890,82 @@ describe("companyId columns", () => {
     repo.close();
   });
 
+  it("migrates a legacy DB whose un-normalized companies rows collide on companyId", () => {
+    // Reproduce the real crash: a database populated BEFORE careers_url normalization (PR #83)
+    // holds distinct raw-URL rows — e.g. `.../careers` and `.../careers/` — that back-fill to the
+    // SAME companyId. The initial companyId release put a UNIQUE index over companies.id, so
+    // migrate() threw `UNIQUE constraint failed: companies.id`. Opening a Repository over such a DB
+    // must now migrate cleanly (non-unique index). A file DB is used so the seeded rows survive
+    // being reopened by the Repository's own connection.
+    const a = "https://acme.com/careers";
+    const b = "https://acme.com/careers/";
+    expect(makeCompanyId(a)).toBe(makeCompanyId(b)); // distinct raw URLs, same companyId
+
+    const dir = mkdtempSync(join(tmpdir(), "job-hunter-migrate-"));
+    const dbPath = join(dir, "legacy.db");
+    try {
+      const seed = new Database(dbPath);
+      // Pre-#83, pre-companyId shape: companies keyed by raw careers_url, no id column.
+      seed.exec(
+        "CREATE TABLE companies (careers_url TEXT PRIMARY KEY, name TEXT, first_seen_scan INTEGER NOT NULL, last_seen_scan INTEGER NOT NULL, last_seen_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      );
+      const insert = seed.prepare(
+        "INSERT INTO companies (careers_url, name, first_seen_scan, last_seen_scan) VALUES (?, ?, 1, 1)",
+      );
+      insert.run(a, "Acme");
+      insert.run(b, "Acme");
+      seed.close();
+
+      let repo: Repository | undefined;
+      expect(() => {
+        repo = new Repository(dbPath); // runs SCHEMA + migrate(): backfill id + build the index
+      }).not.toThrow();
+      if (!repo) throw new Error("repo not constructed");
+
+      // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+      const rows = repo["db"]
+        .prepare("SELECT careers_url, id FROM companies ORDER BY careers_url")
+        .all() as { careers_url: string; id: string }[];
+      // Both legacy rows survive and share the backfilled companyId.
+      expect(rows.map((r) => r.id)).toEqual([makeCompanyId(a), makeCompanyId(b)]);
+      // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+      const idx = repo["db"]
+        .prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_companies_id'")
+        .get() as { sql: string };
+      expect(idx.sql.toLowerCase()).not.toContain("unique");
+      repo.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces a pre-existing UNIQUE idx_companies_id from the initial companyId release on migrate", () => {
+    // A database migrated by the buggy first release that DID manage to build the UNIQUE index (its
+    // companies rows happened not to collide at the time). A later colliding insert would be
+    // rejected by that unique index, so migrate() must DROP and rebuild it as non-unique. A file DB
+    // is used because the index state must survive being reopened by a second connection.
+    const dir = mkdtempSync(join(tmpdir(), "job-hunter-uniqueidx-"));
+    const dbPath = join(dir, "legacy.db");
+    try {
+      const seed = new Database(dbPath);
+      seed.exec(
+        "CREATE TABLE companies (careers_url TEXT PRIMARY KEY, id TEXT, name TEXT, first_seen_scan INTEGER NOT NULL, last_seen_scan INTEGER NOT NULL, last_seen_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      );
+      seed.exec("CREATE UNIQUE INDEX idx_companies_id ON companies(id)");
+      seed.close();
+
+      const repo = new Repository(dbPath);
+      // biome-ignore lint/complexity/useLiteralKeys: bracket access reaches the private `db` field.
+      const idx = repo["db"]
+        .prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_companies_id'")
+        .get() as { sql: string };
+      expect(idx.sql.toLowerCase()).not.toContain("unique");
+      repo.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("persists companyId on savePosting and leaves a companyId-less posting NULL", () => {
     const repo = newRepo();
     const scan = repo.startScan();
