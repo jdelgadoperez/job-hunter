@@ -57,6 +57,12 @@ describe("parseCountry", () => {
     ["APAC - Australia; Singapore", "Singapore"],
     // Whole-word only: a token containing "business" must NOT match "us"
     ["Business Development, Remote", undefined],
+    // Word-like 2-letter state codes must NOT match inside a phrase (never guess)
+    ["London or Paris", undefined],
+    ["Work in Berlin", undefined],
+    ["La Paz", undefined],
+    ["Hybrid or Remote", undefined],
+    ["Remote in Europe", undefined],
   ];
 
   for (const [input, expected] of cases) {

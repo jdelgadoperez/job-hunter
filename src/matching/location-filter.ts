@@ -142,6 +142,20 @@ function resolveKey(key: string): string | undefined {
   return undefined;
 }
 
+// Word-level variant of resolveKey, used only for the per-word scan inside a multi-word token.
+// Deliberately excludes the 2-letter US_STATES/CA_PROVINCES code sets: those codes collide with
+// common English words ("in", "or", "me", "la", "hi", "de", ...), so a phrase like "London or
+// Paris" or "La Paz" must NOT resolve to a country just because one word happens to match a state
+// code. Two-letter codes are only trustworthy as a whole delimited token (see resolveKey above),
+// never as a word embedded in a longer phrase.
+function resolveWordKey(key: string): string | undefined {
+  const alias = COUNTRY_ALIASES[key];
+  if (alias !== undefined) return alias;
+  if (US_STATE_NAMES.has(key)) return "US";
+  if (CA_PROVINCE_NAMES.has(key)) return "Canada";
+  return undefined;
+}
+
 export function parseCountry(location?: string): string | undefined {
   if (location === undefined || location.trim() === "") return undefined;
 
@@ -160,10 +174,12 @@ export function parseCountry(location?: string): string | undefined {
     //    and multi-word state names ("new york") resolve before word-splitting can break them apart.
     const wholeToken = resolveKey(normalizeToken(token));
     if (wholeToken !== undefined) return wholeToken;
-    // 2) Otherwise scan each whitespace-separated word (still whole-word exact).
+    // 2) Otherwise scan each whitespace-separated word (still whole-word exact). Uses
+    //    resolveWordKey, not resolveKey — see its comment for why 2-letter state/province codes
+    //    are excluded here.
     const words = token.split(/\s+/).filter((w) => w.length > 0);
     for (const word of words) {
-      const byWord = resolveKey(normalizeToken(word));
+      const byWord = resolveWordKey(normalizeToken(word));
       if (byWord !== undefined) return byWord;
     }
   }
