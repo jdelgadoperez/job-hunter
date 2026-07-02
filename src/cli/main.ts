@@ -14,6 +14,7 @@ import { formatUsageSummary, UsageAccumulator } from "@app/matching/llm-usage";
 import { resolveRemoteOnly } from "@app/matching/resolve-remote";
 import {
   resolveApiKey,
+  resolveHomeCountry,
   resolveProvider,
   resolveScorerModel,
   settingsWithEnvKey,
@@ -143,6 +144,7 @@ export async function runScoreCommand(
   const dictionary = repo.getSkillDictionary();
   const warnings: Warning[] = [];
   const remoteOnly = resolveRemoteOnly(settings, options.remoteOnly);
+  const homeCountry = resolveHomeCountry(settings);
 
   // Deep-score against the raw provider client. We do NOT reuse `LlmScorer` here because it
   // degrades EVERY failure (including a usage-limit error) into the heuristic fallback, which
@@ -181,6 +183,7 @@ export async function runScoreCommand(
       dryRun: options.dryRun,
       batchSize: DEFAULT_TRIAGE_BATCH_SIZE,
       cost: provider.cost,
+      ...(homeCountry !== undefined ? { homeCountry } : {}),
     },
     onWarning: (warning) => warnings.push(warning),
   });
