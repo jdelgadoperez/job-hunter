@@ -162,6 +162,9 @@ export type ScorePreview = z.infer<typeof ScorePreviewSchema>;
 const ScoreJobStatusSchema = z.object({
   state: ScanJobStateSchema,
   message: z.string().nullable(),
+  current: z.number().nullable(),
+  total: z.number().nullable(),
+  recent: z.array(z.string()),
   counts: ScoreStageCountsSchema.nullable(),
   estimate: CostEstimateSchema.nullable(),
   abortedOnLimit: z.boolean(),
@@ -173,7 +176,7 @@ const ScoreJobStatusSchema = z.object({
 export type ScoreJobStatus = z.infer<typeof ScoreJobStatusSchema>;
 
 /** Options a deep-score run accepts from the dashboard. */
-export type ScoreOptions = { remoteOnly: boolean; limit: number };
+export type ScoreOptions = { remoteOnly: boolean; limit: number; rescore: boolean };
 
 const OkSchema = z.object({ ok: z.literal(true) });
 const RemovedSchema = z.object({ removed: z.boolean() });

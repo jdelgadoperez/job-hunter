@@ -11,6 +11,7 @@ import {
   SCORE_THRESHOLDS,
   ScorePill,
 } from "../components/ui";
+import { formatCount } from "../format";
 import { useMatchAction, useMatches } from "../hooks";
 
 // Semantic glyphs for each research link. lucide dropped brand marks, so these are generic icons
@@ -304,7 +305,7 @@ export function Matches() {
           onClick={() => setOnlyApplied((v) => !v)}
           className="px-2 py-0.5"
         >
-          Applied ({appliedCount})
+          Applied ({formatCount(appliedCount)})
         </Button>
         {!onlyApplied ? (
           <label className="flex items-center gap-1 text-sm text-muted">
@@ -318,6 +319,14 @@ export function Matches() {
           </label>
         ) : null}
       </div>
+
+      {matches.data && matches.data.length > 0 ? (
+        <p className="text-sm text-muted">
+          Showing <span className="font-semibold text-fg">{formatCount(matches.data.length)}</span>{" "}
+          {matches.data.length === 1 ? "match" : "matches"}
+          {filtersAreActive ? " at the current filters" : ""}
+        </p>
+      ) : null}
 
       {matches.isPending ? (
         <Loading label="Loading matches…" />

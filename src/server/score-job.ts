@@ -1,3 +1,4 @@
+import { formatScoreProgress, type ScoreProgressEvent } from "@app/domain/score-progress";
 import type { Warning } from "@app/domain/types";
 import type { CostEstimate } from "@app/matching/cost-estimate";
 import type { ScoreStageCounts } from "@app/matching/score-run";
@@ -9,8 +10,13 @@ export type ScoreJobState = "idle" | "running" | "done" | "error";
 /** A serializable snapshot of the background deep-score, polled via `GET /api/score/status`. */
 export type ScoreJobStatus = {
   state: ScoreJobState;
-  /** Latest human-readable stage line ("Triaging…", "Deep-scoring…"), or null before the first run. */
+  /** Latest human-readable stage line ("Triaging…", "[42/118] …"), or null before the first run. */
   message: string | null;
+  /** Postings deep-scored so far / total to deep-score, when known (drives the UI progress bar). */
+  current: number | null;
+  total: number | null;
+  /** The most recent scored-posting lines (newest last), for a rolling activity view. */
+  recent: string[];
   /** Per-stage counts, set when a run finishes. */
   counts: ScoreStageCounts | null;
   /** Cost estimate for the run, set when a run finishes. */
@@ -22,6 +28,9 @@ export type ScoreJobStatus = {
   startedAt: string | null;
   finishedAt: string | null;
 };
+
+/** How many recent scored-posting lines to retain for the rolling list (matches scan-job). */
+const MAX_RECENT = 8;
 
 /** What a deep-score runner returns when it finishes. */
 export type ScoreResult = {
@@ -35,6 +44,9 @@ function idleStatus(): ScoreJobStatus {
   return {
     state: "idle",
     message: null,
+    current: null,
+    total: null,
+    recent: [],
     counts: null,
     estimate: null,
     abortedOnLimit: false,
@@ -60,6 +72,7 @@ export class ScoreJobManager {
       counts: this.status.counts ? { ...this.status.counts } : null,
       estimate: this.status.estimate ? { ...this.status.estimate } : null,
       warnings: [...this.status.warnings],
+      recent: [...this.status.recent],
     };
   }
 
@@ -82,7 +95,7 @@ export class ScoreJobManager {
 
   private async run(runner: ScoreRunner): Promise<void> {
     try {
-      const result = await runner((message) => this.onStage(message));
+      const result = await runner((event) => this.onProgress(event));
       this.status = {
         ...this.status,
         state: "done",
@@ -103,7 +116,19 @@ export class ScoreJobManager {
     }
   }
 
-  private onStage(message: string): void {
-    this.status = { ...this.status, message };
+  private onProgress(event: ScoreProgressEvent): void {
+    this.status = { ...this.status, message: formatScoreProgress(event) };
+    if (event.kind === "triaging") this.status.total = event.total;
+    if (event.kind === "triaged") {
+      // Switch the progress-bar denominator to the post-triage survivor count now, so it doesn't
+      // stay at the pre-triage total and then snap when the first score lands.
+      this.status.total = event.kept;
+      this.status.current = 0;
+    }
+    if (event.kind === "scoring") {
+      this.status.current = event.index;
+      this.status.total = event.total;
+      this.status.recent = [...this.status.recent, formatScoreProgress(event)].slice(-MAX_RECENT);
+    }
   }
 }

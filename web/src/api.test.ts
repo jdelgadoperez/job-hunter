@@ -22,7 +22,7 @@ describe("api response validation", () => {
   it("parses a fully-populated settings response, including the feed + Muse fields", async () => {
     const serverShape: SettingsView = {
       hasAnthropicKey: true,
-      scorerModel: "claude-sonnet-4-6",
+      scorerModel: "claude-sonnet-5",
       scorerProvider: "anthropic",
       hasTheMuseKey: false,
       feedUrl: "https://feed.example.com/jobs",
@@ -124,13 +124,18 @@ describe("api response validation", () => {
     };
     mockFetchOnce(preview);
 
-    await expect(api.previewScore({ remoteOnly: false, limit: 100 })).resolves.toEqual(preview);
+    await expect(
+      api.previewScore({ remoteOnly: false, limit: 100, rescore: false }),
+    ).resolves.toEqual(preview);
   });
 
   it("startDeepScore accepts a 202 job status", async () => {
     const status = {
       state: "running",
       message: "Starting…",
+      current: null,
+      total: null,
+      recent: [],
       counts: null,
       estimate: null,
       abortedOnLimit: false,
@@ -141,7 +146,9 @@ describe("api response validation", () => {
     };
     mockFetchOnce(status, { ok: false, status: 202 });
 
-    await expect(api.startDeepScore({ remoteOnly: false, limit: 100 })).resolves.toEqual(status);
+    await expect(
+      api.startDeepScore({ remoteOnly: false, limit: 100, rescore: false }),
+    ).resolves.toEqual(status);
   });
 
   it("startDeepScore surfaces the 400 no-key error message", async () => {
@@ -153,9 +160,9 @@ describe("api response validation", () => {
       },
     );
 
-    await expect(api.startDeepScore({ remoteOnly: false, limit: 100 })).rejects.toThrow(
-      /no anthropic key/i,
-    );
+    await expect(
+      api.startDeepScore({ remoteOnly: false, limit: 100, rescore: false }),
+    ).rejects.toThrow(/no anthropic key/i);
   });
 
   it("parses a needs-attention list", async () => {

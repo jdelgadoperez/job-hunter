@@ -760,7 +760,22 @@ describe("deep-score jobs", () => {
     const status = await pollUntilSettled(app);
     expect(status.state).toBe("done");
     expect(status.counts?.deepScored).toBe(4);
-    expect(createScoreRun).toHaveBeenCalledWith({ remoteOnly: true, limit: 20 });
+    // rescore defaults to false when the request body omits it.
+    expect(createScoreRun).toHaveBeenCalledWith({ remoteOnly: true, limit: 20, rescore: false });
+  });
+
+  it("passes rescore through to the score runner when the request sets it", async () => {
+    repo.setSetting(ANTHROPIC_KEY_SETTING, "sk-ant-test");
+    const createScoreRun = vi.fn(() => async () => fakeScoreResult());
+    const app = makeApp({ createScoreRun });
+
+    const res = await app.request(
+      "/api/score",
+      score({ remoteOnly: false, limit: 20, rescore: true }),
+    );
+    expect(res.status).toBe(202);
+    await pollUntilSettled(app);
+    expect(createScoreRun).toHaveBeenCalledWith({ remoteOnly: false, limit: 20, rescore: true });
   });
 
   it("rejects POST /api/score with 400 when no key is configured (before starting a job)", async () => {

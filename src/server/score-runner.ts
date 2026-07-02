@@ -1,3 +1,5 @@
+import { style } from "@app/cli/style";
+import { formatScoreProgress, type ScoreProgressEvent } from "@app/domain/score-progress";
 import type { Warning } from "@app/domain/types";
 import { createAbortingScorer } from "@app/matching/aborting-scorer";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
@@ -37,7 +39,7 @@ async function runDeepScore(
   repo: Repository,
   options: ScoreRunOptions,
   dryRun: boolean,
-  onStage?: (message: string) => void,
+  onProgress?: (event: ScoreProgressEvent) => void,
 ): Promise<ScoreResult> {
   const profile = repo.getLatestProfile();
   if (!profile) throw new Error("No profile yet. Upload a resume first.");
@@ -52,7 +54,6 @@ async function runDeepScore(
   const warnings: Warning[] = [];
   const heuristic = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
 
-  onStage?.("Planning…");
   const rawClient = provider.createClient({ apiKey, model });
   const scorer = createAbortingScorer({
     client: rawClient,
@@ -67,7 +68,6 @@ async function runDeepScore(
     (warning) => warnings.push(warning),
   );
 
-  if (!dryRun) onStage?.("Scoring…");
   const outcome = await runScoreRun({
     repo,
     profile,
@@ -77,12 +77,13 @@ async function runDeepScore(
       minHeuristic: DEFAULT_MIN_HEURISTIC,
       limit: options.limit,
       remoteOnly: options.remoteOnly,
-      rescore: false,
+      rescore: options.rescore,
       dryRun,
       batchSize: DEFAULT_TRIAGE_BATCH_SIZE,
       cost: provider.cost,
     },
     onWarning: (warning) => warnings.push(warning),
+    ...(onProgress ? { onProgress } : {}),
   });
 
   return {
@@ -93,11 +94,16 @@ async function runDeepScore(
   };
 }
 
-/** Build a background deep-score runner for the given options (real LLM calls). Smoke-only. */
+/** Build a background deep-score runner for the given options (real LLM calls). Smoke-only.
+ * Mirrors `createScanRun`: forwards each progress event to the job status AND echoes every event to
+ * the server console as `[score] …`. */
 export function createScoreRun(repo: Repository) {
   return (options: ScoreRunOptions): ScoreRunner =>
-    (onStage) =>
-      runDeepScore(repo, options, false, onStage);
+    (onProgress) =>
+      runDeepScore(repo, options, false, (event) => {
+        onProgress(event);
+        console.log(`${style.dim("[score]")} ${formatScoreProgress(event)}`);
+      });
 }
 
 /** Synchronous dry-run: the plan + cost estimate, with zero LLM calls. */

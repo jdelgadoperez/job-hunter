@@ -1,3 +1,4 @@
+import type { ScoreProgressEvent } from "@app/domain/score-progress";
 import type { JobPosting, MatchResult, SkillProfile, Warning } from "@app/domain/types";
 import type { ScorerTag, ScoringCandidate } from "@app/storage/repository";
 import { describe, expect, it } from "vitest";
@@ -134,6 +135,56 @@ describe("runScoreRun", () => {
     ]);
   });
 
+  it("emits progress events: planning, triaging, triaged, one scoring tick per survivor, done", async () => {
+    const candidates = [
+      candidate("a", "Staff Engineer", 80),
+      candidate("b", "Backend Engineer", 60),
+      candidate("c", "Sales Rep", 10), // below floor — not triaged/scored
+    ];
+    const { repo } = fakeRepo(candidates);
+    const events: ScoreProgressEvent[] = [];
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: baseOptions,
+      onProgress: (event) => events.push(event),
+    });
+
+    const eligible = outcome.counts.afterHeuristic; // 2 survive the floor
+    expect(events[0]).toEqual({ kind: "planning" });
+    expect(events).toContainEqual({ kind: "triaging", total: eligible });
+    expect(events).toContainEqual({ kind: "triaged", kept: eligible, total: eligible });
+
+    // One scoring tick per deep-scored survivor, counter rising 1..N (completion order).
+    const scoring = events.filter((e) => e.kind === "scoring");
+    expect(scoring).toHaveLength(outcome.counts.deepScored);
+    expect(scoring.map((e) => (e.kind === "scoring" ? e.index : -1))).toEqual(
+      Array.from({ length: outcome.counts.deepScored }, (_, i) => i + 1),
+    );
+    for (const e of scoring) {
+      if (e.kind === "scoring") expect(e.total).toBe(outcome.counts.deepScored);
+    }
+    expect(events.at(-1)).toEqual({ kind: "done", deepScored: outcome.counts.deepScored });
+  });
+
+  it("emits no scoring events on a dry run", async () => {
+    const candidates = [candidate("a", "Staff Engineer", 80)];
+    const events: ScoreProgressEvent[] = [];
+    await runScoreRun({
+      repo: fakeRepo(candidates).repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, dryRun: true },
+      onProgress: (event) => events.push(event),
+    });
+    expect(events.filter((e) => e.kind === "scoring")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "planning")).toHaveLength(0);
+  });
+
   it("skips already-LLM-scored postings unless rescore is set", async () => {
     const candidates = [candidate("a", "Staff Engineer", 80, { alreadyLlmScored: true })];
     const skip = await runScoreRun({
@@ -156,6 +207,34 @@ describe("runScoreRun", () => {
     });
     expect(rescore.counts.deepScored).toBe(1);
     expect(forced.saved.length).toBe(1);
+  });
+
+  it("applies the limit to UNSCORED postings, not the already-scored top slice", async () => {
+    // Regression: the query returns rows best-heuristic-first, and already-scored rows cluster at the
+    // top. If the cap were applied before dropping already-scored, `limit` would be spent re-covering
+    // that top slice and score fewer NEW postings than requested. Here the two highest-heuristic rows
+    // are already scored; with limit=2 the run must still deep-score 2 UNSCORED postings, not 0.
+    const candidates = [
+      candidate("scored-1", "Already A", 95, { alreadyLlmScored: true }),
+      candidate("scored-2", "Already B", 90, { alreadyLlmScored: true }),
+      candidate("new-1", "Fresh A", 85),
+      candidate("new-2", "Fresh B", 80),
+      candidate("new-3", "Fresh C", 75),
+    ];
+    const { repo, saved } = fakeRepo(candidates);
+
+    const outcome = await runScoreRun({
+      repo,
+      profile,
+      triager: keepAllTriager(),
+      scorer: deepScorer,
+      options: { ...baseOptions, limit: 2 },
+    });
+
+    // limit=2 → the top 2 UNSCORED (new-1, new-2) are scored; the already-scored top slice is skipped.
+    expect(outcome.counts.deepScored).toBe(2);
+    expect(outcome.counts.alreadyScoredSkipped).toBe(2);
+    expect(saved.map((s) => s.id)).toEqual(["new-1", "new-2"]);
   });
 
   it("partitions remote vs non-remote when remoteOnly is on (unknown location treated as remote)", async () => {

@@ -423,8 +423,8 @@ export function formatScorePlan(
           `  Non-remote:         ${counts.remotePenalized} kept, ranked lower (penalized heuristic, no LLM)`,
         ]
       : []),
-    `  Cap (--limit ${opts.limit}):   ${counts.afterCap} selected`,
     `  Already LLM-scored: ${counts.alreadyScoredSkipped} skipped   (--rescore to re-score)`,
+    `  Cap (--limit ${opts.limit}):   ${counts.afterCap} selected   (of those not yet scored)`,
     `  Triage:             ${estimate.triageTitles} titles (${estimate.triageBatches} batch(es))   est. ~${usd(estimate.triageUsd)}`,
     `  Deep-score (max):   ${estimate.deepScores}                 est. ~${usd(estimate.deepScoreUsd)}`,
     `  Estimated total:                          ~${usd(estimate.totalUsd)}`,
