@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useEffect, useState } from "react";
 import type { CompanyRef, ScorePreview } from "../api";
 import { Button, Card, LiveStatus, Loading } from "../components/ui";
+import { formatCount } from "../format";
 import {
   useLatestScan,
   useProfile,
@@ -159,8 +160,8 @@ export function Home() {
         <Card>
           <h2 className="font-semibold text-fg">Last scan</h2>
           <p className="mt-1 text-sm text-muted">
-            {latestScan.data.companiesSeen ?? 0} companies · {latestScan.data.postingsSeen ?? 0}{" "}
-            postings scored
+            {formatCount(latestScan.data.companiesSeen ?? 0)} companies ·{" "}
+            {formatCount(latestScan.data.postingsSeen ?? 0)} postings scored
           </p>
           {latestScan.data.newCompanies.length === 0 &&
           latestScan.data.removedCompanies.length === 0 ? (
@@ -169,12 +170,12 @@ export function Home() {
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <CompanyDelta
                 tone="success"
-                label={`${latestScan.data.newCompanies.length} new`}
+                label={`${formatCount(latestScan.data.newCompanies.length)} new`}
                 companies={latestScan.data.newCompanies}
               />
               <CompanyDelta
                 tone="warning"
-                label={`${latestScan.data.removedCompanies.length} no longer listed`}
+                label={`${formatCount(latestScan.data.removedCompanies.length)} no longer listed`}
                 companies={latestScan.data.removedCompanies}
               />
             </div>
@@ -308,7 +309,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
 
           {previewData ? (
             <p className="mt-2 text-sm text-muted">
-              ~{previewData.counts.triageTitles} posting(s) to score · est.{" "}
+              ~{formatCount(previewData.counts.triageTitles)} posting(s) to score · est.{" "}
               <span className="font-semibold">${previewData.estimate.totalUsd.toFixed(2)}</span>
             </p>
           ) : null}
@@ -318,7 +319,8 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
 
           {done ? (
             <p className="mt-2 text-sm text-success" aria-live="polite">
-              Deep-scored {done.counts?.deepScored ?? 0} posting(s) — see the Matches tab.
+              Deep-scored {formatCount(done.counts?.deepScored ?? 0)} posting(s) — see the Matches
+              tab.
               {done.abortedOnLimit ? " Stopped early — provider usage/rate limit reached." : ""}
             </p>
           ) : null}
@@ -378,7 +380,7 @@ function CompanyDelta({
             </li>
           ))}
           {companies.length > shown.length ? (
-            <li className="text-faint">…and {companies.length - shown.length} more</li>
+            <li className="text-faint">…and {formatCount(companies.length - shown.length)} more</li>
           ) : null}
         </ul>
       )}

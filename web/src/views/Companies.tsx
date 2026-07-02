@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
+import { formatCount } from "../format";
 import {
   useAddCompany,
   useCompanies,
@@ -137,7 +138,9 @@ export function Companies() {
 
       {manualReview.data && manualReview.data.length > 0 ? (
         <Card>
-          <h2 className="font-semibold text-fg">Review manually ({manualReview.data.length})</h2>
+          <h2 className="font-semibold text-fg">
+            Review manually ({formatCount(manualReview.data.length)})
+          </h2>
           <p className="mt-1 text-xs text-faint">
             These directory companies post on sites we don't auto-scan (LinkedIn/Indeed) — open them
             to check their roles yourself.
@@ -164,7 +167,7 @@ export function Companies() {
         <Card>
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-semibold text-fg">
-              Needs attention ({needsAttention.data.length})
+              Needs attention ({formatCount(needsAttention.data.length)})
             </h2>
             <Button onClick={() => retryFailedScan.mutate()} disabled={retryFailedScan.isPending}>
               Rescan

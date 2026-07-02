@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
+import { formatCount } from "../format";
 import {
   useAddSkill,
   useProfile,
@@ -119,7 +120,7 @@ function Dictionary() {
   return (
     <Card>
       <h2 className="font-semibold text-fg">
-        Skill dictionary{dict.data ? ` (${all.length})` : ""}
+        Skill dictionary{dict.data ? ` (${formatCount(all.length)})` : ""}
       </h2>
       <p className="mt-1 text-xs text-faint">
         The vocabulary the resume parser recognizes. Adding a term here lets future resume uploads
