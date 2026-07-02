@@ -67,6 +67,8 @@ alter table postings add column if not exists remote boolean;
 alter table postings add column if not exists country text;
 
 alter table companies add column if not exists id text;
-create unique index if not exists companies_id_idx on companies (id);
+-- NOT unique: distinct careers_url rows can normalize to the same companyId (case/trailing-slash/
+-- query-string near-duplicates), so companies.id is intentionally many-to-one with careers_url.
+create index if not exists companies_id_idx on companies (id);
 alter table postings add column if not exists company_id text;
 create index if not exists postings_company_id_idx on postings (company_id);

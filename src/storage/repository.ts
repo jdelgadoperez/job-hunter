@@ -137,10 +137,10 @@ export class Repository {
       this.db.exec("ALTER TABLE failed_leads ADD COLUMN company_id TEXT");
     }
 
-    // Backfill the two columns fully derivable from careers_url, before the unique index on
-    // companies.id is created below (an index over unpopulated ids would still work, since SQLite
-    // unique indexes allow multiple NULLs, but populating first keeps the index meaningful and
-    // surfaces any accidental id collisions immediately).
+    // Backfill the two columns fully derivable from careers_url, before the (non-unique) index on
+    // companies.id is created below. companies.id is intentionally NON-unique: distinct careers_url
+    // rows can normalize to the same companyId (case/trailing-slash/query-string near-duplicates),
+    // so one id legitimately maps to several careers_url rows.
     const companiesNeedingId = this.db
       .prepare("SELECT careers_url FROM companies WHERE id IS NULL")
       .all() as { careers_url: string }[];
@@ -161,8 +161,14 @@ export class Repository {
     });
     backfillLeads(leadsNeedingId);
 
+    // Drop a pre-existing UNIQUE idx_companies_id from the initial (buggy) companyId release: it
+    // fails to build on any DB whose companies table holds careers_url near-duplicates that share a
+    // companyId. Dropping it lets the non-unique index in INDEXES take its place. Harmless when the
+    // index is absent or already non-unique.
+    this.db.exec("DROP INDEX IF EXISTS idx_companies_id");
+
     // Create indexes now that every referenced column is guaranteed to exist (above + base schema)
-    // and the companies.id backfill above has populated ids for the unique index on companies(id).
+    // and the companies.id backfill above has populated ids.
     this.db.exec(INDEXES);
   }
 
