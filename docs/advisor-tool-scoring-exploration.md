@@ -1,10 +1,14 @@
 # Exploration: advisor-tool scoring (Sonnet-5 executor + Opus advisor)
 
-> **Status: exploration only — no code changed.** This weighs using Anthropic's **advisor tool**
-> (beta) for the LLM deep-score step: a cheaper *executor* model does the bulk generation while a
-> more capable *advisor* model is consulted for the hard judgment calls, aiming for **Opus-tier
-> matching quality at closer-to-Sonnet cost**. It maps the idea onto the current scorer, flags two
-> things that must be verified before committing, and lays out a phased, opt-in path.
+> **Status: exploration complete — VERDICT: do not adopt (no app code changed).** This weighed using
+> Anthropic's **advisor tool** (beta) for the LLM deep-score step: a cheaper *executor* model does the
+> bulk generation while a more capable *advisor* model is consulted for the hard judgment calls,
+> aiming for **Opus-tier matching quality at closer-to-Sonnet cost**. A live Phase 0 probe
+> (`scripts/smoke-advisor.ts`) settled it: the tool is a fundamental mismatch for single-turn scoring
+> — inert unforced, and a non-terminating, Opus-cost-dominated agentic loop when forced. See
+> **[Phase 0 results](#phase-0-results-live-run-2026-07-02)** and the **[Verdict](#verdict-do-not-adopt-the-advisor-tool-for-the-deep-score-step-as-designed)**.
+> The sections below are the original exploration, preserved for context; the verdict supersedes the
+> "phased path" it proposed.
 
 ## What the advisor tool is
 
@@ -91,12 +95,11 @@ helper works under `client.beta.messages.create`. If they don't compose, the fal
 
 Ran `npm run smoke:advisor` against the live API with a beta-enabled key. Findings:
 
-1. **✅ Structured output composes — no fallback needed.** Variant (a),
+1. **✅ Structured output composes (UNFORCED) — no fallback needed.** Variant (a),
    `client.beta.messages.parse` + `betaZodOutputFormat(MatchPayloadSchema)` + the advisor tool in
    `tools`, returned a populated `parsed_output` (a valid `LlmMatchPayload`) on **both** model pairs.
-   Variant (b) — manual `safeParse` — was never reached. So Phase 1 keeps the exact parse-based shape
-   the scorer uses today; the only change is switching to the `beta.messages.*` namespace and adding
-   the beta flag + tool. The `LlmClient` seam is untouched.
+   Variant (b) — manual `safeParse` — was never reached. Note this holds only when the advisor is
+   *not* forced; see finding 5, where forcing the consult breaks structured output entirely.
 2. **✅ Both model pairs accepted (no `400`).** `claude-sonnet-5` + `claude-opus-4-8` (score 90) and
    `claude-sonnet-4-6` + `claude-opus-4-8` (score 88) both succeeded. The 90-vs-88 gap is ordinary
    model variance, **not** an advisor effect — see finding 4.
@@ -112,30 +115,62 @@ Ran `npm run smoke:advisor` against the live API with a beta-enabled key. Findin
    quality at Sonnet-solo cost**, not the Opus-advised quality the whole idea depends on. Merely
    attaching the tool does nothing for our workload.
 
-### What finding 4 means for Phase 1
-To get any advisor value on the deep-score call we must **force the consult** with
-`tool_choice: { type: "tool", name: "advisor" }` (documented under
-[Forcing tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/advisor-tool)).
-Consequences to design around:
+5. **⛔ FORCING the consult breaks the score — `pause_turn`, no `parsed_output`, runaway advisor
+   cost.** The probe was extended to re-run each pair with `tool_choice: { type: "tool", name:
+   "advisor" }` forcing the consult. The forced runs DID invoke the Opus advisor (many
+   `advisor_message` iterations), but the result was **unusable for scoring**:
+   - **No structured output.** Both forced runs returned `parsed_output === null` with
+     `stop_reason: "pause_turn"`. Forcing the advisor turned the single-shot score into a **multi-turn
+     agentic loop** that never terminated with a final structured answer inside `max_tokens: 2048`.
+     `pause_turn` means the turn was suspended mid-loop — our `messages.parse` call gets nothing back
+     to validate. Forced advisor + single-call structured output **do not compose** for this workload.
+   - **The advisor dominates cost, inverting the premise.** `tool_choice: advisor` forced a consult on
+     *every* loop iteration, not once. Observed output-token split (advisor vs. executor):
 
-- **Forced tool use cannot combine with extended thinking** (the docs return `400` if both are set).
-  Our scorer already sends `thinking: { type: "disabled" }`, so we're compatible — but Phase 1 must
-  keep thinking disabled on the advisor path and add a test/assertion guarding that.
-- With the consult forced, `usage.iterations[]` **will** carry an `advisor_message` entry, so the
-  `UsageAccumulator` change (sum `advisor_message` output tokens for advisor spend, keep top-level
-  `usage` for executor spend) becomes load-bearing — re-run the probe **with `tool_choice` forced**
-  to capture the real executor/advisor token split before wiring the accountant.
-- **Phase 2 measurement only makes sense with the consult forced.** An unforced A/B would compare
-  Sonnet-solo to Sonnet-solo. The real comparison is: Sonnet-solo vs. Sonnet-executor-+-forced-Opus-
-  advisor vs. Opus-solo.
+     | Pair | Executor out | Advisor out (Opus 4.8) | Advisor ≈ | Terminal stop_reason |
+     |---|---|---|---|---|
+     | `claude-sonnet-5` + `claude-opus-4-8` | 936 | 3,872 | ~4× executor | `pause_turn` (null output) |
+     | `claude-sonnet-4-6` + `claude-opus-4-8` | 356 | 8,357 | ~23× executor | `pause_turn` (null output) |
 
-**Net:** the two blockers this exploration set out to clear (structured-output composition, valid
-pair) are both **green**. But Phase 0 surfaced a third, larger design fact — an unforced advisor is a
-no-op for single-turn scoring — that moves "force the advisor consult" from a detail to the crux of
-whether this is worth doing at all. Recommended immediate follow-up: extend the probe with
-`tool_choice: { type: "tool", name: "advisor" }` and re-run, to confirm a forced consult (a) still
-returns valid structured output and (b) produces a non-trivial `advisor_message` token split, before
-committing to Phase 1.
+     The advisor out-generated the executor by 4–23×, at Opus rates. The whole idea was "bulk tokens
+     at executor rates, occasional Opus guidance" — forced, it's the reverse: an Opus-priced firehose
+     that still produces no score.
+   - **Caching note:** the forced runs read the cached prefix (`cache_read_input_tokens` in the tens
+     of thousands), so caching isn't the problem — the non-termination and per-iteration forcing are.
+
+## Verdict: do NOT adopt the advisor tool for the deep-score step (as designed)
+
+Phase 0 is **conclusive, and the answer is no** — but for a better reason than the original blockers:
+
+- The two questions this exploration set out to answer are both technically **green**: structured
+  output composes on `beta.messages.parse` (unforced), and both model pairs are valid (no `400`).
+- But the workload is a **fundamental mismatch** for the tool. Scoring one posting against a resume is
+  single-turn with nothing to plan — exactly the case the docs call a weak fit. In practice:
+  - **Unforced**, the executor never consults the advisor → Sonnet-solo quality at Sonnet-solo cost
+    (finding 4). The tool is inert.
+  - **Forced**, the consult spins up a non-terminating agentic loop that never returns
+    `parsed_output` and runs the Opus advisor 4–23× hotter than the executor (finding 5). The tool is
+    actively harmful to both correctness and cost.
+
+There is no middle setting that gives "Opus-quality score at Sonnet cost" for a single-shot
+structured score. The advisor tool is built for long-horizon agentic loops (coding agents, multi-step
+research) where planning pays off across many turns — not a one-shot classify/score call.
+
+**If we still want Opus-tier score calibration**, the honest options are the plain ones the advisor
+tool was meant to avoid, and they're simpler here:
+- **Opus-solo on the deep score** behind a setting (off by default), accepting the cost, measured
+  against Sonnet-solo on real postings. One call, structured output, no agentic loop.
+- **A two-call pattern we control**: Sonnet scores, then Opus reviews/adjusts only the borderline
+  scores — but that's a bespoke pipeline, not the advisor tool, and only worth it if Phase-2-style
+  measurement shows Sonnet-solo is actually miscalibrated on our postings.
+
+**Recommended next step:** shelve the advisor-tool approach. If score quality is a real concern,
+open a separate, smaller exploration for **Opus-solo deep-score behind a setting** and measure it
+before building anything. Phase 1 (advisor behind a setting) as previously sketched should **not** be
+built — it would ship the inverted-cost, no-output behavior above.
+
+The probe (`scripts/smoke-advisor.ts`) is kept as the reproducible evidence for this verdict and as a
+template for the Opus-solo measurement if we pursue it.
 
 ## Cost & quality
 
@@ -163,9 +198,13 @@ for scoring — the profile (system prefix) + the posting (user turn). The advis
 server-side at Anthropic; there is no new data egress and nothing new stored. The resume still never
 leaves the machine except as today's scoring prompt.
 
-## A phased path
+## A phased path (SUPERSEDED by the Phase 0 verdict above)
 
-- **Phase 0 — verify (no app code). ✅ Probe built — `scripts/smoke-advisor.ts` (`npm run smoke:advisor`).**
+> The phased path below was the plan *before* the live probe. Phase 0 ran and returned "do not adopt"
+> — Phases 1–3 should **not** be built. Kept here to show what was originally proposed and why the
+> evidence redirected it.
+
+- **Phase 0 — verify (no app code). ✅ Probe built + run — `scripts/smoke-advisor.ts` (`npm run smoke:advisor`).**
   Resolves the structured-output composition question and confirms the exact model pair against a real
   key. Build instructions were in [`docs/advisor-tool-phase0-handoff.md`](advisor-tool-phase0-handoff.md).
   **Pre-run findings (from docs + the installed SDK, before the live run):**
@@ -194,9 +233,15 @@ leaves the machine except as today's scoring prompt.
 
 ## Bottom line
 
-The advisor tool is a clean fit for the deep-score step and slots behind the existing `LlmClient`
-seam with no ripple into the rest of the pipeline. The idea is sound and the model pairing is
-confirmed (`claude-sonnet-5` executor + `claude-opus-4-8` advisor is valid). One specific still gates
-it — whether the beta advisor tool composes with our structured-output parse — plus the usage-
-accounting change (sum `usage.iterations[]`). Both are settled by the Phase 0 smoke probe; build
-instructions are in [`docs/advisor-tool-phase0-handoff.md`](advisor-tool-phase0-handoff.md).
+**The advisor tool is not the right fit for the deep-score step — Phase 0 settled it, verdict: do not
+adopt.** The `LlmClient` seam would have made the integration clean, and the model pairing is valid
+(`claude-sonnet-5` + `claude-opus-4-8`), but the *workload* is the problem, not the plumbing: a
+single-turn structured score has nothing for an advisor to plan. Unforced, the executor ignores the
+advisor (Sonnet-solo at Sonnet cost); forced, the consult becomes a non-terminating agentic loop that
+returns no `parsed_output` (`pause_turn`) and runs the Opus advisor 4–23× hotter than the executor —
+the exact inverse of the cost premise. See [Phase 0 results](#phase-0-results-live-run-2026-07-02) and
+[Verdict](#verdict-do-not-adopt-the-advisor-tool-for-the-deep-score-step-as-designed) for the numbers.
+
+If Opus-tier score calibration is worth pursuing, do it with a plain **Opus-solo deep score behind a
+setting** (one call, structured output, no agentic loop) and *measure it against Sonnet-solo on real
+postings first* — a separate, smaller exploration. Don't build the advisor Phases 1–3.
