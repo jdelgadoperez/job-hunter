@@ -22,7 +22,7 @@ describe("api response validation", () => {
   it("parses a fully-populated settings response, including the feed + Muse fields", async () => {
     const serverShape: SettingsView = {
       hasAnthropicKey: true,
-      scorerModel: "claude-sonnet-4-6",
+      scorerModel: "claude-sonnet-5",
       scorerProvider: "anthropic",
       hasTheMuseKey: false,
       feedUrl: "https://feed.example.com/jobs",

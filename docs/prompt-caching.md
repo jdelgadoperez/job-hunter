@@ -26,7 +26,7 @@ If the cached `system` block is **below** that threshold, the marker is **silent
 returns `cache_creation_input_tokens: 0` and `cache_read_input_tokens: 0`, and you pay full price on
 every call with nothing cached.
 
-job-hunter's default model is `claude-sonnet-4-6` (see `llm-providers.ts`), so the prefix must clear
+job-hunter's default model is `claude-sonnet-5` (see `llm-providers.ts`), so the prefix must clear
 **2048 tokens** to cache at all. The cached prefix is just the instructions (~200 tokens) plus your
 serialized profile (skills / role keywords / categories — typically a few hundred tokens). For most
 profiles that total is **well under 2048 tokens**, so caching never engages. That is the most likely

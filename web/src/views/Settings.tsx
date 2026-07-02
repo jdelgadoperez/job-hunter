@@ -74,7 +74,7 @@ export function Settings() {
             type="text"
             value={model}
             onChange={(e) => edited(setModel)(e.target.value)}
-            placeholder="claude-sonnet-4-6"
+            placeholder="claude-sonnet-5"
             className="input"
           />
         </Field>

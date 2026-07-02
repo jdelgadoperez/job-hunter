@@ -29,7 +29,7 @@ export const LLM_PROVIDERS: Record<LlmProviderId, LlmProviderConfig> = {
   anthropic: {
     id: "anthropic",
     apiKeySetting: ANTHROPIC_KEY_SETTING,
-    defaultModel: "claude-sonnet-4-6",
+    defaultModel: "claude-sonnet-5",
     // Approximate Sonnet rates for the dry-run preview; titles are tiny, deep scores carry the
     // full description. Tune as real usage data arrives — this is a labeled estimate, not billing.
     cost: { perTriageTitleUsd: 0.002, perDeepScoreUsd: 0.03 },
