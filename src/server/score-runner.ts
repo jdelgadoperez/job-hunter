@@ -77,7 +77,7 @@ async function runDeepScore(
       minHeuristic: DEFAULT_MIN_HEURISTIC,
       limit: options.limit,
       remoteOnly: options.remoteOnly,
-      rescore: false,
+      rescore: options.rescore,
       dryRun,
       batchSize: DEFAULT_TRIAGE_BATCH_SIZE,
       cost: provider.cost,
@@ -94,30 +94,15 @@ async function runDeepScore(
   };
 }
 
-/** Log every Nth per-posting scoring tick to the terminal, so a large run stays readable. Stage
- * events (planning/triaging/triaged/done) always log — only the high-frequency scoring ticks are
- * throttled. The UI status still updates on every event; this throttle is terminal-only. */
-const SCORING_LOG_EVERY = 10;
-
-/** Should this event be echoed to the terminal? Always yes for non-scoring events; for scoring
- * ticks, only every Nth and the final one (so the last "[Y/Y]" line always prints). Exported for
- * unit testing — it's pure, unlike the rest of this network-bound (smoke-only) module. */
-export function shouldLogToTerminal(event: ScoreProgressEvent): boolean {
-  if (event.kind !== "scoring") return true;
-  return event.index % SCORING_LOG_EVERY === 0 || event.index === event.total;
-}
-
 /** Build a background deep-score runner for the given options (real LLM calls). Smoke-only.
- * Mirrors `createScanRun`: forwards each progress event to the job status AND echoes it to the
- * server console as `[score] …` (scoring ticks throttled to every Nth for readability). */
+ * Mirrors `createScanRun`: forwards each progress event to the job status AND echoes every event to
+ * the server console as `[score] …`. */
 export function createScoreRun(repo: Repository) {
   return (options: ScoreRunOptions): ScoreRunner =>
     (onProgress) =>
       runDeepScore(repo, options, false, (event) => {
         onProgress(event);
-        if (shouldLogToTerminal(event)) {
-          console.log(`${style.dim("[score]")} ${formatScoreProgress(event)}`);
-        }
+        console.log(`${style.dim("[score]")} ${formatScoreProgress(event)}`);
       });
 }
 
