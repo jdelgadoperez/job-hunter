@@ -245,6 +245,10 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
   function runDeepScore() {
     startDeepScore.mutate(options, { onSuccess: () => preview.reset() });
   }
+  function changeOption<T>(setter: (value: T) => void, value: T) {
+    setter(value);
+    preview.reset(); // a prior estimate no longer describes the pending run
+  }
 
   return (
     <Card>
@@ -294,7 +298,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
                 type="checkbox"
                 className="control"
                 checked={remoteOnly}
-                onChange={(e) => setRemoteOnly(e.target.checked)}
+                onChange={(e) => changeOption(setRemoteOnly, e.target.checked)}
                 disabled={blocked}
               />
               Remote only
@@ -304,7 +308,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
                 type="checkbox"
                 className="control"
                 checked={rescore}
-                onChange={(e) => setRescore(e.target.checked)}
+                onChange={(e) => changeOption(setRescore, e.target.checked)}
                 disabled={blocked}
               />
               Re-score already-scored
@@ -315,7 +319,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
                 type="number"
                 min={1}
                 value={limit}
-                onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))}
+                onChange={(e) => changeOption(setLimit, Math.max(1, Number(e.target.value) || 1))}
                 disabled={blocked}
                 className="select ml-1 w-20"
               />
@@ -326,7 +330,10 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
             <Button variant="ghost" onClick={runPreview} disabled={blocked || preview.isPending}>
               {preview.isPending ? "Estimating…" : "Preview"}
             </Button>
-            <Button onClick={runDeepScore} disabled={blocked || startDeepScore.isPending}>
+            <Button
+              onClick={runDeepScore}
+              disabled={blocked || startDeepScore.isPending || !previewData}
+            >
               {running ? "Scoring…" : "Deep-score"}
             </Button>
           </div>

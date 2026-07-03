@@ -140,6 +140,54 @@ describe("Home deep-score card", () => {
   });
 });
 
+describe("DeepScoreCard spend gate", () => {
+  const previewBody = {
+    counts: {
+      inDb: 50,
+      afterRemote: 30,
+      afterHeuristic: 40,
+      afterCap: 30,
+      alreadyScoredSkipped: 0,
+      triageTitles: 30,
+      deepScored: 0,
+      remotePenalized: 0,
+    },
+    estimate: {
+      triageTitles: 30,
+      triageBatches: 1,
+      deepScores: 30,
+      triageUsd: 0.01,
+      deepScoreUsd: 0.29,
+      totalUsd: 0.3,
+    },
+  };
+
+  it("disables Deep-score until a preview has been run", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, preview: previewBody });
+    renderHome();
+
+    const deepScore = await screen.findByRole("button", { name: "Deep-score" });
+    expect(deepScore).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByText(/est\./i);
+    expect(screen.getByRole("button", { name: "Deep-score" })).toBeEnabled();
+  });
+
+  it("re-disables Deep-score and clears the estimate when an option changes after preview", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, preview: previewBody });
+    renderHome();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Preview" }));
+    await screen.findByText(/est\./i);
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /remote only/i }));
+
+    expect(screen.queryByText(/est\./i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Deep-score" })).toBeDisabled();
+  });
+});
+
 describe("Home scan panel — Rescan all toggle", () => {
   function findScanRequest() {
     return vi
