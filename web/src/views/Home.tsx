@@ -149,7 +149,7 @@ export function Home({ active = true }: { active?: boolean } = {}) {
         </div>
 
         {running ? (
-          <div className="mt-3" aria-live="polite">
+          <div className="mt-3" aria-live="polite" aria-atomic="true">
             <LiveStatus
               message={status?.message ?? "Working…"}
               meta={
@@ -286,7 +286,7 @@ function DeepScoreCard({
       </p>
 
       {running && scoreStatus.data ? (
-        <div className="mt-3" aria-live="polite">
+        <div className="mt-3" aria-live="polite" aria-atomic="true">
           <LiveStatus message={scoreStatus.data.message ?? "Scoring…"} />
           {scoreStatus.data.total ? (
             <ProgressBar current={scoreStatus.data.current ?? 0} total={scoreStatus.data.total} />

@@ -10,6 +10,8 @@ type Bodies = {
   scanState?: string;
   scoreState?: string;
   preview?: unknown;
+  scanBody?: unknown;
+  scoreBody?: unknown;
 };
 
 function idleScan(state = "idle") {
@@ -31,6 +33,9 @@ function idleScore(state = "idle") {
   return {
     state,
     message: null,
+    current: null,
+    total: null,
+    recent: [],
     counts: null,
     estimate: null,
     abortedOnLimit: false,
@@ -59,9 +64,10 @@ function mockFetch(bodies: Bodies) {
           };
         }
         if (url.includes("/api/score/preview")) return bodies.preview;
-        if (url.includes("/api/score/status")) return idleScore(bodies.scoreState);
+        if (url.includes("/api/score/status"))
+          return bodies.scoreBody ?? idleScore(bodies.scoreState);
         if (url.includes("/api/score") && init?.method === "POST") return idleScore("running");
-        if (url.includes("/api/scan")) return idleScan(bodies.scanState);
+        if (url.includes("/api/scan")) return bodies.scanBody ?? idleScan(bodies.scanState);
         if (url.includes("/api/profile") || url.includes("/api/scans/latest")) return null;
         if (url.includes("/api/version"))
           return { version: "1.0.0", behind: null, updateAvailable: false };
@@ -82,6 +88,24 @@ function renderHome() {
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children);
   return render(<Home />, { wrapper });
+}
+
+function runningScanBody() {
+  return {
+    ...idleScan("running"),
+    message: "Scanning company 3 of 10…",
+    current: 3,
+    total: 10,
+  };
+}
+
+function runningScoreBody() {
+  return {
+    ...idleScore("running"),
+    message: "Scoring posting 5 of 20…",
+    current: 5,
+    total: 20,
+  };
 }
 
 afterEach(() => {
@@ -225,5 +249,29 @@ describe("Home scan panel — Rescan all toggle", () => {
     await waitFor(() => expect(findScanRequest()).toBeDefined());
     const [, init] = findScanRequest() ?? [];
     expect(init?.body).toEqual(JSON.stringify({ scope: "full" }));
+  });
+});
+
+describe("Home progress live regions — aria-atomic", () => {
+  it("marks the scan progress live region atomic so message and count announce together", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, scanBody: runningScanBody() });
+    renderHome();
+
+    const region = await screen.findByText(/Scanning company 3 of 10/i);
+    const live = region.closest("[aria-live]");
+    expect(live).toHaveAttribute("aria-atomic", "true");
+  });
+
+  it("marks the score progress live region atomic so message and count announce together", async () => {
+    mockFetch({
+      settings: { hasAnthropicKey: true },
+      preview: null,
+      scoreBody: runningScoreBody(),
+    });
+    renderHome();
+
+    const region = await screen.findByText(/Scoring posting 5 of 20/i);
+    const live = region.closest("[aria-live]");
+    expect(live).toHaveAttribute("aria-atomic", "true");
   });
 });
