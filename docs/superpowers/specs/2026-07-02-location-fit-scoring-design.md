@@ -121,8 +121,13 @@ scorer model), so `runScoreRun` stays pure and DI-testable.
   `heuristic-remote-penalized`) keeps the idempotency guard precise — a location-penalized row isn't
   re-penalized, and the two reasons stay distinguishable in the store/UI.
 - A posting excluded by BOTH gates (foreign AND non-remote under remote-only) is penalized once;
-  pick a deterministic single tag (location takes precedence, since it's the stronger signal), penalty
-  applied once — no double reduction.
+  a deterministic single tag applies, penalty applied once — no double reduction. **Precedence: the
+  remote gate wins.** The remote-only filter runs first and partitions `gated` before the country
+  gate sees anything, so a non-remote role is already routed to `heuristic-remote-penalized`; the
+  off-country partition derives from the remote-*survivors*, so it can never re-tag that role. This
+  makes the remote tag authoritative when both apply — the role genuinely failed the coarser,
+  user-explicit remote-only filter. (The single-penalty invariant holds by construction either way;
+  only the tag differs.)
 
 ### 6. Matches UI (minor)
 
@@ -153,7 +158,12 @@ scorer model), so `runScoreRun` stays pure and DI-testable.
 - No city→country gazetteer (relies on `parseCountry`'s explicit signals; unknown stays kept).
 - No new dependency.
 - Home country is a single country label, not a list/region (YAGNI; revisit if multi-country needed).
-- The double-gate single-penalty rule (location precedence) is a deliberate, tested choice.
+- The double-gate single-penalty rule (remote-tag precedence when both apply) is a deliberate,
+  tested choice — see the Design section above for why the remote gate wins.
+- `homeCountry` is canonicalized through `parseCountry` on read (`resolveHomeCountry`), so a
+  free-text Settings entry like "United States" / "USA" / "us" normalizes to the canonical label
+  ("US") before the country comparison — otherwise a user's own domestic on-site roles would be
+  wrongly excluded. Auto-detected values are already canonical; this covers manual entry.
 - Depends conceptually on `resolvePostingRemote` accuracy — hence the Ashby fix ships in this spec.
 - Interacts with but is independent of the country-parsing and incremental-scan features (separate
   branches); better `parseCountry` improves detection but isn't required.

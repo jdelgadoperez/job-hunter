@@ -15,7 +15,8 @@
 - **Never guess/drop unknowns.** Unknown-country and remote roles are always kept (deep-scored).
 - Exclusion rule: exclude ONLY roles with a KNOWN country ≠ homeCountry AND not remote.
 - `homeCountry` blank/unset ⇒ feature is a no-op (no filtering, no penalty).
-- Country/remote gates compose independently; a role failing either is penalized ONCE. Location tag takes precedence when both apply.
+- Country/remote gates compose independently; a role failing either is penalized ONCE. The remote tag takes precedence when both apply (the remote-only filter partitions first; the off-country gate derives from remote-survivors, so it can't re-tag a role the remote gate already excluded).
+- `resolveHomeCountry` canonicalizes the stored value through `parseCountry` so free-text Settings entries ("United States"/"USA"/"us") normalize to the canonical label ("US") before the `===` country comparison.
 - Ashby `workplaceType` values (confirmed live): `"OnSite"` | `"Remote"` | `"Hybrid"`. `remote = workplaceType === "Remote"`.
 - Reuse `applyRemotePenalty` (factor `REMOTE_PENALTY_FACTOR = 0.6`) for the location penalty — no new constant.
 - Biome: 2-space indent, 100-col, double quotes. Run `./node_modules/.bin/biome check .` before commit.
