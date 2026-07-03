@@ -171,6 +171,15 @@ export class PostgresScanStore implements ScanStore {
     return rows.map(rowToPosting);
   }
 
+  async listFreshCompanyUrls(freshnessHours: number): Promise<string[]> {
+    if (freshnessHours <= 0) return [];
+    const rows = await this.sql<{ careers_url: string }[]>`
+      SELECT careers_url FROM companies
+      WHERE last_seen_at IS NOT NULL
+        AND last_seen_at >= now() - make_interval(hours => ${freshnessHours})`;
+    return rows.map((r) => r.careers_url);
+  }
+
   async markPostingExpired(postingId: string): Promise<boolean> {
     const rows = await this.sql`
       UPDATE postings SET expired_at = now()

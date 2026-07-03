@@ -78,6 +78,7 @@ function fakeStore(
       opts.onListLivePostingsNotSeen?.();
       return [];
     },
+    listFreshCompanyUrls: () => [],
     markPostingExpired: () => false,
     expireStalePostings: () => {
       opts.onExpireStalePostings?.();

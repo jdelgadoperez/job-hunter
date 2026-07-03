@@ -3,6 +3,7 @@ import { type DiscoverDeps, discover } from "@app/discovery/discover";
 import type { PostingFeed } from "@app/discovery/feed/posting-feed";
 import type { ScanScope, ScanStore } from "@app/discovery/scan-store";
 import type { CompanyLead } from "@app/discovery/sources/types";
+import { normalizeCareersUrl } from "@app/domain/normalize";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting, Scorer, SkillProfile, Warning } from "@app/domain/types";
 import { detectLiveness } from "@app/freshness/detect-liveness";
@@ -90,6 +91,9 @@ export type ScanDeps = {
    * and the in-run retry pass is NOT skip-listed (those companies are exactly what we want to
    * retry). Defaults to `"full"`. */
   scope?: ScanScope;
+  /** The freshness window (hours) for building the incremental skip-set; ignored unless scope is
+   * `"incremental"`. Forwarded to `runSourcing`. */
+  freshnessHours?: number;
 };
 
 export type ScanOutcome = {
@@ -117,6 +121,9 @@ export type SourcingDeps = {
    * expiry, and the scan is recorded as a retry so it's excluded from the staleness clock.
    * Defaults to `"full"` (the normal whole-directory scan and the hosted worker). */
   scope?: ScanScope;
+  /** The freshness window (hours) for building the incremental skip-set; ignored unless scope is
+   * `"incremental"`. */
+  freshnessHours?: number;
   /**
    * On a `"retry"` scan, restricts the shared feed to postings whose `companyId` is in this set (the
    * needs-attention companies). A posting with no `companyId` is never matched — `undefined` means
@@ -157,17 +164,31 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
   // async Postgres-backed store (both satisfy the ScanStore seam).
   const scanId = await repo.startScan(scope);
 
+  // For an incremental scan, skip directory companies crawled within the freshness window. Built
+  // here so the same skip-set flows to whichever sourcing path runs (feed+tracked or full crawl).
+  const skipCareersUrls =
+    scope === "incremental"
+      ? new Set(
+          (await repo.listFreshCompanyUrls(deps.freshnessHours ?? 0)).map((url) =>
+            normalizeCareersUrl(url),
+          ),
+        )
+      : undefined;
+  const discoverDeps = skipCareersUrls
+    ? { ...deps.discoverDeps, skipCareersUrls }
+    : deps.discoverDeps;
+
   // Remote mode (feed set): pull the shared feed AND crawl only tracked companies locally. Otherwise
   // run the full local crawl. Both yield postings + the companies to snapshot + any warnings.
   const { postings, companies, warnings, recoveredFromFeed } = feed
     ? await sourceFromFeedAndTracked(
         feed,
-        deps.discoverDeps,
+        discoverDeps,
         onProgress,
         deps.companyIdFilter,
         deps.needsAttention,
       )
-    : await sourceFromFullCrawl(deps.discoverDeps, onProgress);
+    : await sourceFromFullCrawl(discoverDeps, onProgress);
 
   // A scoped retry only crawls a subset, so the whole-directory removed-diff would flag every
   // uncrawled healthy company as "gone". Skip it; still upsert the crawled companies.
@@ -303,6 +324,7 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
     discoverDeps: { ...deps.discoverDeps, skipRetryFor },
     ...(deps.feed ? { feed: deps.feed } : {}),
     scope,
+    ...(deps.freshnessHours !== undefined ? { freshnessHours: deps.freshnessHours } : {}),
     onProgress,
     ...(companyIdFilter ? { companyIdFilter, needsAttention } : {}),
   });

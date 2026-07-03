@@ -693,6 +693,88 @@ describe("runScan + listMatches", () => {
     repo.close();
   });
 
+  it("incremental scope skips fresh companies, records kind=incremental, and does not expire", async () => {
+    const repo = newRepo();
+    const freshUrl = "https://boards.greenhouse.io/fresh";
+    const staleUrl = "https://boards.greenhouse.io/stale";
+    const ghJobs = (slug: string) =>
+      JSON.stringify({
+        jobs: [
+          {
+            title: "Engineer",
+            absolute_url: `https://boards.greenhouse.io/${slug}/jobs/1`,
+            content: "TypeScript and React.",
+          },
+        ],
+      });
+    const routes = {
+      "https://boards-api.greenhouse.io/v1/boards/fresh/jobs?content=true": ghJobs("fresh"),
+      "https://boards-api.greenhouse.io/v1/boards/stale/jobs?content=true": ghJobs("stale"),
+    };
+    const discoverDepsFor = (directory: { name: string; url: string }[]): DiscoverDeps => ({
+      fetcher: new RouteFetcher(routes),
+      renderer: new NullRenderer(),
+      sharedViewReader: new FakeSharedViewReader(airtableData(directory)),
+      shareUrl: "https://airtable.com/appX/shrX/tblX",
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // Prior full scan crawls ONLY "Fresh Co", stamping its `last_seen_at` — this is what makes it
+    // fresh for the incremental pass below. "Stale Co" was never crawled, so it isn't fresh.
+    await runSourcing({
+      repo,
+      discoverDeps: discoverDepsFor([{ name: "Fresh Co", url: freshUrl }]),
+      onProgress: () => {},
+    });
+
+    // Spy on the two ScanStore calls the incremental gate governs: which scope opens the scan, and
+    // whether stale-posting expiry runs (it must not under incremental).
+    const startScanKinds: (string | undefined)[] = [];
+    const expireCalls: number[] = [];
+    const spyRepo = new Proxy(repo, {
+      get(target, prop, receiver) {
+        if (prop === "startScan") {
+          return (kind?: string) => {
+            startScanKinds.push(kind);
+            return target.startScan(kind as never);
+          };
+        }
+        if (prop === "expireStalePostings") {
+          return (scanId: number, staleAfter?: number) => {
+            expireCalls.push(scanId);
+            return target.expireStalePostings(scanId, staleAfter);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const result = await runSourcing({
+      repo: spyRepo,
+      discoverDeps: discoverDepsFor([
+        { name: "Fresh Co", url: freshUrl },
+        { name: "Stale Co", url: staleUrl },
+      ]),
+      scope: "incremental",
+      freshnessHours: 24,
+      onProgress: () => {},
+    });
+
+    // (a) the scan opened as incremental
+    expect(startScanKinds).toEqual(["incremental"]);
+    // (b) the fresh company was skipped — only the stale one was crawled
+    const crawledUrls = result.companies.map((c) => c.careersUrl);
+    expect(crawledUrls).not.toContain(freshUrl);
+    expect(crawledUrls).toContain(staleUrl);
+    // (c) no expiry under incremental — skipped companies keep their postings
+    expect(expireCalls).toEqual([]);
+    expect(result.expired).toBe(0);
+    repo.close();
+  });
+
   it("clears a feed-recovered company from failed_leads", async () => {
     const repo = newRepo();
     const url = "https://boards.lever.co/boom";

@@ -37,6 +37,9 @@ export interface ScanStore {
    */
   savePostings?(postings: JobPosting[], scanId?: number | null): void | Promise<void>;
   listLivePostingsNotSeen(scanId: number): JobPosting[] | Promise<JobPosting[]>;
+  /** Careers URLs of companies scanned within the last `freshnessHours`; an incremental scan skips
+   * these. Returns `[]` for a zero/negative window (skipping disabled → behaves like full). */
+  listFreshCompanyUrls(freshnessHours: number): string[] | Promise<string[]>;
   markPostingExpired(postingId: string): boolean | Promise<boolean>;
   expireStalePostings(scanId: number, staleAfter?: number): number | Promise<number>;
   finishScan(
