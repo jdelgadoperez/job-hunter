@@ -6,10 +6,12 @@ import {
   resolveApiKey,
   resolveHomeCountry,
   resolveProvider,
+  resolveScanFreshnessHours,
   resolveScorerModel,
+  SCAN_FRESHNESS_HOURS_DEFAULT,
   type SettingsReader,
 } from "./resolve-settings";
-import { HOME_COUNTRY_SETTING } from "./settings-keys";
+import { HOME_COUNTRY_SETTING, SCAN_FRESHNESS_SETTING } from "./settings-keys";
 
 function reader(values: Record<string, string>): SettingsReader {
   return { getSetting: (key) => values[key] };
@@ -80,6 +82,26 @@ describe("resolveHomeCountry", () => {
 
   it("falls back to the trimmed raw value when the country can't be canonicalized", () => {
     expect(resolveHomeCountry(reader({ [HOME_COUNTRY_SETTING]: " Freedonia " }))).toBe("Freedonia");
+  });
+});
+
+describe("resolveScanFreshnessHours", () => {
+  it("defaults to 24 when unset", () => {
+    expect(resolveScanFreshnessHours(reader({}))).toBe(SCAN_FRESHNESS_HOURS_DEFAULT);
+  });
+  it("uses a stored positive number", () => {
+    expect(resolveScanFreshnessHours(reader({ [SCAN_FRESHNESS_SETTING]: "12" }))).toBe(12);
+  });
+  it("treats a stored 0 as 0 (disables skipping)", () => {
+    expect(resolveScanFreshnessHours(reader({ [SCAN_FRESHNESS_SETTING]: "0" }))).toBe(0);
+  });
+  it("falls back to the default for a non-numeric or negative value", () => {
+    expect(resolveScanFreshnessHours(reader({ [SCAN_FRESHNESS_SETTING]: "abc" }))).toBe(
+      SCAN_FRESHNESS_HOURS_DEFAULT,
+    );
+    expect(resolveScanFreshnessHours(reader({ [SCAN_FRESHNESS_SETTING]: "-5" }))).toBe(
+      SCAN_FRESHNESS_HOURS_DEFAULT,
+    );
   });
 });
 

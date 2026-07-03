@@ -10,6 +10,7 @@ import {
   HOME_COUNTRY_SETTING,
   MODEL_SETTING,
   PROVIDER_SETTING,
+  SCAN_FRESHNESS_SETTING,
 } from "./settings-keys";
 
 // Re-exported so existing importers (and tests) can keep reaching these via resolve-settings.
@@ -79,4 +80,19 @@ export function resolveHomeCountry(settings: SettingsReader): string | undefined
   const value = settings.getSetting(HOME_COUNTRY_SETTING)?.trim();
   if (!value) return undefined;
   return parseCountry(value) ?? value;
+}
+
+/** Default incremental-scan freshness window: skip companies scanned within the last 24h. */
+export const SCAN_FRESHNESS_HOURS_DEFAULT = 24;
+
+/**
+ * Resolve the incremental-scan freshness window (hours) from settings. A stored non-negative number
+ * wins (including `0`, which disables skipping); anything unset, non-numeric, or negative falls back
+ * to the default.
+ */
+export function resolveScanFreshnessHours(settings: SettingsReader): number {
+  const raw = settings.getSetting(SCAN_FRESHNESS_SETTING)?.trim();
+  if (raw === undefined || raw === "") return SCAN_FRESHNESS_HOURS_DEFAULT;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : SCAN_FRESHNESS_HOURS_DEFAULT;
 }
