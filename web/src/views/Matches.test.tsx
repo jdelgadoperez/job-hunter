@@ -159,6 +159,20 @@ describe("Matches empty state", () => {
   });
 });
 
+describe("Matches expired postings", () => {
+  it("carries a non-color signal (accessible label) beyond the dimming class", async () => {
+    mockMatches([{ ...scored({ id: "a", title: "Stale Role", company: "Acme" }), expired: true }]);
+    renderMatches();
+
+    await screen.findByText(/Stale Role/);
+
+    // The badge must expose an accessible name announcing expiry, not just visible dimmed text.
+    const badge = screen.getByRole("note", { name: /this role has expired/i });
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent(/expired/i);
+  });
+});
+
 describe("Matches count header", () => {
   const solo: PostingSeed = { id: "a", title: "Staff Platform Engineer", company: "Acme" };
   const seeds: PostingSeed[] = [solo, { id: "b", title: "Frontend Engineer", company: "Globex" }];
