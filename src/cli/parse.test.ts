@@ -230,7 +230,12 @@ describe("parseCli", () => {
     expect(() => parseCli(["scan", "--bogus-flag"])).not.toThrow();
     expect(parseCli(["scan", "--bogus-flag"])).toMatchObject({
       kind: "help",
-      error: expect.any(String),
+      error: expect.stringContaining("--bogus-flag"),
+    });
+    // The raw Node parseArgs escape-hatch hint ("place it at the end after --") is noise for the
+    // common typo case, so it should be trimmed off rather than surfaced verbatim.
+    expect(parseCli(["scan", "--bogus-flag"])).not.toMatchObject({
+      error: expect.stringContaining("place it at the end"),
     });
   });
 
@@ -238,7 +243,7 @@ describe("parseCli", () => {
     expect(() => parseCli(["profile", "--resume-2026.pdf"])).not.toThrow();
     expect(parseCli(["profile", "--resume-2026.pdf"])).toMatchObject({
       kind: "help",
-      error: expect.any(String),
+      error: expect.stringContaining("--resume-2026.pdf"),
     });
   });
 });
