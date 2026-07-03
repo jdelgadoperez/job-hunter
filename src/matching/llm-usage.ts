@@ -4,10 +4,11 @@
  * Both `score` LLM steps (batch triage + deep score) send a stable, cached system prefix
  * (`cache_control: { type: "ephemeral" }`) followed by a volatile user turn. Whether that cache
  * actually engages is invisible without reading the per-call `usage` the API returns — and it only
- * engages when the cached prefix meets the model's minimum cacheable size (Sonnet 4.6 = 2048
- * tokens; the Opus 4.x family + Haiku 4.5 = 4096), otherwise the marker is silently a no-op. This
- * module normalizes those usage fields and accumulates them so the CLI can report a cache hit-rate
- * after a run — turning "is caching working?" into a measured number.
+ * engages when the cached prefix meets the model's minimum cacheable size (model-specific, ~1024
+ * tokens for recent Sonnet, 2048 for Sonnet 4.6, 4096 for the Opus 4.x family + Haiku 4.5),
+ * otherwise the marker is silently a no-op. This module normalizes those usage fields and
+ * accumulates them so the caller can report a cache hit-rate after a run — turning "is caching
+ * working?" into a measured number.
  */
 
 /** Cache-relevant token usage from a single Anthropic Messages call. */
@@ -86,7 +87,7 @@ export function formatUsageSummary(acc: UsageAccumulator): string | null {
   const header = `LLM usage over ${acc.callCount} call(s): ${t.inputTokens} input + ${t.outputTokens} output tokens`;
   if (cacheable === 0) {
     const reason =
-      "  prompt caching did not engage — the cached system prefix is below the model's minimum cacheable size (Sonnet 4.6 = 2048 tokens; Opus 4.x / Haiku 4.5 = 4096), so the cache_control marker was a no-op. See docs/prompt-caching.md.";
+      "  prompt caching did not engage — the cached system prefix is below the model's minimum cacheable size (model-specific: ~1024 tokens for recent Sonnet, 2048 for Sonnet 4.6, 4096 for Opus 4.x / Haiku 4.5), so the cache_control marker was a no-op. See docs/prompt-caching.md.";
     return `${header}\n${reason}`;
   }
   const pct = Math.round(acc.cacheHitRate() * 100);
