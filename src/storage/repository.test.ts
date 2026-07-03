@@ -1165,8 +1165,8 @@ describe("listFreshCompanyUrls", () => {
     const dir = mkdtempSync(join(tmpdir(), "jobhunter-fresh-"));
     const dbPath = join(dir, "fresh.db");
     try {
-      const repo = new Repository(dbPath);
-      // Seed two companies via a scan, then back-date one to be stale.
+      // Construct once so migrate() creates the schema, then seed rows directly on a raw handle.
+      new Repository(dbPath);
       const raw = new Database(dbPath);
       // A company scanned "now" (fresh) and one scanned 48h ago (stale).
       raw
