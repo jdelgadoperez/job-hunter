@@ -225,6 +225,22 @@ describe("parseCli", () => {
     expect(parseCli(["help", "list"])).toEqual({ kind: "help", topic: "list" });
     expect(parseCli(["help", "bogus"])).toEqual({ kind: "help" });
   });
+
+  it("returns a help error instead of throwing on an unknown flag", () => {
+    expect(() => parseCli(["scan", "--bogus-flag"])).not.toThrow();
+    expect(parseCli(["scan", "--bogus-flag"])).toMatchObject({
+      kind: "help",
+      error: expect.any(String),
+    });
+  });
+
+  it("returns a help error instead of throwing on a dash-leading profile path", () => {
+    expect(() => parseCli(["profile", "--resume-2026.pdf"])).not.toThrow();
+    expect(parseCli(["profile", "--resume-2026.pdf"])).toMatchObject({
+      kind: "help",
+      error: expect.any(String),
+    });
+  });
 });
 
 describe("score command", () => {

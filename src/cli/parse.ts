@@ -1,4 +1,4 @@
-import { parseArgs } from "node:util";
+import { type ParseArgsConfig, parseArgs } from "node:util";
 import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import { COMMAND_NAMES } from "./help";
 
@@ -35,6 +35,27 @@ export type Command =
   | { kind: "version" }
   | { kind: "help"; error?: string; topic?: string };
 
+type SafeParseResult<T extends ParseArgsConfig> =
+  | { ok: true; value: ReturnType<typeof parseArgs<T>> }
+  | { ok: false; error: string };
+
+/**
+ * `node:util`'s `parseArgs` throws a raw `TypeError` (e.g. `ERR_PARSE_ARGS_UNKNOWN_OPTION`) on an
+ * unrecognized flag or a dash-leading positional. The CLI never wants that to escape `parseCli` as
+ * an uncaught exception — every call site funnels through here so a bad flag becomes a normal
+ * `{ kind: "help", error }` result instead of crashing the process. Generic over `T` (mirroring
+ * `parseArgs`'s own signature) so callers keep the narrowed `values`/`positionals` types their
+ * `options` config implies.
+ */
+function safeParse<T extends ParseArgsConfig>(config: T): SafeParseResult<T> {
+  try {
+    return { ok: true, value: parseArgs(config) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
 /**
  * Pure argv → `Command` parser (no I/O), so dispatch logic is unit-tested without spawning a
  * process. `argv` is the arguments after `node script` (i.e. `process.argv.slice(2)`).
@@ -54,7 +75,7 @@ export function parseCli(argv: string[]): Command {
 
   switch (command) {
     case "scan": {
-      const { values } = parseArgs({
+      const parsed = safeParse({
         args: rest,
         options: {
           "retry-failed": { type: "boolean" },
@@ -63,6 +84,8 @@ export function parseCli(argv: string[]): Command {
         },
         allowPositionals: true,
       });
+      if (!parsed.ok) return { kind: "help", error: parsed.error };
+      const { values } = parsed.value;
       const freshnessRaw = values["freshness-hours"];
       let freshnessHours: number | undefined;
       if (freshnessRaw !== undefined) {
@@ -81,7 +104,7 @@ export function parseCli(argv: string[]): Command {
     }
 
     case "serve": {
-      const { values } = parseArgs({
+      const parsed = safeParse({
         args: rest,
         options: {
           port: { type: "string" },
@@ -90,6 +113,8 @@ export function parseCli(argv: string[]): Command {
         },
         allowPositionals: true,
       });
+      if (!parsed.ok) return { kind: "help", error: parsed.error };
+      const { values } = parsed.value;
       const cmd: Extract<Command, { kind: "serve" }> = { kind: "serve", open: !values["no-open"] };
 
       if (values.port !== undefined) {
@@ -110,7 +135,7 @@ export function parseCli(argv: string[]): Command {
     }
 
     case "list": {
-      const { values } = parseArgs({
+      const parsed = safeParse({
         args: rest,
         options: {
           "min-score": { type: "string" },
@@ -121,6 +146,8 @@ export function parseCli(argv: string[]): Command {
         },
         allowPositionals: true,
       });
+      if (!parsed.ok) return { kind: "help", error: parsed.error };
+      const { values } = parsed.value;
       const raw = values["min-score"];
       const minScore = raw === undefined ? DEFAULT_MIN_SCORE : Number(raw);
       return {
@@ -134,7 +161,9 @@ export function parseCli(argv: string[]): Command {
     }
 
     case "profile": {
-      const { positionals } = parseArgs({ args: rest, allowPositionals: true });
+      const parsed = safeParse({ args: rest, allowPositionals: true });
+      if (!parsed.ok) return { kind: "help", error: parsed.error };
+      const { positionals } = parsed.value;
       const resumePath = positionals[0];
       if (!resumePath) return { kind: "help", error: "profile requires a resume file path" };
       return { kind: "profile", resumePath };
@@ -144,17 +173,21 @@ export function parseCli(argv: string[]): Command {
       const [sub, ...trackRest] = rest;
       if (sub === "list") return { kind: "track-list" };
       if (sub === "add") {
-        const { positionals, values } = parseArgs({
+        const parsed = safeParse({
           args: trackRest,
           options: { name: { type: "string" } },
           allowPositionals: true,
         });
+        if (!parsed.ok) return { kind: "help", error: parsed.error };
+        const { positionals, values } = parsed.value;
         const url = positionals[0];
         if (!url) return { kind: "help", error: "track add requires a careers URL" };
         return { kind: "track-add", url, ...(values.name ? { name: values.name } : {}) };
       }
       if (sub === "remove") {
-        const { positionals } = parseArgs({ args: trackRest, allowPositionals: true });
+        const parsed = safeParse({ args: trackRest, allowPositionals: true });
+        if (!parsed.ok) return { kind: "help", error: parsed.error };
+        const { positionals } = parsed.value;
         const url = positionals[0];
         if (!url) return { kind: "help", error: "track remove requires a careers URL" };
         return { kind: "track-remove", url };
@@ -163,7 +196,7 @@ export function parseCli(argv: string[]): Command {
     }
 
     case "score": {
-      const { values } = parseArgs({
+      const parsed = safeParse({
         args: rest,
         options: {
           "min-heuristic": { type: "string" },
@@ -175,6 +208,8 @@ export function parseCli(argv: string[]): Command {
         },
         allowPositionals: true,
       });
+      if (!parsed.ok) return { kind: "help", error: parsed.error };
+      const { values } = parsed.value;
       const minRaw = values["min-heuristic"];
       const limitRaw = values.limit;
       const minHeuristic = minRaw === undefined ? DEFAULT_MIN_HEURISTIC : Number(minRaw);
@@ -201,7 +236,9 @@ export function parseCli(argv: string[]): Command {
     case "config": {
       const [sub, ...configRest] = rest;
       if (sub === "remote") {
-        const { positionals } = parseArgs({ args: configRest, allowPositionals: true });
+        const parsed = safeParse({ args: configRest, allowPositionals: true });
+        if (!parsed.ok) return { kind: "help", error: parsed.error };
+        const { positionals } = parsed.value;
         const value = positionals[0];
         if (value === "on") return { kind: "config-remote", on: true };
         if (value === "off") return { kind: "config-remote", on: false };
