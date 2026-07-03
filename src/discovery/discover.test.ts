@@ -275,9 +275,14 @@ describe("discover", () => {
 
   it("skips directory leads in skipCareersUrls but keeps tracked companies", async () => {
     const gauge = new Gauge();
+    // The directory URL for Fresh Co carries a trailing slash and mixed case; the skip-set entry
+    // below is a plain string literal in already-normalized form. The two are byte-distinct but
+    // must normalize equal, so the membership check only matches if it actually normalizes the
+    // lead's URL before comparing (a raw `skip.has(lead.careersUrl)` check would miss this and
+    // fail to skip Fresh Co).
     const reader = new FakeSharedViewReader(
       airtableData([
-        { name: "Fresh Co", url: "https://fresh.co/careers" },
+        { name: "Fresh Co", url: "https://Fresh.co/careers/" },
         { name: "Stale Co", url: "https://stale.co/careers" },
       ]),
     );
@@ -288,7 +293,7 @@ describe("discover", () => {
       sharedViewReader: reader,
       shareUrl: SHARE_URL,
       trackedCompanies: [{ careersUrl: "https://tracked.co/careers", name: "Tracked Co" }],
-      skipCareersUrls: new Set([normalizeCareersUrl("https://fresh.co/careers")]),
+      skipCareersUrls: new Set(["https://fresh.co/careers"]),
       concurrency: 2,
       delayMs: 0,
       settings: { getSetting: () => undefined },
@@ -298,7 +303,7 @@ describe("discover", () => {
     const crawledUrls = new Set(companies.map((c) => normalizeCareersUrl(c.careersUrl)));
     expect(crawledUrls.has(normalizeCareersUrl("https://stale.co/careers"))).toBe(true);
     expect(crawledUrls.has(normalizeCareersUrl("https://tracked.co/careers"))).toBe(true);
-    expect(crawledUrls.has(normalizeCareersUrl("https://fresh.co/careers"))).toBe(false);
+    expect(crawledUrls.has(normalizeCareersUrl("https://Fresh.co/careers/"))).toBe(false);
   });
 
   it("degrades to tracked-only with a warning when the Airtable read fails", async () => {
