@@ -2,6 +2,7 @@ import { makeCompanyId } from "@app/discovery/company-id";
 import type { PageRenderer } from "@app/discovery/connectors/browser";
 import type { DiscoverDeps } from "@app/discovery/discover";
 import { FakePostingFeed } from "@app/discovery/feed/posting-feed";
+import { makePostingId } from "@app/discovery/posting-id";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
 import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
@@ -822,6 +823,19 @@ describe("runScan + listMatches", () => {
     // (c) no expiry under incremental — skipped companies keep their postings
     expect(expireCalls).toEqual([]);
     expect(result.expired).toBe(0);
+    // (d) DB-outcome check: the mechanism assertions above prove expiry wasn't *called*; this proves
+    // Fresh Co's posting (saved by the earlier full scan, never re-crawled here) is actually still
+    // present and unexpired in the DB — `listLivePostingsNotSeen` excludes expired rows and this scan
+    // never marked Fresh Co "seen", so the posting only survives here if the invariant truly held.
+    const freshPostingId = makePostingId({
+      company: "fresh",
+      title: "Engineer",
+      url: "https://boards.greenhouse.io/fresh/jobs/1",
+    });
+    const stillLive = repo
+      .listLivePostingsNotSeen(result.scanId)
+      .some((p) => p.id === freshPostingId);
+    expect(stillLive).toBe(true);
     repo.close();
   });
 
