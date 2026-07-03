@@ -1,5 +1,5 @@
 import { makeCompanyId } from "@app/discovery/company-id";
-import type { DirectoryDiff, ScanStore } from "@app/discovery/scan-store";
+import type { DirectoryDiff, ScanScope, ScanStore } from "@app/discovery/scan-store";
 import type { JobPosting } from "@app/domain/types";
 import type { CompanyRef } from "@app/storage/repository";
 import type { Sql } from "postgres";
@@ -33,9 +33,9 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 export class PostgresScanStore implements ScanStore {
   constructor(private readonly sql: Sql) {}
 
-  async startScan(): Promise<number> {
+  async startScan(kind: ScanScope = "full"): Promise<number> {
     const rows = await this.sql<{ id: string }[]>`
-      INSERT INTO scans (started_at) VALUES (now()) RETURNING id`;
+      INSERT INTO scans (started_at, kind) VALUES (now(), ${kind}) RETURNING id`;
     return Number(rows[0]?.id);
   }
 

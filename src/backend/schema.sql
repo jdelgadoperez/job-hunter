@@ -23,7 +23,8 @@ create table if not exists scans (
   postings_seen integer,
   companies_seen integer,
   new_companies jsonb,
-  removed_companies jsonb
+  removed_companies jsonb,
+  kind text not null default 'full'
 );
 
 create table if not exists postings (
@@ -77,3 +78,7 @@ drop index if exists companies_id_idx;
 create index if not exists companies_id_idx on companies (id);
 alter table postings add column if not exists company_id text;
 create index if not exists postings_company_id_idx on postings (company_id);
+
+alter table scans add column if not exists kind text not null default 'full';
+-- Staleness clock (expireStalePostings) counts only full scans; index the predicate.
+create index if not exists scans_kind_idx on scans (kind, id);
