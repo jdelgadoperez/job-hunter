@@ -172,10 +172,24 @@ export function Home({ active = true }: { active?: boolean } = {}) {
         ) : null}
 
         {status?.state === "done" ? (
-          <p className="mt-2 text-sm text-success">
-            {status.message} — see the Matches tab.
-            {status.warnings.length > 0 ? ` (${status.warnings.length} warning(s))` : ""}
-          </p>
+          <>
+            <p className="mt-2 text-sm text-success">{status.message} — see the Matches tab.</p>
+            {status.warnings.length > 0 ? (
+              <details className="mt-2 text-sm">
+                <summary className="cursor-pointer text-warning">
+                  {status.warnings.length} warning(s) — companies that didn't load
+                </summary>
+                <ul className="mt-1 list-disc pl-5 text-faint">
+                  {status.warnings.map((w) => (
+                    <li key={`${w.source}:${w.message}`}>
+                      {w.source ? `${w.source}: ` : ""}
+                      {w.message}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </>
         ) : null}
 
         {status?.state === "error" ? (

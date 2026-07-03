@@ -252,6 +252,44 @@ describe("Home scan panel — Rescan all toggle", () => {
   });
 });
 
+describe("Home scan panel — warning details", () => {
+  function doneScanBody(warnings: Array<{ source: string; message: string }>) {
+    return {
+      ...idleScan("done"),
+      message: "Scan complete",
+      finishedAt: "2026-06-30T00:00:00.000Z",
+      warnings,
+    };
+  }
+
+  it("expands warning details for a finished scan", async () => {
+    mockFetch({
+      settings: { hasAnthropicKey: true },
+      scanBody: doneScanBody([{ source: "Acme", message: "board 500" }]),
+    });
+    renderHome();
+
+    const summary = await screen.findByText(/1 warning\(s\)/i);
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+
+    await userEvent.click(summary);
+
+    expect(screen.getByText(/Acme/)).toBeInTheDocument();
+    expect(screen.getByText(/board 500/)).toBeInTheDocument();
+  });
+
+  it("shows no warning details block when a scan finishes clean", async () => {
+    mockFetch({
+      settings: { hasAnthropicKey: true },
+      scanBody: doneScanBody([]),
+    });
+    renderHome();
+
+    await screen.findByText(/Scan complete/i);
+    expect(screen.queryByText(/warning\(s\)/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("Home progress live regions — aria-atomic", () => {
   it("marks the scan progress live region atomic so message and count announce together", async () => {
     mockFetch({ settings: { hasAnthropicKey: true }, scanBody: runningScanBody() });
