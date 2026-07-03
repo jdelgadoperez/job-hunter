@@ -1,8 +1,9 @@
 import type { JobPosting } from "@app/domain/types";
 import type { CompanyRef } from "@app/storage/repository";
 
-/** Whether a scan crawled the whole directory (`"full"`) or only a scoped subset (`"retry"`). */
-export type ScanScope = "full" | "retry";
+/** Whether a scan crawled the whole directory (`"full"`), a scoped retry subset (`"retry"`), or an
+ *  incremental pass that skips recently-scanned companies (`"incremental"`). */
+export type ScanScope = "full" | "retry" | "incremental";
 
 /** The directory delta a scan records (companies that appeared / disappeared vs. the prior scan). */
 export type DirectoryDiff = { newCompanies: CompanyRef[]; removedCompanies: CompanyRef[] };
