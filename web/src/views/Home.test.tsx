@@ -52,6 +52,7 @@ function mockFetch(bodies: Bodies) {
             scorerModel: null,
             scorerProvider: null,
             homeCountry: null,
+            scanFreshnessHours: null,
             hasTheMuseKey: false,
             feedUrl: null,
             hasFeedKey: false,
@@ -136,5 +137,45 @@ describe("Home deep-score card", () => {
     const button = await screen.findByRole("button", { name: "Deep-score" });
     await waitFor(() => expect(button).toBeDisabled());
     expect(screen.getByText(/Waiting for the scan to finish/i)).toBeInTheDocument();
+  });
+});
+
+describe("Home scan panel — Rescan all toggle", () => {
+  function findScanRequest() {
+    return vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([url, init]) =>
+          typeof url === "string" && url.includes("/api/scan") && init?.method === "POST",
+      );
+  }
+
+  it("sends an incremental scope by default", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true } });
+    renderHome();
+
+    const checkbox = await screen.findByRole("checkbox", { name: "Rescan all" });
+    expect(checkbox).not.toBeChecked();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Scan now" }));
+
+    await waitFor(() => expect(findScanRequest()).toBeDefined());
+    const [, init] = findScanRequest() ?? [];
+    expect(init?.body).toEqual(JSON.stringify({ scope: "incremental" }));
+  });
+
+  it("sends a full scope when Rescan all is checked", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true } });
+    renderHome();
+
+    const checkbox = await screen.findByRole("checkbox", { name: "Rescan all" });
+    await userEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Scan now" }));
+
+    await waitFor(() => expect(findScanRequest()).toBeDefined());
+    const [, init] = findScanRequest() ?? [];
+    expect(init?.body).toEqual(JSON.stringify({ scope: "full" }));
   });
 });

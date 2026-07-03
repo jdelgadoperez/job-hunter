@@ -1,8 +1,9 @@
 import type { JobPosting } from "@app/domain/types";
 import type { CompanyRef } from "@app/storage/repository";
 
-/** Whether a scan crawled the whole directory (`"full"`) or only a scoped subset (`"retry"`). */
-export type ScanScope = "full" | "retry";
+/** Whether a scan crawled the whole directory (`"full"`), a scoped retry subset (`"retry"`), or an
+ *  incremental pass that skips recently-scanned companies (`"incremental"`). */
+export type ScanScope = "full" | "retry" | "incremental";
 
 /** The directory delta a scan records (companies that appeared / disappeared vs. the prior scan). */
 export type DirectoryDiff = { newCompanies: CompanyRef[]; removedCompanies: CompanyRef[] };
@@ -36,6 +37,9 @@ export interface ScanStore {
    */
   savePostings?(postings: JobPosting[], scanId?: number | null): void | Promise<void>;
   listLivePostingsNotSeen(scanId: number): JobPosting[] | Promise<JobPosting[]>;
+  /** Careers URLs of companies scanned within the last `freshnessHours`; an incremental scan skips
+   * these. Returns `[]` for a zero/negative window (skipping disabled → behaves like full). */
+  listFreshCompanyUrls(freshnessHours: number): string[] | Promise<string[]>;
   markPostingExpired(postingId: string): boolean | Promise<boolean>;
   expireStalePostings(scanId: number, staleAfter?: number): number | Promise<number>;
   finishScan(

@@ -69,6 +69,8 @@ Run CLI commands with `npm run cli -- <command>` (the `--` passes flags through)
 
 ```bash
 npm run cli -- scan                       # discover + free heuristic score, store matches (live status)
+npm run cli -- scan --all                 # rescan every company, ignoring the freshness window
+npm run cli -- scan --freshness-hours 6   # skip companies scanned within the last 6h (0 = rescan all)
 npm run cli -- score --dry-run            # preview the LLM deep-score plan + estimated cost (no spend)
 npm run cli -- score --limit 50           # LLM triage + deep-score up to 50 postings not yet scored
 npm run cli -- list --min-score 70        # show matches scoring 70+
@@ -86,7 +88,11 @@ npm run cli -- --version
 ```
 
 **Two-step scanning.** `scan` is free — it discovers postings and scores them with the offline
-heuristic. `score` then spends LLM budget only on the best of those: it ranks by heuristic score,
+heuristic. By default a scan is **incremental**: it skips directory companies scanned within the
+freshness window (the `scanFreshnessHours` setting, default **24h**) and re-visits only the rest, so
+routine scans stay fast. Companies you track yourself are always crawled. Force a full re-visit with
+`scan --all`, or override the window for one run with `scan --freshness-hours N` (`0` rescans
+everything). `score` then spends LLM budget only on the best of those: it ranks by heuristic score,
 respects `--min-heuristic`, skips postings already LLM-scored (unless `--rescore`), then caps the
 remainder at `--limit` — so raising `--limit` always scores more new postings, never fewer, and
 re-running works down a large backlog. It batch-triages titles, deep-scores the survivors, and
@@ -112,18 +118,19 @@ posting's location text otherwise; an unknown location counts as remote so nothi
 default on <http://localhost:4317>, bound to loopback so it isn't reachable from other machines —
 and opens a React dashboard in your browser:
 
-- **Overview** — upload your resume and run a scan. Scans run as a **background job** with live
-  status — an elapsed timer plus a rolling list of the companies being visited (reading directory →
-  per-company → heuristic scoring) — so you can switch tabs or close the page and it keeps going. The
-  server also **auto-refreshes** on a schedule (default every 6h; tune with `--refresh-hours N`, or
-  `--refresh-hours 0` to disable).
+- **Overview** — upload your resume and run a scan. **Scan now** runs incrementally by default,
+  skipping companies scanned within the freshness window; tick **Rescan all** beside it to re-visit
+  every company now. Scans run as a **background job** with live status — an elapsed timer plus a
+  rolling list of the companies being visited (reading directory → per-company → heuristic scoring) —
+  so you can switch tabs or close the page and it keeps going. The server also **auto-refreshes** on a
+  schedule (default every 6h; tune with `--refresh-hours N`, or `--refresh-hours 0` to disable).
 - **Matches** — ranked postings filtered by a minimum-score slider (default **50**), a **Remote only**
   toggle, and a **Country** dropdown (its options are the countries actually present in your results).
   Remote roles show a **Remote** badge. Cards list matched/
   missing skills and (once you've run the CLI `score`) the LLM rationale. **Save**, **dismiss**, or
   **mark applied** any match (dismissed and applied ones hide by default; toggles reveal
   expired/dismissed/applied, and an **Applied (N)** view shows just the roles you've applied to).
-  Scans are **incremental**:
+  Scans are **self-updating**:
   postings that vanish from their board across consecutive scans are auto-expired and drop off the
   list, and the **Last scan** panel lists the directory delta (companies that appeared / are no
   longer listed).
@@ -132,9 +139,11 @@ and opens a React dashboard in your browser:
   box)
 - **Companies** — add/remove the companies you track by careers-page URL (scanned alongside the
   public directory and free remote-job feeds)
-- **Settings** — Anthropic API key and scorer model; optionally a [The Muse](https://www.themuse.com)
-  API key (extra lead source) and a remote **feed URL + key** (the hosted shared feed). All secret
-  keys are write-only — stored but never sent back to the browser.
+- **Settings** — Anthropic API key and scorer model; your **home country** (foreign on-site roles rank
+  lower and are skipped when deep-scoring); **scan freshness (hours)** (how long a company stays fresh
+  before a normal scan re-visits it — default 24, `0` = always rescan); optionally a
+  [The Muse](https://www.themuse.com) API key (extra lead source) and a remote **feed URL + key** (the
+  hosted shared feed). All secret keys are write-only — stored but never sent back to the browser.
 
 ### Keep the dashboard always running (optional)
 

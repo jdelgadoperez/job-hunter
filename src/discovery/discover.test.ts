@@ -1,3 +1,4 @@
+import { normalizeCareersUrl } from "@app/domain/normalize";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import { describe, expect, it } from "vitest";
@@ -270,6 +271,39 @@ describe("discover", () => {
     });
 
     expect(postings.map((p) => p.title).sort()).toEqual(["Engineer at acme", "Engineer at zeta"]);
+  });
+
+  it("skips directory leads in skipCareersUrls but keeps tracked companies", async () => {
+    const gauge = new Gauge();
+    // The directory URL for Fresh Co carries a trailing slash and mixed case; the skip-set entry
+    // below is a plain string literal in already-normalized form. The two are byte-distinct but
+    // must normalize equal, so the membership check only matches if it actually normalizes the
+    // lead's URL before comparing (a raw `skip.has(lead.careersUrl)` check would miss this and
+    // fail to skip Fresh Co).
+    const reader = new FakeSharedViewReader(
+      airtableData([
+        { name: "Fresh Co", url: "https://Fresh.co/careers/" },
+        { name: "Stale Co", url: "https://stale.co/careers" },
+      ]),
+    );
+
+    const { companies } = await discover({
+      fetcher: new GaugedFetcher({}, gauge),
+      renderer: new GaugedRenderer("", "", gauge),
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      trackedCompanies: [{ careersUrl: "https://tracked.co/careers", name: "Tracked Co" }],
+      skipCareersUrls: new Set(["https://fresh.co/careers"]),
+      concurrency: 2,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    const crawledUrls = new Set(companies.map((c) => normalizeCareersUrl(c.careersUrl)));
+    expect(crawledUrls.has(normalizeCareersUrl("https://stale.co/careers"))).toBe(true);
+    expect(crawledUrls.has(normalizeCareersUrl("https://tracked.co/careers"))).toBe(true);
+    expect(crawledUrls.has(normalizeCareersUrl("https://Fresh.co/careers/"))).toBe(false);
   });
 
   it("degrades to tracked-only with a warning when the Airtable read fails", async () => {

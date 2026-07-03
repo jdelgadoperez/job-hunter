@@ -498,6 +498,23 @@ export class Repository {
     }));
   }
 
+  /**
+   * Careers URLs of companies scanned within the last `freshnessHours`. An incremental scan uses
+   * this to skip re-crawling companies that are still fresh. Returns `[]` when `freshnessHours <= 0`
+   * so a zero/negative window disables skipping entirely (an incremental scan then behaves like full).
+   */
+  listFreshCompanyUrls(freshnessHours: number): string[] {
+    if (freshnessHours <= 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT careers_url FROM companies
+         WHERE last_seen_at IS NOT NULL
+           AND last_seen_at >= datetime('now', ?)`,
+      )
+      .all(`-${freshnessHours} hours`) as { careers_url: string }[];
+    return rows.map((r) => r.careers_url);
+  }
+
   /** Remove a tracked company; returns whether a row was deleted. */
   removeTrackedCompany(careersUrl: string): boolean {
     const info = this.db

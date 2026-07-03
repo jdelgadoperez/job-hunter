@@ -3,15 +3,50 @@ import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT, parseCli } from "./parse";
 
 describe("parseCli", () => {
   it("parses scan", () => {
-    expect(parseCli(["scan"])).toEqual({ kind: "scan", retryFailed: false });
+    expect(parseCli(["scan"])).toEqual({ kind: "scan", retryFailed: false, all: false });
   });
 
   it("parses scan with --retry-failed", () => {
-    expect(parseCli(["scan", "--retry-failed"])).toEqual({ kind: "scan", retryFailed: true });
+    expect(parseCli(["scan", "--retry-failed"])).toEqual({
+      kind: "scan",
+      retryFailed: true,
+      all: false,
+    });
   });
 
   it("parses bare scan with retryFailed defaulting to false", () => {
-    expect(parseCli(["scan"])).toEqual({ kind: "scan", retryFailed: false });
+    expect(parseCli(["scan"])).toEqual({ kind: "scan", retryFailed: false, all: false });
+  });
+
+  it("parses scan with --all", () => {
+    expect(parseCli(["scan", "--all"])).toEqual({ kind: "scan", retryFailed: false, all: true });
+  });
+
+  it("parses scan with --freshness-hours", () => {
+    expect(parseCli(["scan", "--freshness-hours", "6"])).toEqual({
+      kind: "scan",
+      retryFailed: false,
+      all: false,
+      freshnessHours: 6,
+    });
+    // 0 is valid (disables skipping).
+    expect(parseCli(["scan", "--freshness-hours", "0"])).toEqual({
+      kind: "scan",
+      retryFailed: false,
+      all: false,
+      freshnessHours: 0,
+    });
+  });
+
+  it("rejects an invalid --freshness-hours", () => {
+    expect(parseCli(["scan", "--freshness-hours", "abc"])).toMatchObject({
+      kind: "help",
+      error: expect.stringContaining("freshness-hours"),
+    });
+    expect(parseCli(["scan", "--freshness-hours=-3"])).toMatchObject({
+      kind: "help",
+      error: expect.stringContaining("freshness-hours"),
+    });
   });
 
   it("parses list with and without --min-score (defaulting to 50)", () => {

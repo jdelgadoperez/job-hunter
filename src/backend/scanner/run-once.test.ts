@@ -54,6 +54,7 @@ function fakeStore(): { store: ScanStore; saved: JobPosting[] } {
       saved.push(posting);
     },
     listLivePostingsNotSeen: () => [],
+    listFreshCompanyUrls: () => [],
     markPostingExpired: () => false,
     expireStalePostings: () => 0,
     finishScan: () => {},

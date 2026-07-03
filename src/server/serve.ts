@@ -90,14 +90,14 @@ export function startServer(opts: ServeOptions = {}): void {
   ensureDataDir();
   const repo = new Repository(resolveDbPath());
   const jobs = new ScanJobManager();
-  const runScan = createScanRunner(repo);
+  const runScanForScope = createScanRunner(repo);
   const retryFailedScan = createRetryFailedScanRunner(repo);
   const scoreJobs = new ScoreJobManager();
 
   const app = createApp({
     repo,
     jobs,
-    runScan,
+    runScanForScope,
     retryFailedScan,
     scoreJobs,
     createScoreRun: createScoreRun(repo),
@@ -113,7 +113,7 @@ export function startServer(opts: ServeOptions = {}): void {
   });
 
   mountDashboard(app);
-  scheduleRefresh(jobs, runScan, opts.refreshHours ?? DEFAULT_REFRESH_HOURS);
+  scheduleRefresh(jobs, runScanForScope, opts.refreshHours ?? DEFAULT_REFRESH_HOURS);
 
   const port = opts.port ?? DEFAULT_PORT;
   // Bind to loopback only: this is an unauthenticated local-first dashboard, so it must not be
@@ -141,11 +141,16 @@ export function startServer(opts: ServeOptions = {}): void {
  * manager is single-flight, so a tick that lands while a scan is running is a no-op. A
  * non-positive interval disables the scheduler entirely.
  */
-function scheduleRefresh(jobs: ScanJobManager, runScan: ScanRunner, hours: number): void {
+function scheduleRefresh(
+  jobs: ScanJobManager,
+  runScanForScope: (scope: "full" | "incremental") => ScanRunner,
+  hours: number,
+): void {
   if (!Number.isFinite(hours) || hours <= 0) return;
   const intervalMs = hours * 60 * 60 * 1000;
   const timer = setInterval(() => {
-    if (!jobs.isRunning()) jobs.start(runScan);
+    // Routine background refresh is incremental — don't re-crawl the whole directory each tick.
+    if (!jobs.isRunning()) jobs.start(runScanForScope("incremental"));
   }, intervalMs);
   // Don't let the scheduler alone keep the process alive (the listener already does).
   timer.unref();

@@ -33,6 +33,9 @@ export type DiscoverDeps = {
   sources?: LeadSource[];
   /** Normalized careers URLs to exclude from the retry pass (still attempted on the main pass). */
   skipRetryFor?: Set<string>;
+  /** Normalized careers URLs to skip among DIRECTORY leads (an incremental scan's fresh companies).
+   *  Tracked companies are never skipped. */
+  skipCareersUrls?: Set<string>;
 };
 
 export type DiscoverResult = {
@@ -90,8 +93,15 @@ async function collectLeads(
     categories: [],
   }));
 
+  // An incremental scan skips directory companies crawled recently. Applied to SOURCE leads only —
+  // tracked companies are always crawled (a user who just added one expects it scanned now).
+  const skip = deps.skipCareersUrls;
+  const keptSourceLeads = skip
+    ? sourceLeads.filter((lead) => !skip.has(normalizeCareersUrl(lead.careersUrl)))
+    : sourceLeads;
+
   const byUrl = new Map<string, CompanyLead>();
-  for (const lead of [...sourceLeads, ...trackedLeads]) {
+  for (const lead of [...keptSourceLeads, ...trackedLeads]) {
     const key = normalizeCareersUrl(lead.careersUrl);
     if (!byUrl.has(key)) byUrl.set(key, lead);
   }

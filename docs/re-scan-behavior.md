@@ -12,14 +12,20 @@ re-scanning never re-charges your API budget.
 
 ## The short version
 
-- A scan is **always the same pipeline** — there is no separate "first scan" vs. "re-scan" code
-  path. The difference is entirely in what the diff against the baseline produces.
-- A scan is recorded as an **incremental unit** (a row in the `scans` table). Each posting and
-  company remembers the scan that last saw it, which is how the tool computes "new", "gone", and
-  "stale".
-- **Every live posting is heuristic-re-scored on every scan** — the free offline scorer, so a re-scan
-  costs only CPU. LLM scoring is **not** part of `scan`; it's the separate `score` command, which
-  skips postings it already LLM-scored (unless `--rescore`), so it never silently re-charges.
+- By default a re-scan is **incremental**: it skips directory companies scanned within the freshness
+  window (`scanFreshnessHours`, default 24h) and crawls only the rest. Companies you track yourself
+  are always crawled. A **full** scan (`scan --all`, the dashboard's **Rescan all**, or
+  `scanFreshnessHours = 0`) re-visits every company. See
+  [Incremental scans and the freshness window](#incremental-scans-and-the-freshness-window) below —
+  the full pipeline (diff, liveness, expiry) runs only on a full scan.
+- A scan is recorded as a **unit** (a row in the `scans` table) tagged with its scope (`full` /
+  `incremental` / `retry`). Each posting and company remembers the scan that last saw it, which is how
+  the tool computes "new", "gone", and "stale".
+- **Every live posting from a crawled company is heuristic-re-scored on every scan** — the free
+  offline scorer, so a re-scan costs only CPU. (An incremental scan doesn't crawl fresh companies, so
+  their postings aren't re-scored that run.) LLM scoring is **not** part of `scan`; it's the separate
+  `score` command, which skips postings it already LLM-scored (unless `--rescore`), so it never
+  silently re-charges.
 - Postings that **weren't seen this run** are re-checked for liveness and expired — immediately if
   confirmed gone, otherwise after they've been missing for two or more scans.
 - A posting that **reappears after being expired is revived** automatically.
@@ -44,9 +50,36 @@ flowchart TD
     warn -.-> diff
 ```
 
-The discover and score phases treat the baseline as irrelevant — they fetch and score whatever is
-live right now. The interesting re-scan behavior is in the **diff**, the **liveness re-check**, and
-the **stale-miss sweep**, which all compare "this run" against "what the baseline remembered".
+On a **full** scan the discover and score phases treat the baseline as irrelevant — they fetch and
+score whatever is live right now. (An **incremental** scan is the exception: discovery consults each
+company's `last_seen_at` and skips those still inside the freshness window — see the next section.)
+The interesting re-scan behavior is in the **diff**, the **liveness re-check**, and the **stale-miss
+sweep**, which all compare "this run" against "what the baseline remembered".
+
+## Incremental scans and the freshness window
+
+By default `scan` runs **incrementally**: before crawling, it skips every **directory** company whose
+`last_seen_at` is within the freshness window (the `scanFreshnessHours` setting, default **24 hours**),
+crawling only the companies that have gone stale. This keeps routine scans fast when most of the
+directory hasn't changed. Companies you **track yourself are always crawled**, freshness ignored — a
+company you just added is scanned now.
+
+Forcing a full re-visit:
+
+- **CLI** — `scan --all` (ignore the window entirely) or `scan --freshness-hours N` (override the
+  window for that run; `0` rescans everything).
+- **Dashboard** — tick **Rescan all** beside **Scan now**.
+- **Setting** — `scanFreshnessHours = 0` makes every normal scan a full scan.
+
+An incremental scan skips only the **crawl** for fresh companies — it does **not** run the directory
+diff, the liveness re-check, or the stale-miss sweep. That's deliberate and load-bearing: those phases
+compare "seen this run" against the baseline, so running them on a scan that intentionally didn't
+visit most companies would wrongly flag every skipped-but-healthy company as "gone" and expire its
+live postings. Instead, an incremental scan is recorded with scope `incremental`, and expiry counts
+only `full` scans toward the staleness clock — so **a skipped company's postings are never expired for
+not being seen** on an incremental run. The scheduled auto-refresh runs incrementally for the same
+reason; run a full scan periodically (or on demand) to reconcile the directory diff and expire roles
+that have genuinely closed.
 
 ## How companies diff against the baseline
 

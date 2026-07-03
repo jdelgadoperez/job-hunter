@@ -1159,3 +1159,40 @@ describe("search filter", () => {
     repo.close();
   });
 });
+
+describe("listFreshCompanyUrls", () => {
+  it("returns companies scanned within the window and excludes stale ones; empty when hours<=0", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jobhunter-fresh-"));
+    const dbPath = join(dir, "fresh.db");
+    try {
+      // Construct once so migrate() creates the schema, then seed rows directly on a raw handle.
+      new Repository(dbPath);
+      const raw = new Database(dbPath);
+      // A company scanned "now" (fresh) and one scanned 48h ago (stale).
+      raw
+        .prepare(
+          "INSERT INTO companies (careers_url, name, first_seen_scan, last_seen_scan, last_seen_at) " +
+            "VALUES (?, ?, 1, 1, datetime('now'))",
+        )
+        .run("https://fresh.co/careers", "Fresh Co");
+      raw
+        .prepare(
+          "INSERT INTO companies (careers_url, name, first_seen_scan, last_seen_scan, last_seen_at) " +
+            "VALUES (?, ?, 1, 1, datetime('now', '-48 hours'))",
+        )
+        .run("https://stale.co/careers", "Stale Co");
+      raw.close();
+
+      // Re-open so the repo reads the seeded rows.
+      const repo2 = new Repository(dbPath);
+      const fresh = repo2.listFreshCompanyUrls(24);
+      expect(fresh).toContain("https://fresh.co/careers");
+      expect(fresh).not.toContain("https://stale.co/careers");
+
+      // hours<=0 disables skipping entirely.
+      expect(repo2.listFreshCompanyUrls(0)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

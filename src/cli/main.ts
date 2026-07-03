@@ -16,6 +16,7 @@ import {
   resolveApiKey,
   resolveHomeCountry,
   resolveProvider,
+  resolveScanFreshnessHours,
   resolveScorerModel,
   settingsWithEnvKey,
 } from "@app/matching/resolve-settings";
@@ -51,10 +52,16 @@ export type ScoreCliOptions = {
   dryRun: boolean;
 };
 
+export type ScanCliOptions = {
+  retryFailed: boolean;
+  all: boolean;
+  freshnessHours?: number;
+};
+
 export async function runScanCommand(
   repo: Repository,
   log: Logger,
-  retryFailed: boolean,
+  opts: ScanCliOptions,
 ): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
@@ -65,7 +72,7 @@ export async function runScanCommand(
 
   let trackedCompanies = repo.listTrackedCompanies();
   let sources: DiscoverDeps["sources"] | undefined;
-  if (retryFailed) {
+  if (opts.retryFailed) {
     const needsAttention = repo.listNeedsAttention();
     if (needsAttention.length === 0) {
       log(style.dim("Nothing needs attention — every company scanned cleanly recently."));
@@ -85,7 +92,12 @@ export async function runScanCommand(
   const fetcher = new HttpFetcher();
   // Hybrid remote mode when a feed is configured: pull the shared feed + crawl only tracked companies.
   const feed = resolvePostingFeed(repo, fetcher);
-  const scanScope: ScanScope | undefined = retryFailed ? "retry" : undefined;
+  const settings = settingsWithEnvKey(repo);
+  const scanScope: ScanScope = opts.retryFailed ? "retry" : opts.all ? "full" : "incremental";
+  const freshnessHours =
+    scanScope === "incremental"
+      ? (opts.freshnessHours ?? resolveScanFreshnessHours(settings))
+      : undefined;
 
   const result = await runScan(
     {
@@ -93,7 +105,8 @@ export async function runScanCommand(
       profile,
       scorer,
       ...(feed ? { feed } : {}),
-      ...(scanScope ? { scope: scanScope } : {}),
+      scope: scanScope,
+      ...(freshnessHours !== undefined ? { freshnessHours } : {}),
       // Live status so a scan is never silent: directory read, per-company, scoring.
       // Dimmed as secondary chatter — the final summary stands out in full color.
       onProgress: (event) => log(style.dim(formatProgress(event))),
@@ -103,7 +116,7 @@ export async function runScanCommand(
         sharedViewReader: new PlaywrightSharedViewReader(),
         shareUrl: resolveShareUrl(),
         trackedCompanies,
-        settings: settingsWithEnvKey(repo),
+        settings,
         ...(sources ? { sources } : {}),
       },
     },
@@ -254,7 +267,13 @@ export async function main(): Promise<void> {
         });
         break;
       case "scan":
-        await runScanCommand(repo, log, command.retryFailed);
+        await runScanCommand(repo, log, {
+          retryFailed: command.retryFailed,
+          all: command.all,
+          ...(command.freshnessHours !== undefined
+            ? { freshnessHours: command.freshnessHours }
+            : {}),
+        });
         break;
       case "score":
         await runScoreCommand(

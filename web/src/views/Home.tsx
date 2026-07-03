@@ -50,6 +50,7 @@ export function Home() {
 
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [rescanAll, setRescanAll] = useState(false);
 
   function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -119,7 +120,7 @@ export function Home() {
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-fg">2 · Scan for jobs</h2>
           <Button
-            onClick={() => startScan.mutate()}
+            onClick={() => startScan.mutate(rescanAll ? "full" : "incremental")}
             disabled={running || scoring || startScan.isPending}
           >
             {running ? "Scanning…" : "Scan now"}
@@ -127,9 +128,22 @@ export function Home() {
         </div>
         <p className="mt-1 text-xs text-faint">
           Find open roles from the stillhiring.today directory and your tracked companies, then give
-          each a fast, free keyword score against your resume. Free and safe to re-run often — deep-
-          scoring with Claude (step 3) is the paid, sharper pass on top of these results.
+          each a fast, free keyword score against your resume. Skips companies checked recently —
+          tick “Rescan all” to re-visit every company now.
         </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="flex items-center gap-1 text-sm text-muted">
+            <input
+              type="checkbox"
+              className="control"
+              checked={rescanAll}
+              onChange={(e) => setRescanAll(e.target.checked)}
+              disabled={running || scoring || startScan.isPending}
+            />
+            Rescan all
+          </label>
+        </div>
 
         {running ? (
           <div className="mt-3" aria-live="polite">

@@ -10,6 +10,7 @@ import {
   HOME_COUNTRY_SETTING,
   MODEL_SETTING,
   PROVIDER_SETTING,
+  SCAN_FRESHNESS_SETTING,
   THE_MUSE_KEY_SETTING,
 } from "@app/matching/settings-keys";
 import { errorMessage } from "@app/net/error-message";
@@ -32,6 +33,7 @@ function readSettings(repo: ServerDeps["repo"]) {
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
     homeCountry: repo.getSetting(HOME_COUNTRY_SETTING) ?? null,
+    scanFreshnessHours: repo.getSetting(SCAN_FRESHNESS_SETTING) ?? null,
     hasTheMuseKey: Boolean(repo.getSetting(THE_MUSE_KEY_SETTING)?.trim()),
     // Remote feed: the URL is shown back (not secret); the anon key is write-only (presence only).
     feedUrl: repo.getSetting(FEED_URL_SETTING) ?? null,
@@ -47,6 +49,7 @@ const WRITABLE_SETTINGS: Record<string, string> = {
   scorerModel: MODEL_SETTING,
   scorerProvider: PROVIDER_SETTING,
   homeCountry: HOME_COUNTRY_SETTING,
+  scanFreshnessHours: SCAN_FRESHNESS_SETTING,
   theMuseApiKey: THE_MUSE_KEY_SETTING,
   feedUrl: FEED_URL_SETTING,
   feedKey: FEED_KEY_SETTING,
@@ -79,7 +82,7 @@ export function createApp(deps: ServerDeps): Hono {
   const {
     repo,
     jobs,
-    runScan,
+    runScanForScope,
     retryFailedScan,
     scoreJobs,
     createScoreRun,
@@ -286,8 +289,9 @@ export function createApp(deps: ServerDeps): Hono {
 
   // Start a background scan (single-flight). 202 when started, 409 if one is already running.
   // Either way the body is the current job status, so the client can begin polling immediately.
-  app.post("/api/scan", (c) => {
-    const started = jobs.start(runScan);
+  app.post("/api/scan", async (c) => {
+    const scope = await parseScanScope(c);
+    const started = jobs.start(runScanForScope(scope));
     return c.json(jobs.getStatus(), started ? 202 : 409);
   });
 
@@ -352,4 +356,14 @@ async function parseScoreOptions(c: {
   const limit =
     Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : DEFAULT_SCORE_LIMIT;
   return { remoteOnly, limit, rescore };
+}
+
+/** Parse the scan scope from the request body. Defaults to `"incremental"`; only `"full"` overrides
+ *  it. A malformed body or unknown value uses the default. */
+async function parseScanScope(c: {
+  req: { json: () => Promise<unknown> };
+}): Promise<"full" | "incremental"> {
+  const body = await c.req.json().catch(() => null);
+  const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  return record.scope === "full" ? "full" : "incremental";
 }
