@@ -4,7 +4,13 @@ import {
   type LlmProviderConfig,
   type LlmProviderId,
 } from "./llm-providers";
-import { ANTHROPIC_KEY_SETTING, MODEL_SETTING, PROVIDER_SETTING } from "./settings-keys";
+import { parseCountry } from "./location-filter";
+import {
+  ANTHROPIC_KEY_SETTING,
+  HOME_COUNTRY_SETTING,
+  MODEL_SETTING,
+  PROVIDER_SETTING,
+} from "./settings-keys";
 
 // Re-exported so existing importers (and tests) can keep reaching these via resolve-settings.
 export { MODEL_SETTING, PROVIDER_SETTING } from "./settings-keys";
@@ -59,4 +65,18 @@ export function resolveApiKey(
 export function resolveScorerModel(settings: SettingsReader, provider: LlmProviderConfig): string {
   const model = settings.getSetting(MODEL_SETTING)?.trim();
   return model ? model : provider.defaultModel;
+}
+
+/**
+ * The user's home country label, or undefined when unset/blank (feature off). Canonicalizes a
+ * free-text entry ("United States" / "USA" / "us") to the same label postings resolve to ("US") so
+ * the country comparison in `isOffCountryNonStarter` matches — otherwise a user's own domestic
+ * on-site roles would be wrongly excluded. Falls back to the trimmed raw value when `parseCountry`
+ * can't resolve it: an unrecognized entry simply won't match any posting's country rather than
+ * being dropped.
+ */
+export function resolveHomeCountry(settings: SettingsReader): string | undefined {
+  const value = settings.getSetting(HOME_COUNTRY_SETTING)?.trim();
+  if (!value) return undefined;
+  return parseCountry(value) ?? value;
 }

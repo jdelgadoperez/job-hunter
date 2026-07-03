@@ -26,6 +26,7 @@ function fakeScoreResult(overrides: Partial<ScoreResult> = {}): ScoreResult {
       triageTitles: 0,
       deepScored: 0,
       remotePenalized: 0,
+      locationPenalized: 0,
     },
     estimate: {
       triageTitles: 0,
@@ -410,11 +411,28 @@ describe("settings", () => {
       hasAnthropicKey: true,
       scorerModel: null,
       scorerProvider: null,
+      homeCountry: null,
       hasTheMuseKey: false,
       feedUrl: null,
       hasFeedKey: false,
     });
     expect(JSON.stringify(body)).not.toContain("sk-secret");
+  });
+
+  it("stores and echoes back the home country", async () => {
+    const res = await makeApp().request("/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ homeCountry: "US" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await json<{ homeCountry: string | null }>(res);
+    expect(body.homeCountry).toBe("US");
+
+    const getRes = await makeApp().request("/api/settings");
+    expect(await json<{ homeCountry: string | null }>(getRes)).toMatchObject({
+      homeCountry: "US",
+    });
   });
 
   it("stores the feed URL (shown back) and the feed key (write-only, presence only)", async () => {

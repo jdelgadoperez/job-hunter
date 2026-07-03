@@ -93,6 +93,7 @@ const SettingsViewSchema = z.object({
   hasAnthropicKey: z.boolean(),
   scorerModel: z.string().nullable(),
   scorerProvider: z.string().nullable(),
+  homeCountry: z.string().nullable(),
   hasTheMuseKey: z.boolean(),
   feedUrl: z.string().nullable(),
   hasFeedKey: z.boolean(),
@@ -105,6 +106,7 @@ export type SettingsUpdate = Partial<{
   anthropicApiKey: string;
   scorerModel: string;
   scorerProvider: string;
+  homeCountry: string;
   theMuseApiKey: string;
   feedUrl: string;
   feedKey: string;

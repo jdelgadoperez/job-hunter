@@ -51,6 +51,7 @@ function mockFetch(bodies: Bodies) {
             hasAnthropicKey: bodies.settings?.hasAnthropicKey ?? false,
             scorerModel: null,
             scorerProvider: null,
+            homeCountry: null,
             hasTheMuseKey: false,
             feedUrl: null,
             hasFeedKey: false,

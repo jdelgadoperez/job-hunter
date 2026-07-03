@@ -15,6 +15,7 @@ function counts(overrides: Partial<ScoreStageCounts> = {}): ScoreStageCounts {
     triageTitles: 0,
     deepScored: 0,
     remotePenalized: 0,
+    locationPenalized: 0,
     ...overrides,
   };
 }

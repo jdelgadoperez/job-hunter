@@ -42,6 +42,7 @@ const AshbyJob = z
     descriptionPlain: z.string().optional(),
     location: z.string().optional(),
     isRemote: z.boolean().optional(),
+    workplaceType: z.string().optional(),
   })
   .passthrough();
 

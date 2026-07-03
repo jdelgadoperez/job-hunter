@@ -8,10 +8,13 @@ import type { JobPosting, Scorer, SkillProfile, Warning } from "@app/domain/type
 import { detectLiveness } from "@app/freshness/detect-liveness";
 import { fetchLivenessSignalsForBoard } from "@app/freshness/fetch-liveness";
 import { parseCountry } from "@app/matching/location-filter";
+import { resolveHomeCountry } from "@app/matching/resolve-settings";
 import type { ScoreOutcome } from "@app/matching/score-run";
+import { HOME_COUNTRY_SETTING } from "@app/matching/settings-keys";
 import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
 import { buildProfile } from "@app/profile/build-profile";
+import { detectHomeCountry } from "@app/profile/detect-home-country";
 import type { CompanyRef, Repository } from "@app/storage/repository";
 import pLimit from "p-limit";
 import { scoreBadge, style } from "./style";
@@ -66,6 +69,8 @@ export async function runProfile(
     dictionary: dictionary.length > 0 ? dictionary : undefined,
   });
   deps.repo.saveProfile(profile);
+  const detected = detectHomeCountry(resumeText, resolveHomeCountry(deps.repo));
+  if (detected !== undefined) deps.repo.setSetting(HOME_COUNTRY_SETTING, detected);
   log(
     style.success(`Saved profile: ${profile.skills.length} skill(s) extracted from ${resumePath}.`),
   );

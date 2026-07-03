@@ -4,10 +4,12 @@ import {
   MODEL_SETTING,
   PROVIDER_SETTING,
   resolveApiKey,
+  resolveHomeCountry,
   resolveProvider,
   resolveScorerModel,
   type SettingsReader,
 } from "./resolve-settings";
+import { HOME_COUNTRY_SETTING } from "./settings-keys";
 
 function reader(values: Record<string, string>): SettingsReader {
   return { getSetting: (key) => values[key] };
@@ -54,6 +56,30 @@ describe("resolveScorerModel", () => {
 
   it("returns the provider default when unset", () => {
     expect(resolveScorerModel(reader({}), provider)).toBe(provider.defaultModel);
+  });
+});
+
+describe("resolveHomeCountry", () => {
+  it("returns undefined when unset", () => {
+    expect(resolveHomeCountry(reader({}))).toBeUndefined();
+  });
+
+  it("returns the trimmed stored value", () => {
+    expect(resolveHomeCountry(reader({ [HOME_COUNTRY_SETTING]: " US " }))).toBe("US");
+  });
+
+  it("returns undefined for a blank value", () => {
+    expect(resolveHomeCountry(reader({ [HOME_COUNTRY_SETTING]: "   " }))).toBeUndefined();
+  });
+
+  it("canonicalizes a free-text country name to the label postings resolve to", () => {
+    expect(resolveHomeCountry(reader({ [HOME_COUNTRY_SETTING]: "United States" }))).toBe("US");
+    expect(resolveHomeCountry(reader({ [HOME_COUNTRY_SETTING]: "usa" }))).toBe("US");
+    expect(resolveHomeCountry(reader({ [HOME_COUNTRY_SETTING]: "united kingdom" }))).toBe("UK");
+  });
+
+  it("falls back to the trimmed raw value when the country can't be canonicalized", () => {
+    expect(resolveHomeCountry(reader({ [HOME_COUNTRY_SETTING]: " Freedonia " }))).toBe("Freedonia");
   });
 });
 

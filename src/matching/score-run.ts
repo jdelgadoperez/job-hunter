@@ -6,6 +6,7 @@ import pLimit from "p-limit";
 import { type CostEstimate, estimateCost } from "./cost-estimate";
 import { applyRemotePenalty } from "./heuristic-scorer";
 import type { LlmTriager } from "./llm-triager";
+import { isOffCountryNonStarter } from "./location-filter";
 import { resolvePostingRemote } from "./remote-filter";
 import type { TriageItem } from "./triage-prompt";
 import { isUsageLimitError } from "./usage-limit-error";
@@ -26,6 +27,8 @@ export type ScoreOptions = {
   dryRun: boolean;
   batchSize: number;
   cost: { perTriageTitleUsd: number; perDeepScoreUsd: number };
+  // When set, known-foreign non-remote roles are excluded from the LLM and penalized.
+  homeCountry?: string;
 };
 
 export type ScoreStageCounts = {
@@ -38,6 +41,8 @@ export type ScoreStageCounts = {
   deepScored: number;
   /** Non-remote postings saved a penalized heuristic score this run (only under remoteOnly). */
   remotePenalized: number;
+  /** Known-foreign non-remote postings saved a penalized heuristic score this run (only with homeCountry). */
+  locationPenalized: number;
 };
 
 export type ScoreOutcome = {
@@ -99,15 +104,27 @@ export async function runScoreRun(deps: {
     nonRemotePenalized = [];
   }
 
+  // Second, independent gate: with a home country set, roles that are KNOWN-foreign and not remote
+  // are non-starters — keep them out of the LLM (saves tokens) and penalize them like non-remote
+  // roles. Derived from afterRemote, so a role already excluded by remoteOnly can't also land here
+  // (no double penalty by construction). location tag takes precedence when both would apply.
+  const offCountry = options.homeCountry
+    ? afterRemote.filter((c) => isOffCountryNonStarter(c.posting, options.homeCountry))
+    : [];
+  const inCountryOrKept = options.homeCountry
+    ? afterRemote.filter((c) => !isOffCountryNonStarter(c.posting, options.homeCountry))
+    : afterRemote;
+
   // Drop already-LLM-scored postings BEFORE applying the cap (unless --rescore). Order matters:
   // the query returns rows best-heuristic-first, and already-scored rows cluster at the top (they
   // were the best matches, scored on a prior run). Capping first would spend the limit re-covering
   // that already-scored top slice, so a larger --limit could score FEWER new postings. Filtering
   // first makes `limit` mean "up to N postings not yet scored", which is what the user expects.
   const notYetScored = options.rescore
-    ? afterRemote
-    : afterRemote.filter((c) => !c.alreadyLlmScored);
-  const alreadyScoredSkipped = afterRemote.length - notYetScored.length;
+    ? inCountryOrKept
+    : inCountryOrKept.filter((c) => !c.alreadyLlmScored);
+  // Post-location-filter: off-country roles are penalized (below), not counted as skipped here.
+  const alreadyScoredSkipped = inCountryOrKept.length - notYetScored.length;
   const eligible = notYetScored.slice(0, options.limit);
 
   // Determine which non-remote postings get a penalized heuristic score (the actual save happens
@@ -122,6 +139,13 @@ export async function runScoreRun(deps: {
     .filter((c) => options.rescore || !c.alreadyLlmScored)
     .slice(0, options.limit);
 
+  // Same shape as nonRemoteToPenalize, but for known-foreign non-remote roles. Idempotency is
+  // guarded on the LOCATION tag so repeated runs don't compound the penalty.
+  const offCountryToPenalize = offCountry
+    .filter((c) => c.scorer !== "heuristic-location-penalized")
+    .filter((c) => options.rescore || !c.alreadyLlmScored)
+    .slice(0, options.limit);
+
   const counts: ScoreStageCounts = {
     inDb,
     afterRemote: afterRemote.length,
@@ -132,6 +156,7 @@ export async function runScoreRun(deps: {
     triageTitles: eligible.length,
     deepScored: 0,
     remotePenalized: nonRemoteToPenalize.length,
+    locationPenalized: offCountryToPenalize.length,
   };
 
   const estimate = estimateCost({
@@ -149,6 +174,14 @@ export async function runScoreRun(deps: {
 
   for (const c of nonRemoteToPenalize) {
     repo.saveMatchResult(c.posting.id, applyRemotePenalty(c.current), "heuristic-remote-penalized");
+  }
+
+  for (const c of offCountryToPenalize) {
+    repo.saveMatchResult(
+      c.posting.id,
+      applyRemotePenalty(c.current),
+      "heuristic-location-penalized",
+    );
   }
 
   // Stage 4 — batch title triage (fail-open inside the triager for ordinary errors).

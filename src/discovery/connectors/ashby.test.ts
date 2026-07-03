@@ -22,7 +22,7 @@ describe("AshbyConnector", () => {
     if (!result.ok) {
       throw new Error("expected ok result");
     }
-    expect(result.postings).toHaveLength(2);
+    expect(result.postings).toHaveLength(3);
     const [first] = result.postings;
     expect(first?.source).toBe("ashby");
     expect(first?.company).toBe("acme");
@@ -34,6 +34,8 @@ describe("AshbyConnector", () => {
       makePostingId({ company: "acme", title: first?.title ?? "", url: first?.url ?? "" }),
     );
     expect(first?.fetchedAt).toBeInstanceOf(Date);
+    const hybrid = result.postings.find((p) => p.title === "Data Analyst");
+    expect(hybrid?.remote).toBe(false);
   });
 
   it("fails (not empty) for a malformed feed", async () => {
@@ -126,5 +128,71 @@ describe("AshbyConnector — remote field", () => {
     const result = await new AshbyConnector().fetchPostings("acme", fetcher);
     if (!result.ok) throw new Error("expected ok");
     expect(result.postings[0]?.remote).toBeUndefined();
+  });
+
+  it("maps workplaceType Hybrid to remote=false even when isRemote=true", async () => {
+    const feed = {
+      jobs: [
+        {
+          id: "ah1",
+          title: "Hybrid Engineer",
+          jobUrl: "https://jobs.ashbyhq.com/acme/ah1",
+          descriptionPlain: "desc",
+          location: "Austin, TX (Hybrid)",
+          isRemote: true,
+          workplaceType: "Hybrid",
+        },
+      ],
+    };
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: { statusCode: 200, finalUrl: ENDPOINT, bodyText: JSON.stringify(feed) },
+    });
+    const result = await new AshbyConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(false);
+  });
+
+  it("maps workplaceType Remote to remote=true", async () => {
+    const feed = {
+      jobs: [
+        {
+          id: "ar2",
+          title: "Remote Engineer",
+          jobUrl: "https://jobs.ashbyhq.com/acme/ar2",
+          descriptionPlain: "desc",
+          location: "Remote",
+          isRemote: true,
+          workplaceType: "Remote",
+        },
+      ],
+    };
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: { statusCode: 200, finalUrl: ENDPOINT, bodyText: JSON.stringify(feed) },
+    });
+    const result = await new AshbyConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(true);
+  });
+
+  it("maps workplaceType OnSite to remote=false", async () => {
+    const feed = {
+      jobs: [
+        {
+          id: "ao2",
+          title: "Onsite Engineer",
+          jobUrl: "https://jobs.ashbyhq.com/acme/ao2",
+          descriptionPlain: "desc",
+          location: "Austin, TX (On-site)",
+          isRemote: false,
+          workplaceType: "OnSite",
+        },
+      ],
+    };
+    const fetcher = new FakeFetcher({
+      [ENDPOINT]: { statusCode: 200, finalUrl: ENDPOINT, bodyText: JSON.stringify(feed) },
+    });
+    const result = await new AshbyConnector().fetchPostings("acme", fetcher);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.postings[0]?.remote).toBe(false);
   });
 });

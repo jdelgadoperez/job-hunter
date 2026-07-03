@@ -1,17 +1,19 @@
 import { isUnscrapableHost } from "@app/discovery/unscrapable";
 import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
-import { settingsWithEnvKey } from "@app/matching/resolve-settings";
+import { resolveHomeCountry, settingsWithEnvKey } from "@app/matching/resolve-settings";
 import { DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import {
   ANTHROPIC_KEY_SETTING,
   FEED_KEY_SETTING,
   FEED_URL_SETTING,
+  HOME_COUNTRY_SETTING,
   MODEL_SETTING,
   PROVIDER_SETTING,
   THE_MUSE_KEY_SETTING,
 } from "@app/matching/settings-keys";
 import { errorMessage } from "@app/net/error-message";
+import { detectHomeCountry } from "@app/profile/detect-home-country";
 import { readResumeBuffer } from "@app/profile/read-resume";
 import { Hono } from "hono";
 import { NoApiKeyError } from "./score-runner";
@@ -29,6 +31,7 @@ function readSettings(repo: ServerDeps["repo"]) {
     hasAnthropicKey: Boolean(settingsWithEnvKey(repo).getSetting(ANTHROPIC_KEY_SETTING)?.trim()),
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
+    homeCountry: repo.getSetting(HOME_COUNTRY_SETTING) ?? null,
     hasTheMuseKey: Boolean(repo.getSetting(THE_MUSE_KEY_SETTING)?.trim()),
     // Remote feed: the URL is shown back (not secret); the anon key is write-only (presence only).
     feedUrl: repo.getSetting(FEED_URL_SETTING) ?? null,
@@ -43,6 +46,7 @@ const WRITABLE_SETTINGS: Record<string, string> = {
   anthropicApiKey: ANTHROPIC_KEY_SETTING,
   scorerModel: MODEL_SETTING,
   scorerProvider: PROVIDER_SETTING,
+  homeCountry: HOME_COUNTRY_SETTING,
   theMuseApiKey: THE_MUSE_KEY_SETTING,
   feedUrl: FEED_URL_SETTING,
   feedKey: FEED_KEY_SETTING,
@@ -232,6 +236,8 @@ export function createApp(deps: ServerDeps): Hono {
     }
     const profile = buildProfileFromText(resumeText);
     repo.saveProfile(profile);
+    const detected = detectHomeCountry(resumeText, resolveHomeCountry(repo));
+    if (detected !== undefined) repo.setSetting(HOME_COUNTRY_SETTING, detected);
     return c.json(profile);
   });
 

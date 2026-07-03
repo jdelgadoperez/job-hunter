@@ -13,6 +13,14 @@
       "jobUrl": "https://jobs.ashbyhq.com/acme/c2b8e1d3-bbbb-4b3c-8d4e-000000000002",
       "descriptionPlain": "Financial modeling and forecasting.",
       "location": "London, UK"
+    },
+    {
+      "title": "Data Analyst",
+      "jobUrl": "https://jobs.ashbyhq.com/acme/hybrid-1",
+      "descriptionPlain": "Hybrid role in Austin.",
+      "location": "Austin, TX (Hybrid)",
+      "isRemote": true,
+      "workplaceType": "Hybrid"
     }
   ]
 }

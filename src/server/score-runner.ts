@@ -6,6 +6,7 @@ import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import { DEFAULT_TRIAGE_BATCH_SIZE, LlmTriager } from "@app/matching/llm-triager";
 import {
   resolveApiKey,
+  resolveHomeCountry,
   resolveProvider,
   resolveScorerModel,
   settingsWithEnvKey,
@@ -49,6 +50,7 @@ async function runDeepScore(
   const apiKey = resolveApiKey(settings, provider);
   if (!apiKey) throw new NoApiKeyError();
   const model = resolveScorerModel(settings, provider);
+  const homeCountry = resolveHomeCountry(settings);
 
   const dictionary = repo.getSkillDictionary();
   const warnings: Warning[] = [];
@@ -81,6 +83,7 @@ async function runDeepScore(
       dryRun,
       batchSize: DEFAULT_TRIAGE_BATCH_SIZE,
       cost: provider.cost,
+      ...(homeCountry !== undefined ? { homeCountry } : {}),
     },
     onWarning: (warning) => warnings.push(warning),
     ...(onProgress ? { onProgress } : {}),
