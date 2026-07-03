@@ -24,6 +24,19 @@ describe("renderHelp", () => {
     expect(out).toContain("EXAMPLES");
   });
 
+  it("list help documents all its filter flags", () => {
+    const help = renderHelp("list");
+    for (const flag of [
+      "--min-score",
+      "--remote-only",
+      "--country",
+      "--only-applied",
+      "--include-applied",
+    ]) {
+      expect(help).toContain(flag);
+    }
+  });
+
   it("shows subcommands for track", () => {
     const out = renderHelp("track");
     expect(out).toContain("SUBCOMMANDS");
