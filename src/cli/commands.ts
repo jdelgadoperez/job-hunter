@@ -337,7 +337,13 @@ export async function runScan(deps: ScanDeps, log: Logger): Promise<ScanOutcome>
   await Promise.all(
     sourced.postings.map((posting) =>
       scoreLimit(async () => {
-        repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
+        try {
+          repo.saveMatchResult(posting.id, await deps.scorer.score(deps.profile, posting));
+        } catch (error) {
+          // Failures degrade, never crash: sourcing already committed; a single posting's scoring
+          // failure must not abort the scan (mirrors recordScanFailures below).
+          log(style.warn(`  ! Failed to score posting ${posting.id}: ${errorMessage(error)}`));
+        }
       }),
     ),
   );

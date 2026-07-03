@@ -10,6 +10,8 @@ type Bodies = {
   scanState?: string;
   scoreState?: string;
   preview?: unknown;
+  scanBody?: unknown;
+  scoreBody?: unknown;
 };
 
 function idleScan(state = "idle") {
@@ -31,6 +33,9 @@ function idleScore(state = "idle") {
   return {
     state,
     message: null,
+    current: null,
+    total: null,
+    recent: [],
     counts: null,
     estimate: null,
     abortedOnLimit: false,
@@ -59,9 +64,10 @@ function mockFetch(bodies: Bodies) {
           };
         }
         if (url.includes("/api/score/preview")) return bodies.preview;
-        if (url.includes("/api/score/status")) return idleScore(bodies.scoreState);
+        if (url.includes("/api/score/status"))
+          return bodies.scoreBody ?? idleScore(bodies.scoreState);
         if (url.includes("/api/score") && init?.method === "POST") return idleScore("running");
-        if (url.includes("/api/scan")) return idleScan(bodies.scanState);
+        if (url.includes("/api/scan")) return bodies.scanBody ?? idleScan(bodies.scanState);
         if (url.includes("/api/profile") || url.includes("/api/scans/latest")) return null;
         if (url.includes("/api/version"))
           return { version: "1.0.0", behind: null, updateAvailable: false };
@@ -82,6 +88,24 @@ function renderHome() {
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children);
   return render(<Home />, { wrapper });
+}
+
+function runningScanBody() {
+  return {
+    ...idleScan("running"),
+    message: "Scanning company 3 of 10…",
+    current: 3,
+    total: 10,
+  };
+}
+
+function runningScoreBody() {
+  return {
+    ...idleScore("running"),
+    message: "Scoring posting 5 of 20…",
+    current: 5,
+    total: 20,
+  };
 }
 
 afterEach(() => {
@@ -140,6 +164,54 @@ describe("Home deep-score card", () => {
   });
 });
 
+describe("DeepScoreCard spend gate", () => {
+  const previewBody = {
+    counts: {
+      inDb: 50,
+      afterRemote: 30,
+      afterHeuristic: 40,
+      afterCap: 30,
+      alreadyScoredSkipped: 0,
+      triageTitles: 30,
+      deepScored: 0,
+      remotePenalized: 0,
+    },
+    estimate: {
+      triageTitles: 30,
+      triageBatches: 1,
+      deepScores: 30,
+      triageUsd: 0.01,
+      deepScoreUsd: 0.29,
+      totalUsd: 0.3,
+    },
+  };
+
+  it("disables Deep-score until a preview has been run", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, preview: previewBody });
+    renderHome();
+
+    const deepScore = await screen.findByRole("button", { name: "Deep-score" });
+    expect(deepScore).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByText(/est\./i);
+    expect(screen.getByRole("button", { name: "Deep-score" })).toBeEnabled();
+  });
+
+  it("re-disables Deep-score and clears the estimate when an option changes after preview", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, preview: previewBody });
+    renderHome();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Preview" }));
+    await screen.findByText(/est\./i);
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /remote only/i }));
+
+    expect(screen.queryByText(/est\./i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Deep-score" })).toBeDisabled();
+  });
+});
+
 describe("Home scan panel — Rescan all toggle", () => {
   function findScanRequest() {
     return vi
@@ -177,5 +249,67 @@ describe("Home scan panel — Rescan all toggle", () => {
     await waitFor(() => expect(findScanRequest()).toBeDefined());
     const [, init] = findScanRequest() ?? [];
     expect(init?.body).toEqual(JSON.stringify({ scope: "full" }));
+  });
+});
+
+describe("Home scan panel — warning details", () => {
+  function doneScanBody(warnings: Array<{ source: string; message: string }>) {
+    return {
+      ...idleScan("done"),
+      message: "Scan complete",
+      finishedAt: "2026-06-30T00:00:00.000Z",
+      warnings,
+    };
+  }
+
+  it("expands warning details for a finished scan", async () => {
+    mockFetch({
+      settings: { hasAnthropicKey: true },
+      scanBody: doneScanBody([{ source: "Acme", message: "board 500" }]),
+    });
+    renderHome();
+
+    const summary = await screen.findByText(/1 warning\(s\)/i);
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+
+    await userEvent.click(summary);
+
+    expect(screen.getByText(/Acme/)).toBeInTheDocument();
+    expect(screen.getByText(/board 500/)).toBeInTheDocument();
+  });
+
+  it("shows no warning details block when a scan finishes clean", async () => {
+    mockFetch({
+      settings: { hasAnthropicKey: true },
+      scanBody: doneScanBody([]),
+    });
+    renderHome();
+
+    await screen.findByText(/Scan complete/i);
+    expect(screen.queryByText(/warning\(s\)/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Home progress live regions — aria-atomic", () => {
+  it("marks the scan progress live region atomic so message and count announce together", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, scanBody: runningScanBody() });
+    renderHome();
+
+    const region = await screen.findByText(/Scanning company 3 of 10/i);
+    const live = region.closest("[aria-live]");
+    expect(live).toHaveAttribute("aria-atomic", "true");
+  });
+
+  it("marks the score progress live region atomic so message and count announce together", async () => {
+    mockFetch({
+      settings: { hasAnthropicKey: true },
+      preview: null,
+      scoreBody: runningScoreBody(),
+    });
+    renderHome();
+
+    const region = await screen.findByText(/Scoring posting 5 of 20/i);
+    const live = region.closest("[aria-live]");
+    expect(live).toHaveAttribute("aria-atomic", "true");
   });
 });

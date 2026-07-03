@@ -2,6 +2,7 @@ import { makeCompanyId } from "@app/discovery/company-id";
 import type { PageRenderer } from "@app/discovery/connectors/browser";
 import type { DiscoverDeps } from "@app/discovery/discover";
 import { FakePostingFeed } from "@app/discovery/feed/posting-feed";
+import { makePostingId } from "@app/discovery/posting-id";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
 import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
@@ -316,6 +317,56 @@ describe("runScan + listMatches", () => {
     expect(repo.listScoredPostings(0)).toHaveLength(8); // and stored
     expect(scorer.maxInFlight).toBeGreaterThan(1); // actually concurrent
     expect(scorer.maxInFlight).toBeLessThanOrEqual(4); // but capped
+    repo.close();
+  });
+
+  it("degrades a scorer failure to a warning instead of aborting the scan", async () => {
+    const repo = newRepo();
+    const out = capture();
+    class ThrowingScorer implements Scorer {
+      async score(): Promise<MatchResult> {
+        throw new Error("LLM exploded");
+      }
+    }
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "We need TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    const result = await runScan(
+      {
+        repo,
+        profile,
+        scorer: new ThrowingScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      out.log,
+    );
+
+    // Sourcing still committed even though every posting failed to score.
+    expect(result.count).toBe(1);
+    expect(out.lines.some((line) => line.includes("Failed to score posting"))).toBe(true);
+    expect(out.lines.some((line) => line.includes("LLM exploded"))).toBe(true);
+    // Nothing got persisted for the failed posting, since saveMatchResult never ran.
+    expect(repo.listScoredPostings(0)).toHaveLength(0);
     repo.close();
   });
 
@@ -772,6 +823,19 @@ describe("runScan + listMatches", () => {
     // (c) no expiry under incremental — skipped companies keep their postings
     expect(expireCalls).toEqual([]);
     expect(result.expired).toBe(0);
+    // (d) DB-outcome check: the mechanism assertions above prove expiry wasn't *called*; this proves
+    // Fresh Co's posting (saved by the earlier full scan, never re-crawled here) is actually still
+    // present and unexpired in the DB — `listLivePostingsNotSeen` excludes expired rows and this scan
+    // never marked Fresh Co "seen", so the posting only survives here if the invariant truly held.
+    const freshPostingId = makePostingId({
+      company: "fresh",
+      title: "Engineer",
+      url: "https://boards.greenhouse.io/fresh/jobs/1",
+    });
+    const stillLive = repo
+      .listLivePostingsNotSeen(result.scanId)
+      .some((p) => p.id === freshPostingId);
+    expect(stillLive).toBe(true);
     repo.close();
   });
 

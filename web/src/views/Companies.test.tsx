@@ -178,3 +178,55 @@ describe("Companies needs-attention panel", () => {
     });
   });
 });
+
+describe("Companies remove confirm", () => {
+  it("removing a company requires a confirm click", async () => {
+    mockFetch({ companies: [{ careersUrl: "https://acme.co", name: "Acme" }] });
+    renderCompanies();
+
+    await screen.findByText("Acme");
+    await userEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+
+    // First click reveals a confirm; the untrack request has not fired yet.
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          (call) => String(call[0]).includes("/api/companies?url=") && call[1]?.method === "DELETE",
+        ),
+    ).toBe(false);
+
+    await userEvent.click(screen.getByRole("button", { name: /confirm/i }));
+
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(fetch)
+          .mock.calls.some(
+            (call) =>
+              String(call[0]).includes(
+                `/api/companies?url=${encodeURIComponent("https://acme.co")}`,
+              ) && call[1]?.method === "DELETE",
+          ),
+      ).toBe(true),
+    );
+  });
+
+  it("cancel resets the confirm state without removing", async () => {
+    mockFetch({ companies: [{ careersUrl: "https://acme.co", name: "Acme" }] });
+    renderCompanies();
+
+    await screen.findByText("Acme");
+    await userEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.getByRole("button", { name: /^remove$/i })).toBeInTheDocument();
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          (call) => String(call[0]).includes("/api/companies?url=") && call[1]?.method === "DELETE",
+        ),
+    ).toBe(false);
+  });
+});

@@ -1,5 +1,5 @@
 import { makeCompanyId } from "@app/discovery/company-id";
-import type { DirectoryDiff, ScanStore } from "@app/discovery/scan-store";
+import type { DirectoryDiff, ScanScope, ScanStore } from "@app/discovery/scan-store";
 import type { JobPosting } from "@app/domain/types";
 import type { CompanyRef } from "@app/storage/repository";
 import type { Sql } from "postgres";
@@ -26,6 +26,10 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
  * to the central store. Writes require the service-role connection (RLS is bypassed by it); the
  * client never uses this class (it reads the public feed via PostgREST).
  *
+ * Staleness (`expireStalePostings`) is `kind`-aware, matching SQLite: only `kind = 'full'` scans
+ * advance the expiry clock, so scoped `"retry"`/`"incremental"` scans never push an untouched
+ * posting toward expiry.
+ *
  * `bigint` columns (`scans.id`, `last_seen_scan`) come back as strings from the driver, so they are
  * coerced with `Number`. SQL execution is validated by the opt-in `smoke:postgres` script, not unit
  * tests; the pure row mapping is unit-tested in `postgres-mappers.test.ts`.
@@ -33,13 +37,18 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 export class PostgresScanStore implements ScanStore {
   constructor(private readonly sql: Sql) {}
 
-  async startScan(): Promise<number> {
+  async startScan(kind: ScanScope = "full"): Promise<number> {
     const rows = await this.sql<{ id: string }[]>`
-      INSERT INTO scans (started_at) VALUES (now()) RETURNING id`;
+      INSERT INTO scans (started_at, kind) VALUES (now(), ${kind}) RETURNING id`;
     return Number(rows[0]?.id);
   }
 
-  async recordDirectory(scanId: number, companies: CompanyRef[]): Promise<DirectoryDiff> {
+  async recordDirectory(
+    scanId: number,
+    companies: CompanyRef[],
+    options: { computeRemoved?: boolean } = {},
+  ): Promise<DirectoryDiff> {
+    const computeRemoved = options.computeRemoved ?? true;
     const existing = await this.sql<
       { careers_url: string; name: string | null; last_seen_scan: string }[]
     >`SELECT careers_url, name, last_seen_scan FROM companies`;
@@ -52,9 +61,10 @@ export class PostgresScanStore implements ScanStore {
     const prevScan = prev[0]?.id == null ? null : Number(prev[0].id);
     const isBaseline = existing.length === 0;
 
-    const newCompanies = isBaseline ? [] : companies.filter((c) => !existingUrls.has(c.careersUrl));
+    const newCompanies =
+      !computeRemoved || isBaseline ? [] : companies.filter((c) => !existingUrls.has(c.careersUrl));
     const removedCompanies =
-      isBaseline || prevScan === null
+      !computeRemoved || isBaseline || prevScan === null
         ? []
         : existing
             .filter((e) => Number(e.last_seen_scan) === prevScan && !currentUrls.has(e.careers_url))
@@ -192,7 +202,10 @@ export class PostgresScanStore implements ScanStore {
     const rows = await this.sql`
       UPDATE postings SET expired_at = now()
       WHERE expired_at IS NULL AND last_seen_scan IS NOT NULL
-        AND (${scanId} - last_seen_scan) >= ${staleAfter}
+        AND (
+          SELECT COUNT(*) FROM scans
+          WHERE kind = 'full' AND id > postings.last_seen_scan AND id <= ${scanId}
+        ) >= ${staleAfter}
       RETURNING id`;
     return rows.length;
   }

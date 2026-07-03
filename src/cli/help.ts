@@ -71,11 +71,25 @@ export const COMMANDS: CommandHelp[] = [
   },
   {
     name: "list",
-    invocation: "list [--min-score N]",
+    invocation:
+      "list [--min-score N] [--remote-only] [--country CC] [--only-applied] [--include-applied]",
     summary: "Show stored matches (default min score 50)",
-    details: "Prints stored matches, highest score first.",
-    options: [["--min-score N", "Only show matches scoring at least N (default 50)."]],
-    examples: ["job-hunter list", "job-hunter list --min-score 70"],
+    details:
+      "Prints stored matches, highest score first. Expired and dismissed postings are hidden.",
+    options: [
+      ["--min-score N", "Only show matches scoring at least N (default 50)."],
+      ["--remote-only", "Only show roles detected as remote."],
+      [
+        "--country CC",
+        "Only show roles in the given country, plus roles whose country couldn't be determined.",
+      ],
+      [
+        "--only-applied",
+        "Show only roles you've marked applied (including ones that have since expired).",
+      ],
+      ["--include-applied", "Also include applied roles, which are hidden by default."],
+    ],
+    examples: ["job-hunter list", "job-hunter list --min-score 70 --remote-only"],
   },
   {
     name: "serve",

@@ -1,5 +1,5 @@
 import { Globe, type LucideIcon, Star, TrendingUp, Users } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { ScoredPosting } from "../api";
 import { type CompanyLink, companyDisplayName, companyLinks } from "../company-links";
 import {
@@ -50,7 +50,10 @@ function CompanyLinksRow({ posting }: { posting: ScoredPosting["posting"] }) {
   );
 }
 
-function MatchCard({
+// Wrapped in memo so an optimistic save/dismiss/apply mutation on one card only re-renders that
+// card, not the whole list — React.memo compares incoming props, and only the touched posting's
+// `action`/`result` identity changes after a mutation.
+const MatchCard = memo(function MatchCard({
   posting,
   result,
   action,
@@ -65,7 +68,7 @@ function MatchCard({
   const showUnknownCountry = countryFilterActive && posting.country === undefined;
 
   return (
-    <Card className={expired ? "opacity-60" : ""}>
+    <Card className={expired ? "border-l-2 border-l-muted opacity-60" : ""}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <a
@@ -97,7 +100,13 @@ function MatchCard({
             </span>
           ) : null}
           {expired ? (
-            <span className="rounded-full bg-subtle px-2 py-0.5 text-xs text-muted">expired</span>
+            <span
+              role="note"
+              aria-label="This role has expired"
+              className="rounded-full border border-border bg-subtle px-2 py-0.5 text-xs text-muted"
+            >
+              <span aria-hidden="true">⊘</span> expired
+            </span>
           ) : null}
           <ScorePill score={result.score} />
         </div>
@@ -155,7 +164,7 @@ function MatchCard({
       </div>
     </Card>
   );
-}
+});
 
 export function Matches() {
   // Default to the "relevant" floor so the list leads with genuinely relevant matches.

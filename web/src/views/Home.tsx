@@ -16,13 +16,16 @@ import {
   useUploadResume,
 } from "../hooks";
 
-export function Home() {
+/** @param active Whether this tab is the one currently visible. When `false` (e.g. the user has
+ *  switched to another tab), status polling is suppressed while the view stays mounted and its
+ *  cached data stays readable — see the "Keep every tab mounted" comment in App.tsx. */
+export function Home({ active = true }: { active?: boolean } = {}) {
   const profile = useProfile();
   const upload = useUploadResume();
-  const scan = useScanStatus();
+  const scan = useScanStatus({ enabled: active });
   const startScan = useStartScan();
   const latestScan = useLatestScan();
-  const scoreStatus = useScoreStatus();
+  const scoreStatus = useScoreStatus({ enabled: active });
   const settings = useSettings();
   const qc = useQueryClient();
 
@@ -146,7 +149,7 @@ export function Home() {
         </div>
 
         {running ? (
-          <div className="mt-3" aria-live="polite">
+          <div className="mt-3" aria-live="polite" aria-atomic="true">
             <LiveStatus
               message={status?.message ?? "Working…"}
               meta={
@@ -169,10 +172,24 @@ export function Home() {
         ) : null}
 
         {status?.state === "done" ? (
-          <p className="mt-2 text-sm text-success">
-            {status.message} — see the Matches tab.
-            {status.warnings.length > 0 ? ` (${status.warnings.length} warning(s))` : ""}
-          </p>
+          <>
+            <p className="mt-2 text-sm text-success">{status.message} — see the Matches tab.</p>
+            {status.warnings.length > 0 ? (
+              <details className="mt-2 text-sm">
+                <summary className="cursor-pointer text-warning">
+                  {status.warnings.length} warning(s) — companies that didn't load
+                </summary>
+                <ul className="mt-1 list-disc pl-5 text-faint">
+                  {status.warnings.map((w) => (
+                    <li key={`${w.source}:${w.message}`}>
+                      {w.source ? `${w.source}: ` : ""}
+                      {w.message}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </>
         ) : null}
 
         {status?.state === "error" ? (
@@ -184,7 +201,11 @@ export function Home() {
         </p>
       </Card>
 
-      <DeepScoreCard hasKey={settings.data?.hasAnthropicKey ?? false} scanRunning={running} />
+      <DeepScoreCard
+        hasKey={settings.data?.hasAnthropicKey ?? false}
+        scanRunning={running}
+        active={active}
+      />
 
       {latestScan.data ? (
         <Card>
@@ -222,8 +243,16 @@ export function Home() {
  * a free dry-run showing the plan + estimated cost; the run spends real money, so it's gated behind
  * the preview.
  */
-function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: boolean }) {
-  const scoreStatus = useScoreStatus();
+function DeepScoreCard({
+  hasKey,
+  scanRunning,
+  active,
+}: {
+  hasKey: boolean;
+  scanRunning: boolean;
+  active: boolean;
+}) {
+  const scoreStatus = useScoreStatus({ enabled: active });
   const preview = useScorePreview();
   const startDeepScore = useStartDeepScore();
 
@@ -244,6 +273,10 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
   }
   function runDeepScore() {
     startDeepScore.mutate(options, { onSuccess: () => preview.reset() });
+  }
+  function changeOption<T>(setter: (value: T) => void, value: T) {
+    setter(value);
+    preview.reset(); // a prior estimate no longer describes the pending run
   }
 
   return (
@@ -267,7 +300,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
       </p>
 
       {running && scoreStatus.data ? (
-        <div className="mt-3" aria-live="polite">
+        <div className="mt-3" aria-live="polite" aria-atomic="true">
           <LiveStatus message={scoreStatus.data.message ?? "Scoring…"} />
           {scoreStatus.data.total ? (
             <ProgressBar current={scoreStatus.data.current ?? 0} total={scoreStatus.data.total} />
@@ -294,7 +327,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
                 type="checkbox"
                 className="control"
                 checked={remoteOnly}
-                onChange={(e) => setRemoteOnly(e.target.checked)}
+                onChange={(e) => changeOption(setRemoteOnly, e.target.checked)}
                 disabled={blocked}
               />
               Remote only
@@ -304,7 +337,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
                 type="checkbox"
                 className="control"
                 checked={rescore}
-                onChange={(e) => setRescore(e.target.checked)}
+                onChange={(e) => changeOption(setRescore, e.target.checked)}
                 disabled={blocked}
               />
               Re-score already-scored
@@ -315,7 +348,7 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
                 type="number"
                 min={1}
                 value={limit}
-                onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))}
+                onChange={(e) => changeOption(setLimit, Math.max(1, Number(e.target.value) || 1))}
                 disabled={blocked}
                 className="select ml-1 w-20"
               />
@@ -326,7 +359,10 @@ function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: 
             <Button variant="ghost" onClick={runPreview} disabled={blocked || preview.isPending}>
               {preview.isPending ? "Estimating…" : "Preview"}
             </Button>
-            <Button onClick={runDeepScore} disabled={blocked || startDeepScore.isPending}>
+            <Button
+              onClick={runDeepScore}
+              disabled={blocked || startDeepScore.isPending || !previewData}
+            >
               {running ? "Scoring…" : "Deep-score"}
             </Button>
           </div>
