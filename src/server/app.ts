@@ -79,7 +79,7 @@ export function createApp(deps: ServerDeps): Hono {
   const {
     repo,
     jobs,
-    runScan,
+    runScanForScope,
     retryFailedScan,
     scoreJobs,
     createScoreRun,
@@ -286,8 +286,9 @@ export function createApp(deps: ServerDeps): Hono {
 
   // Start a background scan (single-flight). 202 when started, 409 if one is already running.
   // Either way the body is the current job status, so the client can begin polling immediately.
-  app.post("/api/scan", (c) => {
-    const started = jobs.start(runScan);
+  app.post("/api/scan", async (c) => {
+    const scope = await parseScanScope(c);
+    const started = jobs.start(runScanForScope(scope));
     return c.json(jobs.getStatus(), started ? 202 : 409);
   });
 
@@ -352,4 +353,14 @@ async function parseScoreOptions(c: {
   const limit =
     Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : DEFAULT_SCORE_LIMIT;
   return { remoteOnly, limit, rescore };
+}
+
+/** Parse the scan scope from the request body. Defaults to `"incremental"`; only `"full"` overrides
+ *  it. A malformed body or unknown value uses the default. */
+async function parseScanScope(c: {
+  req: { json: () => Promise<unknown> };
+}): Promise<"full" | "incremental"> {
+  const body = await c.req.json().catch(() => null);
+  const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  return record.scope === "full" ? "full" : "incremental";
 }

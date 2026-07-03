@@ -5,7 +5,7 @@ import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
-import { settingsWithEnvKey } from "@app/matching/resolve-settings";
+import { resolveScanFreshnessHours, settingsWithEnvKey } from "@app/matching/resolve-settings";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import type { Repository } from "@app/storage/repository";
@@ -17,45 +17,53 @@ import type { ScanRunner } from "./types";
  * Mirrors the CLI's `scan` wiring. Missing preconditions throw, which the job manager records as
  * the job's error; structured progress (directory read, per-company, scoring) is forwarded through.
  */
-export function createScanRunner(repo: Repository): ScanRunner {
-  return async (onProgress) => {
-    const profile = repo.getLatestProfile();
-    if (!profile) throw new Error("No profile yet. Upload a resume first.");
+export function createScanRunner(repo: Repository) {
+  return (scope: "full" | "incremental"): ScanRunner =>
+    async (onProgress) => {
+      const profile = repo.getLatestProfile();
+      if (!profile) throw new Error("No profile yet. Upload a resume first.");
 
-    const dictionary = repo.getSkillDictionary();
-    const scorer = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
+      const dictionary = repo.getSkillDictionary();
+      const scorer = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
 
-    const fetcher = new HttpFetcher();
-    // Hybrid remote mode when a feed is configured (mirrors the CLI scan wiring).
-    const feed = resolvePostingFeed(repo, fetcher);
+      const fetcher = new HttpFetcher();
+      // Hybrid remote mode when a feed is configured (mirrors the CLI scan wiring).
+      const feed = resolvePostingFeed(repo, fetcher);
+      const settings = settingsWithEnvKey(repo);
 
-    const result = await runScan(
-      {
-        repo,
-        profile,
-        scorer,
-        ...(feed ? { feed } : {}),
-        // Update the job status snapshot AND echo each step to the server console, so progress is
-        // followable in the `serve`/`dev` terminal (not just the dashboard).
-        onProgress: (event) => {
-          onProgress(event);
-          console.log(`${style.dim("[scan]")} ${formatProgress(event)}`);
+      const result = await runScan(
+        {
+          repo,
+          profile,
+          scorer,
+          ...(feed ? { feed } : {}),
+          scope,
+          // An incremental scan skips companies re-crawled within the freshness window; a full scan
+          // re-crawls everything, so the window doesn't apply.
+          ...(scope === "incremental"
+            ? { freshnessHours: resolveScanFreshnessHours(settings) }
+            : {}),
+          // Update the job status snapshot AND echo each step to the server console, so progress is
+          // followable in the `serve`/`dev` terminal (not just the dashboard).
+          onProgress: (event) => {
+            onProgress(event);
+            console.log(`${style.dim("[scan]")} ${formatProgress(event)}`);
+          },
+          discoverDeps: {
+            fetcher,
+            renderer: new PlaywrightRenderer(),
+            sharedViewReader: new PlaywrightSharedViewReader(),
+            shareUrl: resolveShareUrl(),
+            trackedCompanies: repo.listTrackedCompanies(),
+            settings,
+          },
         },
-        discoverDeps: {
-          fetcher,
-          renderer: new PlaywrightRenderer(),
-          sharedViewReader: new PlaywrightSharedViewReader(),
-          shareUrl: resolveShareUrl(),
-          trackedCompanies: repo.listTrackedCompanies(),
-          settings: settingsWithEnvKey(repo),
-        },
-      },
-      // Discovery warnings still reach the console for visibility.
-      (message) => console.log(`${style.dim("[scan]")} ${message}`),
-    );
+        // Discovery warnings still reach the console for visibility.
+        (message) => console.log(`${style.dim("[scan]")} ${message}`),
+      );
 
-    return { count: result.count, warnings: result.warnings };
-  };
+      return { count: result.count, warnings: result.warnings };
+    };
 }
 
 /**

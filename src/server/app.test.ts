@@ -48,7 +48,7 @@ function makeApp(overrides: Partial<ServerDeps> = {}) {
   const deps: ServerDeps = {
     repo,
     jobs: new ScanJobManager(),
-    runScan: async () => ({ count: 0, warnings: [] }),
+    runScanForScope: () => async () => ({ count: 0, warnings: [] }),
     retryFailedScan: async () => ({ count: 0, warnings: [] }),
     scoreJobs: new ScoreJobManager(),
     createScoreRun: () => async () => fakeScoreResult(),
@@ -655,7 +655,7 @@ describe("scan jobs", () => {
   it("starts a background scan (202) and reaches done with the count", async () => {
     const jobs = new ScanJobManager();
     const runScan = vi.fn(async () => ({ count: 3, warnings: [] }));
-    const app = makeApp({ jobs, runScan });
+    const app = makeApp({ jobs, runScanForScope: () => runScan });
 
     const res = await app.request("/api/scan", { method: "POST" });
     expect(res.status).toBe(202);
@@ -676,7 +676,7 @@ describe("scan jobs", () => {
       await gate;
       return { count: 0, warnings: [] };
     });
-    const app = makeApp({ jobs, runScan });
+    const app = makeApp({ jobs, runScanForScope: () => runScan });
 
     expect((await app.request("/api/scan", { method: "POST" })).status).toBe(202);
     expect((await app.request("/api/scan", { method: "POST" })).status).toBe(409);
@@ -690,12 +690,65 @@ describe("scan jobs", () => {
     const runScan = vi.fn(async () => {
       throw new Error("no profile yet");
     });
-    const app = makeApp({ runScan });
+    const app = makeApp({ runScanForScope: () => runScan });
     await app.request("/api/scan", { method: "POST" });
 
     const status = await pollUntilSettled(app);
     expect(status.state).toBe("error");
     expect(status.error).toContain("no profile yet");
+  });
+
+  it("defaults to the incremental scope when the request has no body", async () => {
+    const scopes: string[] = [];
+    const app = makeApp({
+      runScanForScope: (scope) => {
+        scopes.push(scope);
+        return async () => ({ count: 0, warnings: [] });
+      },
+    });
+
+    const res = await app.request("/api/scan", { method: "POST" });
+    expect(res.status).toBe(202);
+    await pollUntilSettled(app);
+    expect(scopes).toEqual(["incremental"]);
+  });
+
+  it("honors scope:full from the request body", async () => {
+    const scopes: string[] = [];
+    const app = makeApp({
+      runScanForScope: (scope) => {
+        scopes.push(scope);
+        return async () => ({ count: 0, warnings: [] });
+      },
+    });
+
+    const res = await app.request("/api/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scope: "full" }),
+    });
+    expect(res.status).toBe(202);
+    await pollUntilSettled(app);
+    expect(scopes).toEqual(["full"]);
+  });
+
+  it("falls back to incremental for an invalid scope value", async () => {
+    const scopes: string[] = [];
+    const app = makeApp({
+      runScanForScope: (scope) => {
+        scopes.push(scope);
+        return async () => ({ count: 0, warnings: [] });
+      },
+    });
+
+    const res = await app.request("/api/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scope: "sideways" }),
+    });
+    expect(res.status).toBe(202);
+    await pollUntilSettled(app);
+    expect(scopes).toEqual(["incremental"]);
   });
 });
 

@@ -32,8 +32,8 @@ export type ServerDeps = {
   repo: Repository;
   /** Background scan-job manager (start + status). */
   jobs: ScanJobManager;
-  /** The scan to run when a job starts. */
-  runScan: ScanRunner;
+  /** Build a scan runner for the given scope (`"full"` or `"incremental"`). */
+  runScanForScope: (scope: "full" | "incremental") => ScanRunner;
   /** The scan to run for `POST /api/scan/retry-failed` — scoped to the needs-attention list. */
   retryFailedScan: ScanRunner;
   /** Background deep-score-job manager (start + status). */
