@@ -93,10 +93,13 @@ CREATE TABLE IF NOT EXISTS companies (
 //   expired_at:     the `WHERE expired_at IS NULL` predicate in nearly every posting query.
 //   score:          the `WHERE score >= ? ORDER BY score DESC` of listScoredPostings.
 //   last_seen_scan: `listLivePostingsNotSeen` / `expireStalePostings`, which scan by last-seen scan.
+//   last_seen_at:   `listFreshCompanyUrls`, which range-scans by last-seen timestamp on every
+//                   incremental scan.
 export const INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_postings_expired_at ON postings(expired_at);
 CREATE INDEX IF NOT EXISTS idx_postings_last_seen_scan ON postings(last_seen_scan);
 CREATE INDEX IF NOT EXISTS idx_match_results_score ON match_results(score);
 CREATE INDEX IF NOT EXISTS idx_companies_id ON companies(id);
 CREATE INDEX IF NOT EXISTS idx_postings_company_id ON postings(company_id);
+CREATE INDEX IF NOT EXISTS idx_companies_last_seen_at ON companies(last_seen_at);
 `;

@@ -886,6 +886,7 @@ describe("schema indexes", () => {
     "idx_postings_expired_at",
     "idx_postings_last_seen_scan",
     "idx_match_results_score",
+    "idx_companies_last_seen_at",
   ];
 
   /** Index names in the DB at `dbPath`, read via an independent connection. */
@@ -908,6 +909,21 @@ describe("schema indexes", () => {
     const repo = new Repository(dbPath);
     repo.close();
     expect(indexNamesAt(dbPath)).toEqual(expect.arrayContaining(EXPECTED_INDEXES));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("migrate creates an index on companies.last_seen_at (incremental-scan hot path)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jobhunter-idx-last-seen-"));
+    const dbPath = join(dir, "fresh.db");
+    const repo = new Repository(dbPath);
+    const raw = new Database(dbPath, { readonly: true });
+    try {
+      const indexes = raw.prepare("PRAGMA index_list('companies')").all() as { name: string }[];
+      expect(indexes.some((i) => i.name === "idx_companies_last_seen_at")).toBe(true);
+    } finally {
+      raw.close();
+    }
+    repo.close();
     rmSync(dir, { recursive: true, force: true });
   });
 
