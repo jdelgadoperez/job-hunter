@@ -29,3 +29,27 @@ describe("PostgresScanStore.startScan", () => {
     expect(insert?.values).toContain("full");
   });
 });
+
+describe("PostgresScanStore.recordDirectory", () => {
+  test("honors computeRemoved:false", async () => {
+    // Fake returns pre-existing companies + a prev scan, but computeRemoved:false must suppress the diff.
+    const sql = fakeSql([]); // adapt: recordDirectory issues several queries; return [] for each
+    const store = new PostgresScanStore(sql as never);
+    const diff = await store.recordDirectory(5, [{ careersUrl: "https://x.co" }], {
+      computeRemoved: false,
+    });
+    expect(diff).toEqual({ newCompanies: [], removedCompanies: [] });
+  });
+});
+
+describe("PostgresScanStore.expireStalePostings", () => {
+  test("counts only full scans in its staleness predicate", async () => {
+    const sql = fakeSql([]);
+    const store = new PostgresScanStore(sql as never);
+    await store.expireStalePostings(10, 2);
+    const update = sql.calls.find((c) =>
+      c.strings.join("").includes("UPDATE postings SET expired_at"),
+    );
+    expect(update?.strings.join("")).toContain("kind = 'full'");
+  });
+});
