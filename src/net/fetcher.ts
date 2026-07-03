@@ -25,7 +25,16 @@ export interface Fetcher {
 const MAX_REDIRECTS = 5;
 
 export class HttpFetcher implements Fetcher {
-  constructor(private readonly timeoutMs = 15_000) {}
+  private readonly fetchImpl: typeof fetch;
+  private readonly assertAllowed: (url: string) => Promise<void>;
+
+  constructor(
+    private readonly timeoutMs = 15_000,
+    deps: { fetchImpl?: typeof fetch; assertAllowed?: (url: string) => Promise<void> } = {},
+  ) {
+    this.fetchImpl = deps.fetchImpl ?? fetch;
+    this.assertAllowed = deps.assertAllowed ?? assertAllowedUrl;
+  }
 
   async fetch(url: string, init?: FetchInit): Promise<FetchResponse> {
     const method = init?.method ?? "GET";
@@ -37,8 +46,8 @@ export class HttpFetcher implements Fetcher {
       // POST is returned as-is (re-issuing a body to a new URL is unsafe to assume).
       let current = url;
       for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-        await assertAllowedUrl(current);
-        const res = await fetch(current, {
+        await this.assertAllowed(current);
+        const res = await this.fetchImpl(current, {
           method,
           body: init?.body,
           headers: init?.headers,
