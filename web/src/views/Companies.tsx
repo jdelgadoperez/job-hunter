@@ -21,6 +21,46 @@ const label = (c: CompanyEntry) => c.name ?? c.careersUrl;
 const byLabel = (a: CompanyEntry, b: CompanyEntry) =>
   label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
 
+/** Untracking a company is permanent, so a single click only arms a confirm; the actual
+ *  removal only fires on the follow-up "Confirm" click. "Cancel" (or re-render, since
+ *  `confirming` is local state) backs out without side effects. */
+function RemoveButton({ onRemove, pending }: { onRemove: () => void; pending: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        disabled={pending}
+        className="shrink-0 rounded text-sm text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      >
+        Remove
+      </button>
+    );
+  }
+
+  return (
+    <span className="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={pending}
+        className="rounded text-sm text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      >
+        Confirm
+      </button>
+      <button
+        type="button"
+        onClick={() => setConfirming(false)}
+        className="rounded text-sm text-faint hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        Cancel
+      </button>
+    </span>
+  );
+}
+
 /** @param active Whether this tab is the one currently visible. When `false` (e.g. the user has
  *  switched to another tab), status polling is suppressed while the view stays mounted and its
  *  cached data stays readable — see the "Keep every tab mounted" comment in App.tsx. */
@@ -126,14 +166,10 @@ export function Companies({ active = true }: { active?: boolean } = {}) {
                   {c.careersUrl}
                 </a>
               </div>
-              <button
-                type="button"
-                onClick={() => removeCompany.mutate(c.careersUrl)}
-                disabled={removeCompany.isPending && removeCompany.variables === c.careersUrl}
-                className="shrink-0 rounded text-sm text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-              >
-                Remove
-              </button>
+              <RemoveButton
+                onRemove={() => removeCompany.mutate(c.careersUrl)}
+                pending={removeCompany.isPending && removeCompany.variables === c.careersUrl}
+              />
             </Card>
           ))}
         </div>
