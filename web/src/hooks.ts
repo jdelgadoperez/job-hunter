@@ -146,12 +146,14 @@ export function useRemoveSkill() {
   });
 }
 
-/** Poll the background scan status; refetch quickly while a scan is running, idle otherwise. */
-export function useScanStatus() {
+/** Poll the background scan status; refetch quickly while a scan is running, idle otherwise.
+ *  Pass `{ enabled: false }` (e.g. a hidden/inactive tab) to keep the cached data readable while
+ *  suppressing the polling interval. */
+export function useScanStatus({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ["scan-status"],
     queryFn: api.getScanStatus,
-    refetchInterval: (query) => (query.state.data?.state === "running" ? 1000 : false),
+    refetchInterval: (query) => (enabled && query.state.data?.state === "running" ? 1000 : false),
   });
 }
 
@@ -182,12 +184,14 @@ export function useRetryFailedScan() {
   });
 }
 
-/** Poll the background deep-score status; refetch quickly while running, idle otherwise. */
-export function useScoreStatus() {
+/** Poll the background deep-score status; refetch quickly while running, idle otherwise.
+ *  Pass `{ enabled: false }` (e.g. a hidden/inactive tab) to keep the cached data readable while
+ *  suppressing the polling interval. */
+export function useScoreStatus({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ["score-status"],
     queryFn: api.getScoreStatus,
-    refetchInterval: (query) => (query.state.data?.state === "running" ? 1000 : false),
+    refetchInterval: (query) => (enabled && query.state.data?.state === "running" ? 1000 : false),
   });
 }
 

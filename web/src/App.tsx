@@ -92,7 +92,7 @@ export function App() {
           form text) survives tab switches instead of being discarded on unmount. */}
       <main className="mx-auto max-w-3xl px-4 py-6">
         <div hidden={tab !== "Home"}>
-          <Home />
+          <Home active={tab === "Home"} />
         </div>
         <div hidden={tab !== "Matches"}>
           <Matches />
@@ -101,7 +101,7 @@ export function App() {
           <Skills />
         </div>
         <div hidden={tab !== "Companies"}>
-          <Companies />
+          <Companies active={tab === "Companies"} />
         </div>
         <div hidden={tab !== "Settings"}>
           <Settings />

@@ -21,7 +21,10 @@ const label = (c: CompanyEntry) => c.name ?? c.careersUrl;
 const byLabel = (a: CompanyEntry, b: CompanyEntry) =>
   label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
 
-export function Companies() {
+/** @param active Whether this tab is the one currently visible. When `false` (e.g. the user has
+ *  switched to another tab), status polling is suppressed while the view stays mounted and its
+ *  cached data stays readable — see the "Keep every tab mounted" comment in App.tsx. */
+export function Companies({ active = true }: { active?: boolean } = {}) {
   const companies = useCompanies();
   const manualReview = useManualReviewCompanies();
   const needsAttention = useNeedsAttention();
@@ -33,7 +36,7 @@ export function Companies() {
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const qc = useQueryClient();
-  const scanStatus = useScanStatus();
+  const scanStatus = useScanStatus({ enabled: active });
   // A retry-failed scan (the Rescan button) runs in the background; when it finishes, a company may
   // have recovered and been cleared from failed_leads. Refresh the needs-attention list so the
   // panel reflects that without a page reload. Keyed on finishedAt so each completed scan re-runs.

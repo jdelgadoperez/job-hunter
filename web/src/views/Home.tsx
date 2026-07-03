@@ -16,13 +16,16 @@ import {
   useUploadResume,
 } from "../hooks";
 
-export function Home() {
+/** @param active Whether this tab is the one currently visible. When `false` (e.g. the user has
+ *  switched to another tab), status polling is suppressed while the view stays mounted and its
+ *  cached data stays readable — see the "Keep every tab mounted" comment in App.tsx. */
+export function Home({ active = true }: { active?: boolean } = {}) {
   const profile = useProfile();
   const upload = useUploadResume();
-  const scan = useScanStatus();
+  const scan = useScanStatus({ enabled: active });
   const startScan = useStartScan();
   const latestScan = useLatestScan();
-  const scoreStatus = useScoreStatus();
+  const scoreStatus = useScoreStatus({ enabled: active });
   const settings = useSettings();
   const qc = useQueryClient();
 
@@ -184,7 +187,11 @@ export function Home() {
         </p>
       </Card>
 
-      <DeepScoreCard hasKey={settings.data?.hasAnthropicKey ?? false} scanRunning={running} />
+      <DeepScoreCard
+        hasKey={settings.data?.hasAnthropicKey ?? false}
+        scanRunning={running}
+        active={active}
+      />
 
       {latestScan.data ? (
         <Card>
@@ -222,8 +229,16 @@ export function Home() {
  * a free dry-run showing the plan + estimated cost; the run spends real money, so it's gated behind
  * the preview.
  */
-function DeepScoreCard({ hasKey, scanRunning }: { hasKey: boolean; scanRunning: boolean }) {
-  const scoreStatus = useScoreStatus();
+function DeepScoreCard({
+  hasKey,
+  scanRunning,
+  active,
+}: {
+  hasKey: boolean;
+  scanRunning: boolean;
+  active: boolean;
+}) {
+  const scoreStatus = useScoreStatus({ enabled: active });
   const preview = useScorePreview();
   const startDeepScore = useStartDeepScore();
 

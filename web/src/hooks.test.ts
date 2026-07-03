@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useMatchAction } from "./hooks";
+import { useMatchAction, useScanStatus } from "./hooks";
 
 function mockFetch(body: unknown, status = 200) {
   vi.stubGlobal(
@@ -114,6 +114,60 @@ describe("useMatchAction", () => {
 
     const rolledBack = client.getQueryData<ReturnType<typeof scoredPosting>[]>(key);
     expect(rolledBack?.[0]?.action).toBeNull();
+  });
+});
+
+function runningScanStatus() {
+  return {
+    state: "running",
+    message: null,
+    current: null,
+    total: null,
+    count: null,
+    warnings: [],
+    error: null,
+    startedAt: "2026-06-30T00:00:00.000Z",
+    finishedAt: null,
+    recent: [],
+  };
+}
+
+describe("useScanStatus", () => {
+  it("keeps polling by default while a scan is running", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockFetch(runningScanStatus());
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    renderHook(() => useScanStatus(), { wrapper: withClient(client) });
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(1));
+    const initialCalls = vi.mocked(fetch).mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(initialCalls);
+    vi.useRealTimers();
+  });
+
+  it("suppresses the poll interval when enabled is false, even while a scan is running", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockFetch(runningScanStatus());
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    renderHook(() => useScanStatus({ enabled: false }), { wrapper: withClient(client) });
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(1));
+    const initialCalls = vi.mocked(fetch).mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+
+    // No repeated polling — the interval is gated off while the tab is inactive.
+    expect(vi.mocked(fetch).mock.calls.length).toBe(initialCalls);
+    vi.useRealTimers();
   });
 });
 
