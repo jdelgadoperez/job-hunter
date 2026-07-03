@@ -102,6 +102,48 @@ describe("api response validation", () => {
     await expect(api.startScan()).resolves.toEqual(status);
   });
 
+  it("startScan defaults to an incremental scope", async () => {
+    const status = {
+      state: "running",
+      message: null,
+      current: null,
+      total: null,
+      count: null,
+      warnings: [],
+      error: null,
+      startedAt: "2026-06-30T00:00:00.000Z",
+      finishedAt: null,
+      recent: [],
+    };
+    mockFetchOnce(status);
+
+    await api.startScan();
+
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.body).toEqual(
+      JSON.stringify({ scope: "incremental" }),
+    );
+  });
+
+  it("startScan sends the full scope when requested", async () => {
+    const status = {
+      state: "running",
+      message: null,
+      current: null,
+      total: null,
+      count: null,
+      warnings: [],
+      error: null,
+      startedAt: "2026-06-30T00:00:00.000Z",
+      finishedAt: null,
+      recent: [],
+    };
+    mockFetchOnce(status);
+
+    await api.startScan("full");
+
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.body).toEqual(JSON.stringify({ scope: "full" }));
+  });
+
   it("parses a deep-score preview (counts + estimate)", async () => {
     const preview = {
       counts: {

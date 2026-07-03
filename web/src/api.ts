@@ -273,9 +273,14 @@ export const api = {
   removeSkill: (name: string) =>
     request(`/api/skills/${encodeURIComponent(name)}`, RemovedSchema, { method: "DELETE" }),
   // Start a background scan (or no-op if one is already running). Both 202 (started) and 409
-  // (already running) carry the current job status, so neither is an error here.
-  startScan: async (): Promise<ScanJobStatus> => {
-    const res = await fetch("/api/scan", { method: "POST" });
+  // (already running) carry the current job status, so neither is an error here. `scope` defaults
+  // to "incremental" (skip companies checked recently); "full" re-visits every company.
+  startScan: async (scope: "full" | "incremental" = "incremental"): Promise<ScanJobStatus> => {
+    const res = await fetch("/api/scan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scope }),
+    });
     if (res.status === 202 || res.status === 409 || res.ok) {
       return ScanJobStatusSchema.parse(await res.json());
     }
