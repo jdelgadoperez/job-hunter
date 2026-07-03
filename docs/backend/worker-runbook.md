@@ -20,6 +20,7 @@ Run it where a real browser is available — a container or a CI runner with the
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Service-role Postgres connection (writes bypass RLS). From Supabase → Project Settings → Database. **Secret.** |
 | `JOB_HUNTER_THE_MUSE_API_KEY` | no | Enables The Muse lead source; omit to skip it. |
+| `JOB_HUNTER_SCAN_BUDGET_MS` | no | Wall-clock budget for the crawl (default 25 min). When reached, the crawl stops and the worker persists a partial feed instead of overrunning the job timeout. Keep it below the scheduler's timeout. |
 | `PLAYWRIGHT_BROWSERS_PATH` | env-specific | Where Chromium is installed (set by the base image). |
 
 The worker never needs the anon key or any per-user data.
@@ -54,8 +55,11 @@ env vars via the platform's secrets.
 
 - **Interval:** the committed workflow runs **once a day** (09:17 UTC); tune to how fresh the feed
   must be vs. load on the ATS boards. One central crawler is far gentler than N independent clients.
-- **Run length:** a full crawl takes ~25 min (the `timeout-minutes: 30` cap leaves headroom). Most of
-  the tail is browser-fallback render timeouts on slow non-ATS careers pages — see "Warnings" below.
+- **Run length:** a full crawl takes ~20-30 min and grows with the directory. The worker enforces a
+  25-min crawl budget (`JOB_HUNTER_SCAN_BUDGET_MS`) so it always persists within the `timeout-minutes:
+  45` cap instead of being hard-killed mid-crawl; if the budget is hit it writes a partial feed this
+  run (a "Time budget reached" warning) and picks up the rest next run. Most of the tail is
+  browser-fallback render timeouts on slow non-ATS careers pages — see "Warnings" below.
 - **Idempotent:** each run upserts postings and reconciles liveness/expiry incrementally, so overlap
   or a missed run is harmless.
 - **Validate first:** `npm run smoke:postgres` (with `DATABASE_URL`) confirms the store works against

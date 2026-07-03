@@ -4,6 +4,7 @@ import type { JobPosting, Warning } from "@app/domain/types";
 import type { SettingsReader } from "@app/matching/resolve-settings";
 import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
+import { withTimeout } from "@app/net/with-timeout";
 import pLimit from "p-limit";
 import { makeCompanyId } from "./company-id";
 import { BrowserConnector, type PageRenderer } from "./connectors/browser";
@@ -27,6 +28,13 @@ export type DiscoverDeps = {
   onProgress?: (event: ScanProgressEvent) => void;
   concurrency?: number;
   delayMs?: number;
+  /** Optional wall-clock budget (ms) for the whole crawl. Once exceeded, discover stops starting new
+   *  leads and skips the retry pass, returning partial results with `truncated: true` and a warning —
+   *  so a growing directory degrades to a partial feed instead of blowing a hard job timeout. The
+   *  hosted worker sets this below its runner timeout; local scans leave it unset (no budget). */
+  budgetMs?: number;
+  /** Injectable clock for the budget (default `Date.now`); tests drive it to force truncation. */
+  now?: () => number;
   /** Settings reader for key-gated lead sources (threaded to each source). */
   settings: SettingsReader;
   /** Lead sources to run; defaults to the production registry. Injected for tests. */
@@ -45,10 +53,18 @@ export type DiscoverResult = {
   companies: CompanyLead[];
   /** Companies on hosts we don't scrape (LinkedIn/Indeed/…), surfaced for manual review. */
   skipped: CompanyLead[];
+  /** True when the crawl stopped early because `budgetMs` was reached: some leads were not crawled
+   *  this run. They remain in `companies` (the directory diff is unaffected), but the caller should
+   *  skip the liveness re-check — "not seen this scan" no longer means "gone". */
+  truncated: boolean;
 };
 
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_DELAY_MS = 250;
+/** Cap for the post-crawl browser teardown. Closing the shared headless browser should be near-
+ *  instant; if it ever hangs, this bounds the wait to a few seconds (then degrades to a warning)
+ *  instead of a silent stall that runs the run's clock down to the job timeout. */
+const DISPOSE_TIMEOUT_MS = 15_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -122,6 +138,13 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
   const concurrency = Math.max(1, deps.concurrency ?? DEFAULT_CONCURRENCY);
   const delayMs = deps.delayMs ?? DEFAULT_DELAY_MS;
 
+  // Wall-clock budget: a safety valve so the crawl always finishes and persists within the runner's
+  // job timeout instead of being hard-killed mid-crawl. Started here so it bounds the whole run.
+  const now = deps.now ?? Date.now;
+  const startedAt = now();
+  const overBudget = (): boolean =>
+    deps.budgetMs !== undefined && now() - startedAt >= deps.budgetMs;
+
   deps.onProgress?.({ kind: "directory" });
   const { leads, warnings } = await collectLeads(deps);
   deps.onProgress?.({ kind: "leads", total: leads.length });
@@ -158,11 +181,17 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
   };
 
   const failed: { lead: CompanyLead; result: Extract<ConnectorResult, { ok: false }> }[] = [];
+  // Leads we never attempted because the wall-clock budget ran out mid-crawl (a `null` result below).
+  let skippedOverBudget = 0;
   try {
     const collected = await Promise.all(
       leads.map(async (lead) => {
         await waitTurn();
-        return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+        // `null` result === skipped because the budget is spent (distinct from a crawl failure).
+        return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult | null }> => {
+          if (overBudget()) {
+            return { lead, result: null };
+          }
           started += 1;
           deps.onProgress?.({
             kind: "company",
@@ -183,6 +212,10 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     );
 
     for (const { lead, result } of collected) {
+      if (result === null) {
+        skippedOverBudget += 1;
+        continue;
+      }
       if (!result.ok) {
         failed.push({ lead, result });
         continue;
@@ -192,52 +225,75 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
       }
     }
 
-    if (failed.length > 0) {
-      const skipRetryFor = deps.skipRetryFor ?? new Set<string>();
-      const toRetry = failed.filter(
-        ({ lead }) => !skipRetryFor.has(normalizeCareersUrl(lead.careersUrl)),
-      );
-      const retried = await Promise.all(
-        toRetry.map(async ({ lead }) => {
-          await waitTurn();
-          return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
-            try {
-              return { lead, result: await fetchLead(lead) };
-            } catch (error) {
-              return { lead, result: { ok: false, warning: errorMessage(error) } };
-            }
+    // Retry the failed leads once — unless the budget is spent (skip the expensive, slow second pass)
+    // or a lead is explicitly skip-listed. Unlike the main pass, the retry pass emits progress too, so
+    // a long retry over hundreds of failures is visible in the logs rather than a silent stall.
+    const skipRetryFor = deps.skipRetryFor ?? new Set<string>();
+    const toRetry = overBudget()
+      ? []
+      : failed.filter(({ lead }) => !skipRetryFor.has(normalizeCareersUrl(lead.careersUrl)));
+    let retryStarted = 0;
+    const retried = await Promise.all(
+      toRetry.map(async ({ lead }) => {
+        await waitTurn();
+        return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+          retryStarted += 1;
+          deps.onProgress?.({
+            kind: "company",
+            name: lead.company,
+            host: hostnameOf(lead.careersUrl),
+            index: retryStarted,
+            total: toRetry.length,
           });
-        }),
-      );
-      const retriedUrls = new Set(toRetry.map(({ lead }) => normalizeCareersUrl(lead.careersUrl)));
-      for (const { lead, result } of retried) {
-        if (!result.ok) {
-          warnings.push({
-            source: lead.company,
-            message: result.warning,
-            careersUrl: lead.careersUrl,
-          });
-          continue;
-        }
-        for (const posting of result.postings) {
-          byId.set(posting.id, { ...posting, companyId: makeCompanyId(lead.careersUrl) });
-        }
-      }
-      // Anything skipped (in skipRetryFor) keeps its original main-pass warning.
-      for (const { lead, result } of failed) {
-        if (retriedUrls.has(normalizeCareersUrl(lead.careersUrl))) continue;
+          try {
+            return { lead, result: await fetchLead(lead) };
+          } catch (error) {
+            return { lead, result: { ok: false, warning: errorMessage(error) } };
+          }
+        });
+      }),
+    );
+    const retriedUrls = new Set(toRetry.map(({ lead }) => normalizeCareersUrl(lead.careersUrl)));
+    for (const { lead, result } of retried) {
+      if (!result.ok) {
         warnings.push({
           source: lead.company,
           message: result.warning,
           careersUrl: lead.careersUrl,
         });
+        continue;
       }
+      for (const posting of result.postings) {
+        byId.set(posting.id, { ...posting, companyId: makeCompanyId(lead.careersUrl) });
+      }
+    }
+    // Anything not retried (skip-listed, or skipped because the budget ran out) keeps its main-pass
+    // warning so the failure is still surfaced.
+    for (const { lead, result } of failed) {
+      if (retriedUrls.has(normalizeCareersUrl(lead.careersUrl))) continue;
+      warnings.push({
+        source: lead.company,
+        message: result.warning,
+        careersUrl: lead.careersUrl,
+      });
     }
   } finally {
     // Release the shared headless browser (if the run used the browser fallback) once, after all
     // renders are done — main pass AND retry pass — rather than launching and closing one per
-    // company or per pass.
-    await renderer.dispose?.();
+    // company or per pass. Bounded by a timeout and never fatal: a hung teardown must not silently
+    // burn the run's remaining clock (nor discard the postings we just crawled) — it degrades to a
+    // warning, same as any other crawl failure.
+    if (renderer.dispose) {
+      try {
+        await withTimeout(
+          Promise.resolve(renderer.dispose()),
+          DISPOSE_TIMEOUT_MS,
+          "renderer.dispose",
+        );
+      } catch (error) {
+        warnings.push({ source: "directory", message: `Browser cleanup: ${errorMessage(error)}` });
+      }
+    }
   }
 
   const skipped = leads.filter((lead) => isUnscrapableHost(lead.careersUrl));
@@ -248,5 +304,13 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
     });
   }
 
-  return { postings: [...byId.values()], warnings, companies: leads, skipped };
+  const truncated = skippedOverBudget > 0;
+  if (truncated) {
+    warnings.push({
+      source: "directory",
+      message: `Time budget reached — crawled ${started}/${leads.length} companies this run; the remaining ${skippedOverBudget} will be picked up next run.`,
+    });
+  }
+
+  return { postings: [...byId.values()], warnings, companies: leads, skipped, truncated };
 }

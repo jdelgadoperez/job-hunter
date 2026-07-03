@@ -180,7 +180,7 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
 
   // Remote mode (feed set): pull the shared feed AND crawl only tracked companies locally. Otherwise
   // run the full local crawl. Both yield postings + the companies to snapshot + any warnings.
-  const { postings, companies, warnings, recoveredFromFeed } = feed
+  const { postings, companies, warnings, recoveredFromFeed, truncated } = feed
     ? await sourceFromFeedAndTracked(
         feed,
         discoverDeps,
@@ -220,9 +220,11 @@ export async function runSourcing(deps: SourcingDeps): Promise<SourcingOutcome> 
   // expired immediately when confirmed gone (404 / removed from the board), rather than waiting for
   // the consecutive-miss heuristic. "unknown" (unreachable) is left for that heuristic backstop.
   // A scoped retry refreshes only the companies it crawled; it must not re-check or expire the
-  // postings of companies it never looked at (that treats "not seen this scan" as "gone").
+  // postings of companies it never looked at (that treats "not seen this scan" as "gone"). A
+  // budget-truncated full crawl is the same situation — some companies weren't crawled — so it also
+  // skips the re-check rather than expiring the roles of companies it simply ran out of time to visit.
   const expired =
-    scope === "full"
+    scope === "full" && !truncated
       ? (await recheckLiveness(repo, scanId, deps.discoverDeps.fetcher, onProgress)) +
         (await repo.expireStalePostings(scanId))
       : 0;
@@ -240,6 +242,9 @@ type SourceResult = {
   companies: CompanyLead[];
   warnings: Warning[];
   recoveredFromFeed?: CompanyRef[];
+  /** A full crawl that stopped early on its wall-clock budget (see `discover`): don't re-check the
+   *  liveness of postings "not seen this scan" — some companies simply weren't crawled this run. */
+  truncated?: boolean;
 };
 
 /** Full local crawl: the directory sources + tracked companies (today's default behavior). */
@@ -247,8 +252,16 @@ async function sourceFromFullCrawl(
   discoverDeps: DiscoverDeps,
   onProgress?: (event: ScanProgressEvent) => void,
 ): Promise<SourceResult> {
-  const { postings, warnings, companies = [] } = await discover({ ...discoverDeps, onProgress });
-  return { postings, companies, warnings };
+  const {
+    postings,
+    warnings,
+    companies = [],
+    truncated,
+  } = await discover({
+    ...discoverDeps,
+    onProgress,
+  });
+  return { postings, companies, warnings, truncated };
 }
 
 /**

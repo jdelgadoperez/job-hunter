@@ -200,6 +200,35 @@ describe("discover", () => {
     expect(disposeCount).toBe(1);
   });
 
+  it("degrades a failing browser teardown to a warning without aborting the run", async () => {
+    const renderer: PageRenderer = {
+      async render() {
+        return JSONLD_HTML;
+      },
+      async dispose() {
+        throw new Error("browser stuck");
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Initech", url: "https://initech.com/careers" }]),
+    );
+
+    const { postings, warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // The crawled posting still comes through despite the teardown failure...
+    expect(postings.map((p) => p.title)).toEqual(["Operations Lead"]);
+    // ...and the failure surfaces as a warning rather than crashing discover.
+    expect(warnings.some((w) => w.message.includes("Browser cleanup"))).toBe(true);
+  });
+
   it("skips un-scrapable hosts (LinkedIn) without rendering, and surfaces them for review", async () => {
     const rendered: string[] = [];
     const renderer: PageRenderer = {
@@ -606,6 +635,118 @@ describe("discover retry pass", () => {
     // Attempted once (main pass) — the retry pass skipped it, so renderCalls stops at 1.
     expect(renderCalls).toBe(1);
     expect(warnings[0]?.careersUrl).toBe("https://boom.com/careers");
+  });
+});
+
+describe("discover time budget", () => {
+  it("stops crawling once the wall-clock budget is exhausted, returning partial results", async () => {
+    let clockMs = 0;
+    const companies = Array.from({ length: 5 }, (_, i) => ({
+      name: `Co${i}`,
+      url: `https://boards.greenhouse.io/co${i}`,
+    }));
+    const routes: Record<string, string> = {};
+    for (const c of companies) {
+      const token = c.url.split("/").pop() as string;
+      routes[`https://boards-api.greenhouse.io/v1/boards/${token}/jobs?content=true`] =
+        greenhouseFeed(token);
+    }
+    // Every board fetch burns 10s of the budget; serial (concurrency 1) so the cutoff is deterministic.
+    const fetcher: Fetcher = {
+      async fetch(url) {
+        clockMs += 10_000;
+        const body = routes[url];
+        return body === undefined
+          ? { statusCode: 404, finalUrl: url, bodyText: "" }
+          : { statusCode: 200, finalUrl: url, bodyText: body };
+      },
+    };
+    const reader = new FakeSharedViewReader(airtableData(companies));
+
+    const events: ScanProgressEvent[] = [];
+    const {
+      postings,
+      warnings,
+      truncated,
+      companies: crawled,
+    } = await discover({
+      fetcher,
+      renderer: new GaugedRenderer("", "", new Gauge()),
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      concurrency: 1,
+      delayMs: 0,
+      budgetMs: 25_000,
+      now: () => clockMs,
+      onProgress: (e) => events.push(e),
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // Budget 25s, 10s per fetch: the first three companies crawl, the rest are skipped.
+    expect(truncated).toBe(true);
+    expect(postings).toHaveLength(3);
+    // Every lead still appears in the directory snapshot, so the removed-diff is unaffected...
+    expect(crawled).toHaveLength(5);
+    // ...but only the crawled companies emit a progress event.
+    expect(events.filter((e) => e.kind === "company")).toHaveLength(3);
+    expect(warnings.some((w) => w.source === "directory" && w.message.includes("3/5"))).toBe(true);
+  });
+
+  it("does not truncate (and keeps retrying) when no budget is set", async () => {
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+    );
+    const fetcher = new GaugedFetcher(
+      {
+        "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouseFeed("acme"),
+      },
+      new Gauge(),
+    );
+
+    const { truncated } = await discover({
+      fetcher,
+      renderer: new GaugedRenderer("", "", new Gauge()),
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    expect(truncated).toBe(false);
+  });
+
+  it("skips the retry pass for a lead that failed once the budget is exhausted", async () => {
+    let clockMs = 0;
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render() {
+        renderCalls += 1;
+        clockMs += 30_000; // a single render blows the whole budget
+        throw new Error("render crashed");
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+    );
+
+    const { warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      budgetMs: 25_000,
+      now: () => clockMs,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // Rendered once on the main pass; the retry pass is skipped because the budget is spent.
+    expect(renderCalls).toBe(1);
+    // The failure still surfaces as a warning (kept, not retried).
+    expect(warnings.some((w) => w.source === "Boom")).toBe(true);
   });
 });
 

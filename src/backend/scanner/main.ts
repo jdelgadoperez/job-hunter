@@ -16,8 +16,18 @@ import { runScannerOnce } from "./run-once";
  * live network, so it must run in a container with Chromium — never a serverless function.
  *
  * Env: DATABASE_URL (service-role Postgres connection, required); JOB_HUNTER_THE_MUSE_API_KEY
- * (optional, enables The Muse lead source). See docs/backend/worker-runbook.md.
+ * (optional, enables The Muse lead source); JOB_HUNTER_SCAN_BUDGET_MS (optional, overrides the
+ * wall-clock crawl budget below). See docs/backend/worker-runbook.md.
  */
+
+/**
+ * Wall-clock budget for the crawl, kept safely under the scheduler's job timeout (45 min in the
+ * GitHub Action). The directory grows over time, so an unbounded crawl eventually overruns the
+ * timeout and gets hard-killed with nothing persisted. With a budget, discover stops early and the
+ * worker still writes what it gathered — a partial feed this run, the rest picked up next run.
+ */
+const DEFAULT_BUDGET_MS = 25 * 60 * 1000;
+const crawlBudgetMs = Number(process.env.JOB_HUNTER_SCAN_BUDGET_MS) || DEFAULT_BUDGET_MS;
 
 /** Lead-source settings come from env in the worker (no per-user DB); only key-gated sources read it. */
 const envSettings: SettingsReader = {
@@ -46,6 +56,7 @@ async function main(): Promise<void> {
         sharedViewReader: new PlaywrightSharedViewReader(),
         shareUrl: resolveShareUrl(),
         settings: envSettings,
+        budgetMs: crawlBudgetMs,
       },
       onProgress: (event) => console.log(`[scanner] ${formatProgress(event)}`),
     });

@@ -14,8 +14,8 @@ on:
     - cron: "17 9 * * *"
   workflow_dispatch: {}
 
-# A crawl can run ~25 min; never let two overlap (the store is idempotent, but two concurrent crawls
-# waste runner time and double the load on the ATS boards).
+# A crawl can run ~20-30 min and grows with the directory; never let two overlap (the store is
+# idempotent, but two concurrent crawls waste runner time and double the load on the ATS boards).
 concurrency:
   group: scan-worker
   cancel-in-progress: false
@@ -23,7 +23,10 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Comfortably above the worker's own 25-min crawl budget (JOB_HUNTER_SCAN_BUDGET_MS): the crawl
+    # stops itself and persists a partial feed before this hard limit, so the job never gets killed
+    # mid-crawl with nothing written. Headroom covers directory read + the post-crawl DB write.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
