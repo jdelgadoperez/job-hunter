@@ -2,11 +2,14 @@ import { describe, expect, test } from "vitest";
 import { PostgresScanStore } from "./postgres-scan-store";
 
 // Minimal fake of porsager's tagged-template `sql`. Captures the values array of each call.
-function fakeSql(returnRows: unknown[]) {
+// `responses` is either a single array shared by every call (legacy, most tests) or a function
+// that inspects the query text and returns rows tailored to that specific call.
+function fakeSql(responses: unknown[] | ((sqlText: string) => unknown[])) {
   const calls: { strings: readonly string[]; values: unknown[] }[] = [];
   const fn = (strings: TemplateStringsArray, ...values: unknown[]) => {
     calls.push({ strings: [...strings], values });
-    return Promise.resolve(returnRows);
+    const rows = typeof responses === "function" ? responses(strings.join("")) : responses;
+    return Promise.resolve(rows);
   };
   return Object.assign(fn, { calls });
 }
@@ -32,10 +35,23 @@ describe("PostgresScanStore.startScan", () => {
 
 describe("PostgresScanStore.recordDirectory", () => {
   test("honors computeRemoved:false", async () => {
-    // Fake returns pre-existing companies + a prev scan, but computeRemoved:false must suppress the diff.
-    const sql = fakeSql([]); // adapt: recordDirectory issues several queries; return [] for each
+    // Fake returns a pre-existing company (so isBaseline is false) and a prev scan id that matches
+    // that company's last_seen_scan (so it's a removed-diff candidate). The companies arg below both
+    // omits that existing company (removed candidate) and adds a new one (new-company candidate), so
+    // if computeRemoved were not gating the diff, both newCompanies and removedCompanies would be
+    // non-empty. The empty result is achievable only via the `!computeRemoved` branch.
+    const sql = fakeSql((sqlText) => {
+      if (sqlText.includes("SELECT careers_url, name, last_seen_scan FROM companies")) {
+        return [{ careers_url: "https://existing.co", name: "Existing", last_seen_scan: "3" }];
+      }
+      if (sqlText.includes("SELECT MAX(id) AS id FROM scans")) {
+        return [{ id: "3" }];
+      }
+      // Chunked upsert into companies.
+      return [];
+    });
     const store = new PostgresScanStore(sql as never);
-    const diff = await store.recordDirectory(5, [{ careersUrl: "https://x.co" }], {
+    const diff = await store.recordDirectory(5, [{ careersUrl: "https://new.co" }], {
       computeRemoved: false,
     });
     expect(diff).toEqual({ newCompanies: [], removedCompanies: [] });
