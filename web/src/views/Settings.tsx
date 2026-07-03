@@ -10,6 +10,7 @@ export function Settings() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
   const [homeCountry, setHomeCountry] = useState("");
+  const [scanFreshnessHours, setScanFreshnessHours] = useState("");
   const [theMuseKey, setTheMuseKey] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
   const [feedKey, setFeedKey] = useState("");
@@ -20,6 +21,7 @@ export function Settings() {
     if (settings.data) {
       setModel(settings.data.scorerModel ?? "");
       setHomeCountry(settings.data.homeCountry ?? "");
+      setScanFreshnessHours(settings.data.scanFreshnessHours ?? "");
       setFeedUrl(settings.data.feedUrl ?? "");
     }
   }, [settings.data]);
@@ -29,7 +31,12 @@ export function Settings() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const payload: SettingsUpdate = { scorerModel: model, feedUrl, homeCountry };
+    const payload: SettingsUpdate = {
+      scorerModel: model,
+      feedUrl,
+      homeCountry,
+      scanFreshnessHours,
+    };
     if (apiKey.trim()) payload.anthropicApiKey = apiKey.trim();
     if (theMuseKey.trim()) payload.theMuseApiKey = theMuseKey.trim();
     if (feedKey.trim()) payload.feedKey = feedKey.trim();
@@ -89,6 +96,19 @@ export function Settings() {
             value={homeCountry}
             onChange={(e) => edited(setHomeCountry)(e.target.value)}
             placeholder="US"
+            className="input"
+          />
+        </Field>
+        <Field
+          label="Scan freshness (hours)"
+          hint="Skip companies scanned within this many hours on a normal scan (0 = always rescan). Tick “Rescan all” on the dashboard to override for one run."
+        >
+          <input
+            type="number"
+            min={0}
+            value={scanFreshnessHours}
+            onChange={(e) => edited(setScanFreshnessHours)(e.target.value)}
+            placeholder="24"
             className="input"
           />
         </Field>

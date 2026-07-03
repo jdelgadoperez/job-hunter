@@ -25,6 +25,7 @@ describe("api response validation", () => {
       scorerModel: "claude-sonnet-5",
       scorerProvider: "anthropic",
       homeCountry: "US",
+      scanFreshnessHours: "24",
       hasTheMuseKey: false,
       feedUrl: "https://feed.example.com/jobs",
       hasFeedKey: true,

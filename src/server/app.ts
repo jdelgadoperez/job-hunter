@@ -10,6 +10,7 @@ import {
   HOME_COUNTRY_SETTING,
   MODEL_SETTING,
   PROVIDER_SETTING,
+  SCAN_FRESHNESS_SETTING,
   THE_MUSE_KEY_SETTING,
 } from "@app/matching/settings-keys";
 import { errorMessage } from "@app/net/error-message";
@@ -32,6 +33,7 @@ function readSettings(repo: ServerDeps["repo"]) {
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
     homeCountry: repo.getSetting(HOME_COUNTRY_SETTING) ?? null,
+    scanFreshnessHours: repo.getSetting(SCAN_FRESHNESS_SETTING) ?? null,
     hasTheMuseKey: Boolean(repo.getSetting(THE_MUSE_KEY_SETTING)?.trim()),
     // Remote feed: the URL is shown back (not secret); the anon key is write-only (presence only).
     feedUrl: repo.getSetting(FEED_URL_SETTING) ?? null,
@@ -47,6 +49,7 @@ const WRITABLE_SETTINGS: Record<string, string> = {
   scorerModel: MODEL_SETTING,
   scorerProvider: PROVIDER_SETTING,
   homeCountry: HOME_COUNTRY_SETTING,
+  scanFreshnessHours: SCAN_FRESHNESS_SETTING,
   theMuseApiKey: THE_MUSE_KEY_SETTING,
   feedUrl: FEED_URL_SETTING,
   feedKey: FEED_KEY_SETTING,

@@ -412,6 +412,7 @@ describe("settings", () => {
       scorerModel: null,
       scorerProvider: null,
       homeCountry: null,
+      scanFreshnessHours: null,
       hasTheMuseKey: false,
       feedUrl: null,
       hasFeedKey: false,
@@ -432,6 +433,22 @@ describe("settings", () => {
     const getRes = await makeApp().request("/api/settings");
     expect(await json<{ homeCountry: string | null }>(getRes)).toMatchObject({
       homeCountry: "US",
+    });
+  });
+
+  it("stores and echoes back the scan freshness hours", async () => {
+    const res = await makeApp().request("/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scanFreshnessHours: "12" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await json<{ scanFreshnessHours: string | null }>(res);
+    expect(body.scanFreshnessHours).toBe("12");
+
+    const getRes = await makeApp().request("/api/settings");
+    expect(await json<{ scanFreshnessHours: string | null }>(getRes)).toMatchObject({
+      scanFreshnessHours: "12",
     });
   });
 

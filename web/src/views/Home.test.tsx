@@ -52,6 +52,7 @@ function mockFetch(bodies: Bodies) {
             scorerModel: null,
             scorerProvider: null,
             homeCountry: null,
+            scanFreshnessHours: null,
             hasTheMuseKey: false,
             feedUrl: null,
             hasFeedKey: false,
