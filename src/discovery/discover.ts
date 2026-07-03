@@ -4,6 +4,7 @@ import type { JobPosting, Warning } from "@app/domain/types";
 import type { SettingsReader } from "@app/matching/resolve-settings";
 import { errorMessage } from "@app/net/error-message";
 import type { Fetcher } from "@app/net/fetcher";
+import { withTimeout } from "@app/net/with-timeout";
 import pLimit from "p-limit";
 import { makeCompanyId } from "./company-id";
 import { BrowserConnector, type PageRenderer } from "./connectors/browser";
@@ -60,6 +61,10 @@ export type DiscoverResult = {
 
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_DELAY_MS = 250;
+/** Cap for the post-crawl browser teardown. Closing the shared headless browser should be near-
+ *  instant; if it ever hangs, this bounds the wait to a few seconds (then degrades to a warning)
+ *  instead of a silent stall that runs the run's clock down to the job timeout. */
+const DISPOSE_TIMEOUT_MS = 15_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -275,8 +280,20 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
   } finally {
     // Release the shared headless browser (if the run used the browser fallback) once, after all
     // renders are done — main pass AND retry pass — rather than launching and closing one per
-    // company or per pass.
-    await renderer.dispose?.();
+    // company or per pass. Bounded by a timeout and never fatal: a hung teardown must not silently
+    // burn the run's remaining clock (nor discard the postings we just crawled) — it degrades to a
+    // warning, same as any other crawl failure.
+    if (renderer.dispose) {
+      try {
+        await withTimeout(
+          Promise.resolve(renderer.dispose()),
+          DISPOSE_TIMEOUT_MS,
+          "renderer.dispose",
+        );
+      } catch (error) {
+        warnings.push({ source: "directory", message: `Browser cleanup: ${errorMessage(error)}` });
+      }
+    }
   }
 
   const skipped = leads.filter((lead) => isUnscrapableHost(lead.careersUrl));

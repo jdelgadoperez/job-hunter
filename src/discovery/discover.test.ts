@@ -200,6 +200,35 @@ describe("discover", () => {
     expect(disposeCount).toBe(1);
   });
 
+  it("degrades a failing browser teardown to a warning without aborting the run", async () => {
+    const renderer: PageRenderer = {
+      async render() {
+        return JSONLD_HTML;
+      },
+      async dispose() {
+        throw new Error("browser stuck");
+      },
+    };
+    const reader = new FakeSharedViewReader(
+      airtableData([{ name: "Initech", url: "https://initech.com/careers" }]),
+    );
+
+    const { postings, warnings } = await discover({
+      fetcher: new GaugedFetcher({}, new Gauge()),
+      renderer,
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // The crawled posting still comes through despite the teardown failure...
+    expect(postings.map((p) => p.title)).toEqual(["Operations Lead"]);
+    // ...and the failure surfaces as a warning rather than crashing discover.
+    expect(warnings.some((w) => w.message.includes("Browser cleanup"))).toBe(true);
+  });
+
   it("skips un-scrapable hosts (LinkedIn) without rendering, and surfaces them for review", async () => {
     const rendered: string[] = [];
     const renderer: PageRenderer = {
