@@ -4,6 +4,7 @@ import type { Warning } from "@app/domain/types";
 import { createAbortingScorer } from "@app/matching/aborting-scorer";
 import { HeuristicScorer } from "@app/matching/heuristic-scorer";
 import { DEFAULT_TRIAGE_BATCH_SIZE, LlmTriager } from "@app/matching/llm-triager";
+import { formatUsageSummary, UsageAccumulator } from "@app/matching/llm-usage";
 import {
   resolveApiKey,
   resolveHomeCountry,
@@ -56,7 +57,13 @@ async function runDeepScore(
   const warnings: Warning[] = [];
   const heuristic = new HeuristicScorer(dictionary.length > 0 ? dictionary : undefined);
 
-  const rawClient = provider.createClient({ apiKey, model });
+  // Accumulate prompt-cache telemetry across triage + deep-score calls so the read/write split is
+  // visible on the server console after a dashboard-triggered run — the CLI already does this via
+  // `runScoreCommand`, but this path (deep-score from the web UI) previously captured nothing.
+  const usage = new UsageAccumulator();
+  const onUsage = (u: Parameters<typeof usage.add>[0]) => usage.add(u);
+
+  const rawClient = provider.createClient({ apiKey, model, onUsage });
   const scorer = createAbortingScorer({
     client: rawClient,
     heuristic,
@@ -65,7 +72,7 @@ async function runDeepScore(
   });
 
   const triager = new LlmTriager(
-    new AnthropicTriageClient({ apiKey, model }),
+    new AnthropicTriageClient({ apiKey, model, onUsage }),
     DEFAULT_TRIAGE_BATCH_SIZE,
     (warning) => warnings.push(warning),
   );
@@ -88,6 +95,12 @@ async function runDeepScore(
     onWarning: (warning) => warnings.push(warning),
     ...(onProgress ? { onProgress } : {}),
   });
+
+  // Echo the cache read/write split to the server console (null on a dry-run — no LLM calls).
+  const usageSummary = formatUsageSummary(usage);
+  if (usageSummary) {
+    for (const line of usageSummary.split("\n")) console.log(`${style.dim("[score]")} ${line}`);
+  }
 
   return {
     counts: outcome.counts,
