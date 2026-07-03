@@ -1,5 +1,5 @@
 import { Globe, type LucideIcon, Star, TrendingUp, Users } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { ScoredPosting } from "../api";
 import { type CompanyLink, companyDisplayName, companyLinks } from "../company-links";
 import {
@@ -50,7 +50,10 @@ function CompanyLinksRow({ posting }: { posting: ScoredPosting["posting"] }) {
   );
 }
 
-function MatchCard({
+// Wrapped in memo so an optimistic save/dismiss/apply mutation on one card only re-renders that
+// card, not the whole list — React.memo compares incoming props, and only the touched posting's
+// `action`/`result` identity changes after a mutation.
+const MatchCard = memo(function MatchCard({
   posting,
   result,
   action,
@@ -155,7 +158,7 @@ function MatchCard({
       </div>
     </Card>
   );
-}
+});
 
 export function Matches() {
   // Default to the "relevant" floor so the list leads with genuinely relevant matches.
