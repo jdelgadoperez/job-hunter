@@ -20,17 +20,25 @@ type CommandHelp = {
 export const COMMANDS: CommandHelp[] = [
   {
     name: "scan",
-    invocation: "scan [--retry-failed]",
+    invocation: "scan [--retry-failed] [--all] [--freshness-hours N]",
     summary: "Discover and store new postings (free heuristic scoring)",
     details:
-      "Reads the public job directory plus any tracked companies, stores postings with a free heuristic score, and expires roles that have gone offline. Run `score` afterward for LLM scoring.",
+      "Reads the public job directory plus any tracked companies, stores postings with a free heuristic score, and expires roles that have gone offline. Run `score` afterward for LLM scoring. Defaults to an incremental scan that skips companies scanned recently.",
     options: [
       [
         "--retry-failed",
         "Rescan only companies that have failed to fetch on several consecutive scans (the 'needs attention' list), instead of the full directory. Note: when a remote feed is configured, the feed is scoped to these needs-attention companies once the shared worker emits company ids.",
       ],
+      [
+        "--all",
+        "Rescan every company, ignoring the freshness window (default: skip recently-scanned ones).",
+      ],
+      [
+        "--freshness-hours N",
+        "Skip companies scanned within the last N hours (default: the scanFreshnessHours setting).",
+      ],
     ],
-    examples: ["job-hunter scan", "job-hunter scan --retry-failed"],
+    examples: ["job-hunter scan", "job-hunter scan --retry-failed", "job-hunter scan --all"],
   },
   {
     name: "score",

@@ -9,7 +9,7 @@ export const DEFAULT_MIN_SCORE = 50;
 export { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT };
 
 export type Command =
-  | { kind: "scan"; retryFailed: boolean }
+  | { kind: "scan"; retryFailed: boolean; all: boolean; freshnessHours?: number }
   | { kind: "serve"; port?: number; open: boolean; refreshHours?: number }
   | { kind: "track-add"; url: string; name?: string }
   | { kind: "track-list" }
@@ -56,10 +56,28 @@ export function parseCli(argv: string[]): Command {
     case "scan": {
       const { values } = parseArgs({
         args: rest,
-        options: { "retry-failed": { type: "boolean" } },
+        options: {
+          "retry-failed": { type: "boolean" },
+          all: { type: "boolean" },
+          "freshness-hours": { type: "string" },
+        },
         allowPositionals: true,
       });
-      return { kind: "scan", retryFailed: Boolean(values["retry-failed"]) };
+      const freshnessRaw = values["freshness-hours"];
+      let freshnessHours: number | undefined;
+      if (freshnessRaw !== undefined) {
+        const n = Number(freshnessRaw);
+        if (!Number.isInteger(n) || n < 0) {
+          return { kind: "help", error: `invalid --freshness-hours: ${freshnessRaw}` };
+        }
+        freshnessHours = n;
+      }
+      return {
+        kind: "scan",
+        retryFailed: Boolean(values["retry-failed"]),
+        all: Boolean(values.all),
+        ...(freshnessHours !== undefined ? { freshnessHours } : {}),
+      };
     }
 
     case "serve": {
