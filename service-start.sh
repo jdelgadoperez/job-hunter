@@ -12,4 +12,4 @@ fi
 # on an already-loaded agent. bootstrap is a no-op error if already loaded, so ignore that case.
 launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || true
 launchctl kickstart -k "gui/$(id -u)/$LABEL"
-echo "Started. Open http://localhost:4317"
+echo "Started. Open http://localhost:48373"
