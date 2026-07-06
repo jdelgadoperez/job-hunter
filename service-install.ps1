@@ -30,4 +30,4 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
 Start-ScheduledTask -TaskName $TaskName
-Write-Host "Dashboard will start automatically at logon. Open http://localhost:4317"
+Write-Host "Dashboard will start automatically at logon. Open http://localhost:48373"

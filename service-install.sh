@@ -50,4 +50,4 @@ PLISTEOF
 
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 launchctl kickstart -k "gui/$(id -u)/$LABEL"
-echo "Dashboard will start automatically at login. Open http://localhost:4317"
+echo "Dashboard will start automatically at login. Open http://localhost:48373"
