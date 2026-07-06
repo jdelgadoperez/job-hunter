@@ -104,6 +104,22 @@ export const COMMANDS: CommandHelp[] = [
     examples: ["job-hunter serve", "job-hunter serve --port 8080 --no-open"],
   },
   {
+    name: "service",
+    invocation: "service <install|uninstall|start|stop|status>",
+    summary: "Keep the dashboard running in the background (at login)",
+    details:
+      "Runs the dashboard as a per-user background service so it starts at login and survives closing the terminal — no admin rights required. Uses launchd on macOS and Task Scheduler on Windows under the hood. `install` sets it up (and starts it now); `status` shows whether it's running plus recent logs.",
+    optionsLabel: "SUBCOMMANDS",
+    options: [
+      ["install", "Set up the service and start it now (runs at every login)."],
+      ["uninstall", "Remove the service (stops keeping the dashboard running)."],
+      ["start", "Start the service now."],
+      ["stop", "Stop the service now."],
+      ["status", "Show whether the dashboard is running, plus recent log lines."],
+    ],
+    examples: ["job-hunter service install", "job-hunter service status"],
+  },
+  {
     name: "profile",
     invocation: "profile <resume-file>",
     summary: "Build your skill profile from a resume",

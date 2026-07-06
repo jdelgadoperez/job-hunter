@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   warnings: [] as Warning[],
   resumeText: "Experienced with TypeScript and React.",
   startServer: vi.fn(),
+  runServiceCommand: vi.fn(),
 }));
 
 // Point the CLI at a per-test temp database instead of the real data dir.
@@ -34,6 +35,13 @@ vi.mock("@app/profile/read-resume", () => ({
 // Don't boot a real HTTP listener when dispatching the `serve` command.
 vi.mock("@app/server/serve", () => ({
   startServer: (opts: unknown) => h.startServer(opts),
+}));
+
+// Don't spawn the real background-service script when dispatching `service` — but keep the real
+// pure exports (isServiceAction/SERVICE_ACTIONS) that the parser depends on.
+vi.mock("./service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./service")>()),
+  runServiceCommand: (action: unknown) => h.runServiceCommand(action),
 }));
 
 import { main } from "./main";
@@ -75,6 +83,7 @@ beforeEach(() => {
   h.postings = [];
   h.warnings = [];
   h.startServer.mockReset();
+  h.runServiceCommand.mockReset().mockResolvedValue(0);
   process.exitCode = 0;
   vi.stubEnv("ANTHROPIC_API_KEY", undefined);
   logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -137,6 +146,20 @@ describe("main dispatch", () => {
   it("starts the web server for the serve command, passing through options", async () => {
     await runCli("serve", "--port", "8080", "--no-open", "--refresh-hours", "12");
     expect(h.startServer).toHaveBeenCalledWith({ port: 8080, open: false, refreshHours: 12 });
+  });
+
+  it("dispatches the service command to the platform script and adopts its exit code", async () => {
+    h.runServiceCommand.mockResolvedValue(3);
+    await runCli("service", "status");
+    expect(h.runServiceCommand).toHaveBeenCalledWith("status");
+    expect(process.exitCode).toBe(3);
+  });
+
+  it("does not open the database for the service command", async () => {
+    // A service action needs no DB — resolveDbPath must not even be consulted. (If it were, this
+    // would still pass, but the assertion documents that `service` short-circuits before the repo.)
+    await runCli("service", "install");
+    expect(h.runServiceCommand).toHaveBeenCalledWith("install");
   });
 });
 
