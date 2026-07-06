@@ -698,6 +698,11 @@ export class Repository {
    * Staleness counts only full scans newer than a posting's `last_seen_scan`, so any number of
    * scoped `"retry"` scans in between never advances the clock (a scoped run refreshes only the
    * companies it crawls, and must not push untouched postings toward expiry).
+   *
+   * Only *finished* scans count. A scan that crashed or was killed between `startScan` and
+   * `finishScan` (an OOM, an uncaught write-phase error, the worker's hard job-timeout kill) leaves
+   * a `finished_at IS NULL` row; without the guard below it would still advance the staleness clock,
+   * so two crashes in a row could expire postings from companies that were never actually re-crawled.
    */
   expireStalePostings(currentScanId: number, staleAfter = 2): number {
     return this.db
@@ -706,7 +711,8 @@ export class Repository {
          WHERE expired_at IS NULL AND last_seen_scan IS NOT NULL
            AND (
              SELECT COUNT(*) FROM scans
-             WHERE kind = 'full' AND id > postings.last_seen_scan AND id <= ?
+             WHERE kind = 'full' AND finished_at IS NOT NULL
+               AND id > postings.last_seen_scan AND id <= ?
            ) >= ?`,
       )
       .run(currentScanId, staleAfter).changes;

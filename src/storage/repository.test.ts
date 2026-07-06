@@ -380,17 +380,29 @@ describe("incremental scans — posting expiry", () => {
     repo.saveMatchResult(id, { score: 80, matchedSkills: [], missingSkills: [] });
   }
 
+  /** Start and finish a scan — only *finished* scans advance the staleness clock. */
+  function finishedScan(repo: Repository, kind: "full" | "retry" = "full"): number {
+    const id = repo.startScan(kind);
+    repo.finishScan(id, {
+      postingsSeen: 0,
+      companiesSeen: 0,
+      newCompanies: [],
+      removedCompanies: [],
+    });
+    return id;
+  }
+
   it("expires a posting after it misses two consecutive scans, and revives it on return", () => {
     const repo = newRepo();
     const s1 = repo.startScan();
     seedScored(repo, "p1", s1);
 
     // One missed scan: still listed.
-    expect(repo.expireStalePostings(repo.startScan())).toBe(0);
+    expect(repo.expireStalePostings(finishedScan(repo))).toBe(0);
     expect(repo.listScoredPostings(0)).toHaveLength(1);
 
     // Second consecutive miss: expired and dropped from the default list.
-    const expired = repo.expireStalePostings(repo.startScan());
+    const expired = repo.expireStalePostings(finishedScan(repo));
     expect(expired).toBe(1);
     expect(repo.listScoredPostings(0)).toHaveLength(0);
     expect(repo.listScoredPostings(0, { includeExpired: true })).toHaveLength(1);
@@ -398,6 +410,25 @@ describe("incremental scans — posting expiry", () => {
     // Seen again in a later scan: revived.
     seedScored(repo, "p1", repo.startScan());
     expect(repo.listScoredPostings(0)).toHaveLength(1);
+    repo.close();
+  });
+
+  it("does NOT count an unfinished (crashed/killed) scan toward the staleness clock", () => {
+    const repo = newRepo();
+    seedScored(repo, "p1", repo.startScan());
+
+    // Two full scans elapse, but both crashed before finishScan (finished_at stays NULL). A
+    // consecutive-miss expiry must not fire on scans that never actually completed a crawl —
+    // otherwise a worker that OOMs or hits its hard job-timeout twice would expire live postings.
+    repo.startScan("full"); // unfinished
+    const secondUnfinished = repo.startScan("full"); // unfinished
+    expect(repo.expireStalePostings(secondUnfinished)).toBe(0);
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+
+    // Once two scans actually FINISH without re-seeing p1, it expires as expected.
+    finishedScan(repo);
+    expect(repo.expireStalePostings(finishedScan(repo))).toBe(1);
+    expect(repo.listScoredPostings(0)).toHaveLength(0);
     repo.close();
   });
 
@@ -417,15 +448,15 @@ describe("incremental scans — posting expiry", () => {
     repo.savePosting(postingWith("p1"), scan1);
 
     // Two scoped retry scans happen (e.g. the user iterates on flaky companies).
-    repo.startScan("retry");
-    repo.startScan("retry");
+    finishedScan(repo, "retry");
+    finishedScan(repo, "retry");
     // Even though the raw scanId gap is now >= 2, only 0 FULL scans have elapsed since scan1,
     // so nothing is stale.
-    expect(repo.expireStalePostings(repo.startScan("retry"))).toBe(0);
+    expect(repo.expireStalePostings(finishedScan(repo, "retry"))).toBe(0);
 
     // A genuine second AND third full scan (that don't re-see p1) DO make it stale.
-    repo.startScan("full");
-    const laterFull = repo.startScan("full");
+    finishedScan(repo);
+    const laterFull = finishedScan(repo);
     expect(repo.expireStalePostings(laterFull)).toBe(1);
     repo.close();
   });
@@ -862,12 +893,23 @@ describe("listScoredPostings — applied action", () => {
 
   it("onlyApplied still shows an applied posting after it expires (you applied to it)", () => {
     const repo = newRepo();
-    // Save under a scan, mark applied, then let it miss two consecutive scans so it expires.
+    // Save under a scan, mark applied, then let it miss two consecutive FINISHED scans so it expires
+    // (only finished scans advance the staleness clock).
+    const finishScan = (): number => {
+      const id = repo.startScan();
+      repo.finishScan(id, {
+        postingsSeen: 0,
+        companiesSeen: 0,
+        newCompanies: [],
+        removedCompanies: [],
+      });
+      return id;
+    };
     repo.savePosting(postingWith("p-exp"), repo.startScan());
     repo.saveMatchResult("p-exp", { score: 90, matchedSkills: [], missingSkills: [] });
     repo.setUserAction("p-exp", "applied");
-    repo.expireStalePostings(repo.startScan());
-    repo.expireStalePostings(repo.startScan());
+    repo.expireStalePostings(finishScan());
+    repo.expireStalePostings(finishScan());
 
     // It's expired, so the default list (and a normal includeApplied reveal) hides it...
     expect(repo.listScoredPostings(0, { includeApplied: true }).map((s) => s.posting.id)).toEqual(

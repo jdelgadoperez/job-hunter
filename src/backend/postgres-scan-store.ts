@@ -199,12 +199,15 @@ export class PostgresScanStore implements ScanStore {
   }
 
   async expireStalePostings(scanId: number, staleAfter = 2): Promise<number> {
+    // Only *finished* scans count toward the staleness clock — a crashed/killed scan (finished_at
+    // IS NULL) must not push untouched postings toward expiry. Matches the SQLite Repository.
     const rows = await this.sql`
       UPDATE postings SET expired_at = now()
       WHERE expired_at IS NULL AND last_seen_scan IS NOT NULL
         AND (
           SELECT COUNT(*) FROM scans
-          WHERE kind = 'full' AND id > postings.last_seen_scan AND id <= ${scanId}
+          WHERE kind = 'full' AND finished_at IS NOT NULL
+            AND id > postings.last_seen_scan AND id <= ${scanId}
         ) >= ${staleAfter}
       RETURNING id`;
     return rows.length;
