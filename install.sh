@@ -27,8 +27,15 @@ echo "Running setup…"
 npm run setup
 
 # Only prompt when stdin is a terminal — a piped install (e.g. curl | bash) has no TTY, and `read`
-# would either hang or read nothing. In that case skip the offer; the service can be enabled later.
+# would either hang or read nothing. In that case skip the offers; both can be enabled later.
 if [ -t 0 ]; then
+  echo
+  read -r -p "Add a 'job-hunter' command to your PATH (so you can skip 'npm run cli --')? [y/N] " reply
+  case "$reply" in
+    [yY]*) ./command-install.sh ;;
+    *) echo "Skipped. You can add it later with ./command-install.sh" ;;
+  esac
+
   echo
   read -r -p "Keep the dashboard running in the background (start at login)? [y/N] " reply
   case "$reply" in
@@ -36,5 +43,6 @@ if [ -t 0 ]; then
     *) echo "Skipped. You can enable it later with ./service-install.sh" ;;
   esac
 else
+  echo "To add a 'job-hunter' command to your PATH, run ./command-install.sh"
   echo "To keep the dashboard running in the background, run ./service-install.sh"
 fi
