@@ -1,6 +1,7 @@
 import { type ParseArgsConfig, parseArgs } from "node:util";
 import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import { COMMAND_NAMES } from "./help";
+import { isServiceAction, SERVICE_ACTIONS, type ServiceAction } from "./service";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
 export const DEFAULT_MIN_SCORE = 50;
@@ -32,6 +33,7 @@ export type Command =
       dryRun: boolean;
     }
   | { kind: "config-remote"; on: boolean }
+  | { kind: "service"; action: ServiceAction }
   | { kind: "version" }
   | { kind: "help"; error?: string; topic?: string };
 
@@ -257,6 +259,20 @@ export function parseCli(argv: string[]): Command {
         return { kind: "help", error: `config remote expects on|off, got: ${value ?? "(none)"}` };
       }
       return { kind: "help", error: `unknown config subcommand: ${sub ?? "(none)"}` };
+    }
+
+    case "service": {
+      const [action] = rest;
+      if (action === undefined) {
+        return {
+          kind: "help",
+          error: `service requires an action: ${SERVICE_ACTIONS.join(" | ")}`,
+        };
+      }
+      if (!isServiceAction(action)) {
+        return { kind: "help", error: `unknown service action: ${action}` };
+      }
+      return { kind: "service", action };
     }
 
     default:

@@ -42,6 +42,7 @@ import {
 } from "./commands";
 import { renderHelp } from "./help";
 import { parseCli } from "./parse";
+import { runServiceCommand } from "./service";
 import { style } from "./style";
 
 export type ScoreCliOptions = {
@@ -239,6 +240,13 @@ export async function main(): Promise<void> {
       open: command.open,
       refreshHours: command.refreshHours,
     });
+    return;
+  }
+
+  // `service` just shells out to the per-platform background-service script — it needs no database,
+  // so it runs before the repository is opened. Its exit code becomes ours.
+  if (command.kind === "service") {
+    process.exitCode = await runServiceCommand(command.action);
     return;
   }
 

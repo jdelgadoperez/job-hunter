@@ -303,3 +303,23 @@ describe("config remote command", () => {
     expect(parseCli(["config", "remote", "maybe"]).kind).toBe("help");
   });
 });
+
+describe("service command", () => {
+  it("parses each lifecycle action", () => {
+    for (const action of ["install", "uninstall", "start", "stop", "status"] as const) {
+      expect(parseCli(["service", action])).toEqual({ kind: "service", action });
+    }
+  });
+
+  it("returns a help error when no action is given", () => {
+    const result = parseCli(["service"]);
+    expect(result.kind).toBe("help");
+    expect(result).toMatchObject({ error: expect.stringContaining("action") });
+  });
+
+  it("returns a help error for an unknown action", () => {
+    const result = parseCli(["service", "restart"]);
+    expect(result.kind).toBe("help");
+    expect(result).toMatchObject({ error: expect.stringContaining("restart") });
+  });
+});
