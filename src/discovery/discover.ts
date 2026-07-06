@@ -156,13 +156,22 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
 
   // Space request *starts* by delayMs without holding a concurrency slot during the
   // wait, so the cap bounds in-flight requests rather than serializing the dead time.
+  //
+  // Returns `false` when the budget is spent so the caller skips the lead without crawling. The
+  // budget check runs INSIDE the serialized gate chain (right before the sleep), not eagerly at
+  // call time: all leads' turns are queued up front, so an eager check would still read a
+  // not-yet-exhausted clock and chain a `delayMs` sleep for every remaining lead once the budget
+  // blows — burning minutes of dead sleep past the budget. Checking within the chain means each
+  // turn sees the clock advanced by the fetches that already ran, and over-budget turns resolve
+  // immediately with no sleep.
   let gate = Promise.resolve();
-  const waitTurn = (): Promise<void> => {
-    if (delayMs <= 0) {
-      return Promise.resolve();
-    }
-    const next = gate.then(() => sleep(delayMs));
-    gate = next;
+  const waitTurn = (): Promise<boolean> => {
+    const next = gate.then(async () => {
+      if (overBudget()) return false;
+      if (delayMs > 0) await sleep(delayMs);
+      return true;
+    });
+    gate = next.then(() => undefined);
     return next;
   };
 
@@ -185,9 +194,13 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
   let skippedOverBudget = 0;
   try {
     const collected = await Promise.all(
-      leads.map(async (lead) => {
-        await waitTurn();
+      leads.map(async (lead): Promise<{ lead: CompanyLead; result: ConnectorResult | null }> => {
         // `null` result === skipped because the budget is spent (distinct from a crawl failure).
+        // waitTurn() itself skips the politeness sleep once the budget is spent, so remaining leads
+        // don't burn `delayMs` each past the deadline.
+        if (!(await waitTurn())) {
+          return { lead, result: null };
+        }
         return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult | null }> => {
           if (overBudget()) {
             return { lead, result: null };
@@ -233,28 +246,40 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
       ? []
       : failed.filter(({ lead }) => !skipRetryFor.has(normalizeCareersUrl(lead.careersUrl)));
     let retryStarted = 0;
+    // Leads we entered the retry pass for but abandoned because the budget ran out mid-pass. They
+    // fall through to the main-pass-warning loop below so they keep their original failure reason.
+    const retryAbandoned = new Set<string>();
     const retried = await Promise.all(
-      toRetry.map(async ({ lead }) => {
-        await waitTurn();
-        return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
-          retryStarted += 1;
-          deps.onProgress?.({
-            kind: "company",
-            name: lead.company,
-            host: hostnameOf(lead.careersUrl),
-            index: retryStarted,
-            total: toRetry.length,
-          });
-          try {
-            return { lead, result: await fetchLead(lead) };
-          } catch (error) {
-            return { lead, result: { ok: false, warning: errorMessage(error) } };
+      toRetry.map(
+        async ({ lead }): Promise<{ lead: CompanyLead; result: ConnectorResult | null }> => {
+          // Same budget-aware wait as the main pass: if the budget is spent partway through the retry
+          // pass, waitTurn() returns false without sleeping. `null` === abandoned; the lead keeps its
+          // main-pass warning (surfaced by the loop below).
+          if (!(await waitTurn())) {
+            retryAbandoned.add(normalizeCareersUrl(lead.careersUrl));
+            return { lead, result: null };
           }
-        });
-      }),
+          return limit(async (): Promise<{ lead: CompanyLead; result: ConnectorResult }> => {
+            retryStarted += 1;
+            deps.onProgress?.({
+              kind: "company",
+              name: lead.company,
+              host: hostnameOf(lead.careersUrl),
+              index: retryStarted,
+              total: toRetry.length,
+            });
+            try {
+              return { lead, result: await fetchLead(lead) };
+            } catch (error) {
+              return { lead, result: { ok: false, warning: errorMessage(error) } };
+            }
+          });
+        },
+      ),
     );
     const retriedUrls = new Set(toRetry.map(({ lead }) => normalizeCareersUrl(lead.careersUrl)));
     for (const { lead, result } of retried) {
+      if (result === null) continue; // budget-abandoned — handled by the main-pass-warning loop below
       if (!result.ok) {
         warnings.push({
           source: lead.company,
@@ -267,10 +292,11 @@ export async function discover(deps: DiscoverDeps): Promise<DiscoverResult> {
         byId.set(posting.id, { ...posting, companyId: makeCompanyId(lead.careersUrl) });
       }
     }
-    // Anything not retried (skip-listed, or skipped because the budget ran out) keeps its main-pass
-    // warning so the failure is still surfaced.
+    // Anything not retried (skip-listed, or skipped/abandoned because the budget ran out) keeps its
+    // main-pass warning so the failure is still surfaced.
     for (const { lead, result } of failed) {
-      if (retriedUrls.has(normalizeCareersUrl(lead.careersUrl))) continue;
+      const key = normalizeCareersUrl(lead.careersUrl);
+      if (retriedUrls.has(key) && !retryAbandoned.has(key)) continue;
       warnings.push({
         source: lead.company,
         message: result.warning,
