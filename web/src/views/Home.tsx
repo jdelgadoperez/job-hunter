@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useState } from "react";
 import type { CompanyRef, ScorePreview } from "../api";
-import { Button, Card, LiveStatus, Loading, ProgressBar } from "../components/ui";
+import { Button, Card, ErrorNote, LiveStatus, Loading, ProgressBar } from "../components/ui";
 import { formatCount } from "../format";
 import {
   useLatestScan,
@@ -75,6 +75,10 @@ export function Home({ active = true }: { active?: boolean } = {}) {
   }
 
   if (profile.isPending) return <Loading label="Loading…" />;
+  // A failed /api/profile fetch (500, network error, or a zod schema-drift parse failure) must not
+  // fall through to the "no profile yet" empty state below — that would tell a user who already
+  // uploaded a resume they have none, with no hint the request failed.
+  if (profile.isError) return <ErrorNote error={profile.error} />;
 
   const skills = profile.data?.skills ?? [];
 
@@ -169,6 +173,16 @@ export function Home({ active = true }: { active?: boolean } = {}) {
               </ul>
             ) : null}
           </div>
+        ) : null}
+
+        {/* The status poll itself failed (server died, network dropped) while the last-known state is
+            still "running". Without this, TanStack Query keeps the stale "running" data and the
+            spinner above would loop forever with no sign anything went wrong. */}
+        {scan.isError ? (
+          <p className="mt-2 text-sm text-danger" aria-live="assertive">
+            Lost contact with the scan — it may still be running in the background. Reload to check
+            its status. ({scan.error instanceof Error ? scan.error.message : String(scan.error)})
+          </p>
         ) : null}
 
         {status?.state === "done" ? (
@@ -313,6 +327,19 @@ function DeepScoreCard({
             </ul>
           ) : null}
         </div>
+      ) : null}
+
+      {/* Same as the scan card: a failed status poll while the last-known state is "running" would
+          otherwise leave the "Scoring…" spinner looping forever with no error. */}
+      {scoreStatus.isError ? (
+        <p className="mt-3 text-sm text-danger" aria-live="assertive">
+          Lost contact with the deep-score run — it may still be running in the background. Reload
+          to check its status. (
+          {scoreStatus.error instanceof Error
+            ? scoreStatus.error.message
+            : String(scoreStatus.error)}
+          )
+        </p>
       ) : null}
 
       {!hasKey ? (
