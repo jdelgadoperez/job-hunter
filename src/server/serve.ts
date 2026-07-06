@@ -47,7 +47,7 @@ function mountDashboard(app: Hono): void {
 }
 
 export type ServeOptions = {
-  /** Port to listen on. Defaults to 4317. */
+  /** Port to listen on. Defaults to 48373. */
   port?: number;
   /** Open the dashboard in the default browser on launch. Defaults to true. */
   open?: boolean;
@@ -55,7 +55,10 @@ export type ServeOptions = {
   refreshHours?: number;
 };
 
-const DEFAULT_PORT = 4317;
+// A high, uncommon port in the private range so the dashboard doesn't collide with well-known
+// services. (4317 — the previous default — is the OTLP/gRPC telemetry port used by OpenTelemetry
+// collectors and tools like OrbStack, which caused a bind conflict.)
+const DEFAULT_PORT = 48373;
 const LOOPBACK_HOST = "127.0.0.1";
 const DEFAULT_REFRESH_HOURS = 6;
 const UPDATE_CHECK_TTL_MS = 60 * 60 * 1000;

@@ -80,10 +80,10 @@ describe("isLoopbackHost (DNS-rebinding guard)", () => {
   it("accepts loopback hosts, with or without a port", () => {
     for (const host of [
       "localhost",
-      "localhost:4317",
+      "localhost:48373",
       "127.0.0.1",
-      "127.0.0.1:4317",
-      "[::1]:4317",
+      "127.0.0.1:48373",
+      "[::1]:48373",
     ]) {
       expect(isLoopbackHost(host)).toBe(true);
     }
@@ -92,7 +92,7 @@ describe("isLoopbackHost (DNS-rebinding guard)", () => {
   });
 
   it("rejects non-loopback hosts (the DNS-rebinding signature)", () => {
-    for (const host of ["evil.example.com", "192.168.1.5:4317", "0.0.0.0:4317", "10.0.0.1"]) {
+    for (const host of ["evil.example.com", "192.168.1.5:48373", "0.0.0.0:48373", "10.0.0.1"]) {
       expect(isLoopbackHost(host)).toBe(false);
     }
   });

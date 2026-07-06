@@ -3,8 +3,8 @@
  *
  *   npm run dev
  *
- * Starts `job-hunter serve` (Hono API on :4317, no auto-open, no scheduled scans) alongside the
- * Vite dev server (hot-reload UI on :5173, which proxies /api to :4317). Use the :5173 URL. Either
+ * Starts `job-hunter serve` (Hono API on :48373, no auto-open, no scheduled scans) alongside the
+ * Vite dev server (hot-reload UI on :5173, which proxies /api to :48373). Use the :5173 URL. Either
  * process exiting tears down the other; Ctrl+C stops both.
  */
 import { type ChildProcess, spawn } from "node:child_process";
@@ -34,6 +34,6 @@ function run(label: string, command: string): void {
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
-console.log("Starting API (:4317) + web dev server (:5173)… open http://localhost:5173\n");
+console.log("Starting API (:48373) + web dev server (:5173)… open http://localhost:5173\n");
 run("api", "npm run serve -- --no-open --refresh-hours 0");
 run("web", "npm run dev:web");
