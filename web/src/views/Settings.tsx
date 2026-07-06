@@ -115,9 +115,22 @@ export function Settings() {
         <Field
           label="The Muse API key"
           hint={
-            settings.data.hasTheMuseKey
-              ? "A key is set. Leave blank to keep it."
-              : "Optional — adds The Muse as a lead source."
+            settings.data.hasTheMuseKey ? (
+              "A key is set. Leave blank to keep it."
+            ) : (
+              <>
+                Optional — adds The Muse as a lead source.{" "}
+                <a
+                  href="https://www.themuse.com/developers/api/v2"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  Get a key
+                </a>
+                .
+              </>
+            )
           }
         >
           <input
@@ -180,7 +193,7 @@ function Field({
   children,
 }: {
   label: string;
-  hint?: string;
+  hint?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
