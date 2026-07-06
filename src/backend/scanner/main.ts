@@ -1,3 +1,4 @@
+import { ensureSchema } from "@app/backend/ensure-schema";
 import { PostgresScanStore } from "@app/backend/postgres-scan-store";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
@@ -48,6 +49,10 @@ async function main(): Promise<void> {
   const sql = postgres(url);
   const store = new PostgresScanStore(sql);
   try {
+    // Self-heal any schema drift (a rebuilt DB, or one predating a recent column) before the first
+    // query touches it — schema.sql is idempotent, so this is a no-op on an up-to-date database.
+    await ensureSchema(sql);
+    console.log("[scanner] schema ensured.");
     const outcome = await runScannerOnce({
       store,
       discoverDeps: {
