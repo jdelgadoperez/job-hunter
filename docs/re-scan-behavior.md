@@ -7,7 +7,7 @@ revived), and where those changes surface to you in the CLI and the dashboard.
 
 For everyday usage, see the [getting-started guide](https://github.com/jdelgadoperez/job-hunter/wiki/Getting-Started). This doc is for understanding the *behavior*
 — useful if you're wondering "why did that posting disappear?". Note that **`scan` only ever applies
-the free heuristic score**; LLM deep-scoring is a separate, budget-aware `score` step (see below), so
+the free offline score**; Claude deep-scoring is a separate, budget-aware `score` step (see below), so
 re-scanning never re-charges your API budget.
 
 ## The short version
@@ -23,9 +23,9 @@ re-scanning never re-charges your API budget.
   the tool computes "new", "gone", and "stale".
 - **Every live posting from a crawled company is heuristic-re-scored on every scan** — the free
   offline scorer, so a re-scan costs only CPU. (An incremental scan doesn't crawl fresh companies, so
-  their postings aren't re-scored that run.) LLM scoring is **not** part of `scan`; it's the separate
-  `score` command, which skips postings it already LLM-scored (unless `--rescore`), so it never
-  silently re-charges.
+  their postings aren't re-scored that run.) Claude scoring is **not** part of `scan`; it's the
+  separate `score` command, which skips postings it already Claude-scored (unless `--rescore`), so it
+  never silently re-charges.
 - Postings that **weren't seen this run** are re-checked for liveness and expired — immediately if
   confirmed gone, otherwise after they've been missing for two or more scans.
 - A posting that **reappears after being expired is revived** automatically.
@@ -116,9 +116,9 @@ re-runs (see below).
 latest heuristic score overwrites the previous one. There's no per-posting heuristic cache, but the
 heuristic is free, so re-scan cost is just CPU.
 
-LLM deep-scoring is the separate **`score`** command, and it *does* cache: it ranks stored postings by
-heuristic score, caps how many it deep-scores (`--limit`), and **skips postings already LLM-scored**
-unless you pass `--rescore`. So running `scan` on a tight auto-refresh schedule never re-charges your
+Claude deep-scoring is the separate **`score`** command, and it *does* cache: it ranks stored postings
+by heuristic score, caps how many it deep-scores (`--limit`), and **skips postings already
+Claude-scored** unless you pass `--rescore`. So running `scan` on a tight auto-refresh schedule never re-charges your
 API budget — only an explicit `score` spends, and only on postings it hasn't scored before. Preview
 the cost first with `score --dry-run`.
 
@@ -243,16 +243,15 @@ its board). Use **Show expired** in the dashboard to find it.
 temporarily unreachable across two scans and the stale sweep aged it out. The next successful scan
 that sees it will **revive** it automatically.
 
-**Can I avoid re-paying for LLM scoring on every scan?** Not currently — re-scoring is unconditional.
-Scan deliberately rather than on a frequent auto-refresh if API cost is a concern, or use the free
-heuristic scorer (no API key).
+**Can I avoid re-paying for Claude scoring on every scan?** Not currently — re-scoring is
+unconditional. Scan deliberately rather than on a frequent auto-refresh if API cost is a concern, or
+use the free offline scorer (no API key).
 
 **Does "gone company" mean it's deleted?** No — it means the company left the directory (or you
 untracked it). Its already-discovered postings remain until they expire on their own.
 
 ---
 
-> **TODO — user-facing wiki.** This doc is engineering-oriented. A friendlier, task-oriented wiki
-> (getting started, "why is my match list empty?", scoring explained, FAQ) would help non-technical
-> users understand the tool. Tracked in
-> [#41](https://github.com/jdelgadoperez/job-hunter/issues/41).
+> This doc is engineering-oriented — it explains re-scan *behavior*. For friendlier, task-oriented
+> guides (getting started, "why is my match list empty?", scoring explained, FAQ), see the
+> **[user guide wiki](https://github.com/jdelgadoperez/job-hunter/wiki)**.

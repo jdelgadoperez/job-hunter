@@ -8,8 +8,8 @@ steps are listed at the end if you'd rather do it by hand.
 
 - **Node.js 22 or newer** (24 recommended; see `.nvmrc`) ([nodejs.org](https://nodejs.org)) — the only thing you must install first.
 - macOS (Intel or Apple Silicon), Windows 11+, or Linux.
-- *Optional:* an [Anthropic API key](https://console.anthropic.com) for high-quality LLM scoring.
-  Without one, job-hunter uses a free, offline keyword scorer.
+- *Optional:* an [Anthropic API key](https://console.anthropic.com) for high-quality Claude scoring.
+  Without one, job-hunter uses the free offline scorer (keyword matching).
 
 ## Recommended: the installer
 
@@ -40,14 +40,15 @@ The installer runs `npm install` and then `npm run setup`.
 4. **Seeds the skill dictionary** into your local SQLite database (a broad ~340-term default the
    resume parser recognizes; you can edit it later in the dashboard's Skills tab).
 5. **Guided config** (interactive) — prompts for:
-   - your **Anthropic API key** (optional; blank = free heuristic scoring),
+   - your **Anthropic API key** (optional; blank = the free offline scorer),
    - the path to your **resume** (`.pdf` / `.docx` / `.md` / `.txt`; blank to skip),
 
    then saves them so `scan` works immediately. The job directory itself is the
    community-maintained stillhiring.today table, so there's nothing to configure there.
 
 Setup never hard-fails: network/browser steps degrade to warnings, and skipping the API key just
-means heuristic scoring. You can (re)build your profile later with `npm run cli -- profile <resume>`.
+means the free offline scorer. You can (re)build your profile later with
+`npm run cli -- profile <resume>`.
 
 ### Non-interactive install
 
@@ -143,9 +144,9 @@ job-hunter service install
 
 Manage it with `job-hunter service start`, `stop`, `status`, and `uninstall`.
 `./update.sh` / `./update.ps1` restart the service automatically so updates go
-live with no extra steps. See the
-[README](README.md#keep-the-dashboard-always-running-optional) for the full table
-and log locations.
+live with no extra steps. See
+[Using the Dashboard → Keep the dashboard always running](https://github.com/jdelgadoperez/job-hunter/wiki/Using-the-Dashboard#keep-the-dashboard-always-running)
+for the full command table and log locations.
 
 See the **[user guide](https://github.com/jdelgadoperez/job-hunter/wiki)** for the full walkthrough and **[README](README.md)** for an
 overview.
