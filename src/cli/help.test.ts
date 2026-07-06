@@ -50,8 +50,16 @@ describe("renderHelp", () => {
 
   it("exposes every command name as a help topic", () => {
     expect(COMMAND_NAMES).toEqual(
-      new Set(["scan", "score", "config", "list", "serve", "profile", "track"]),
+      new Set(["scan", "score", "config", "list", "serve", "service", "profile", "track"]),
     );
+  });
+
+  it("documents the service lifecycle subcommands", () => {
+    const out = renderHelp("service");
+    expect(out).toContain("SUBCOMMANDS");
+    for (const verb of ["install", "uninstall", "start", "stop", "status"]) {
+      expect(out).toContain(verb);
+    }
   });
 
   it("documents the score and config commands", () => {

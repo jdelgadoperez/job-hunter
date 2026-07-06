@@ -32,6 +32,9 @@ export default defineConfig({
         // Real LLM deep-score pipeline (live provider calls), smoke-only like scan-runner. The
         // unit-tested logic lives in `server/score-job.ts` + the routes in `server/app.ts`.
         "src/server/score-runner.ts",
+        // Shells out to the per-platform `service-*.{sh,ps1}` scripts (spawns a child process). The
+        // pure invocation resolver (`resolveServiceInvocation`) IS unit-tested in service.test.ts.
+        "src/cli/service.ts",
       ],
       reporter: ["text", "html"],
       // Floor for the gate, a few points below current coverage so honest churn

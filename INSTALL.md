@@ -134,16 +134,16 @@ tracks `git pull` with no rebuild. Remove it with `./command-uninstall.sh` (or `
 ### Keep the dashboard always running (optional)
 
 To have the dashboard start automatically at every login — no terminal needed —
-install it as a per-user background service (no admin required). Same commands on
-macOS and Windows:
+install it as a per-user background service (no admin required). The same command
+works on macOS and Windows:
 
 ```bash
-./service-install.sh     # macOS/Linux   (or  ./service-install.ps1  on Windows)
+job-hunter service install
 ```
 
-Manage it with `service-start`, `service-stop`, `service-status`, and
-`service-uninstall` (the `.ps1` form on Windows). `./update.sh` / `./update.ps1`
-restart the service automatically so updates go live with no extra steps. See the
+Manage it with `job-hunter service start`, `stop`, `status`, and `uninstall`.
+`./update.sh` / `./update.ps1` restart the service automatically so updates go
+live with no extra steps. See the
 [README](README.md#keep-the-dashboard-always-running-optional) for the full table
 and log locations.
 

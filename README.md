@@ -153,23 +153,25 @@ and opens a React dashboard in your browser:
 ### Keep the dashboard always running (optional)
 
 To have the dashboard start automatically every time you log in — no terminal
-needed — install it as a background service. Same commands on macOS and Windows:
+needed — install it as a per-user background service (no admin required). The
+same command works on macOS and Windows:
 
 ```bash
-./service-install.sh     # macOS/Linux   (or  ./service-install.ps1  on Windows)
+job-hunter service install
 ```
 
 The dashboard will be at <http://localhost:48373> after every login. Manage it with:
 
 | Command | What it does |
 | --- | --- |
-| `service-install` | Start at login, from now on |
-| `service-start` / `service-stop` | Start or stop it now |
-| `service-status` | Is it running? (shows recent log) |
-| `service-uninstall` | Stop starting it at login |
+| `job-hunter service install` | Start at login, from now on (and start it now) |
+| `job-hunter service start` / `stop` | Start or stop it now |
+| `job-hunter service status` | Is it running? (shows recent log) |
+| `job-hunter service uninstall` | Stop starting it at login |
 
-(On Windows, run the `.ps1` form, e.g. `./service-start.ps1`. If PowerShell
-blocks the script, run it as `powershell -ExecutionPolicy Bypass -File ./service-start.ps1`.)
+Under the hood this uses a launchd LaunchAgent on macOS and a Task Scheduler
+task on Windows; the command runs the matching `service-*.sh` / `service-*.ps1`
+script for your platform, so you can also invoke those directly if you prefer.
 
 Running `./update.sh` (or `./update.ps1`) automatically restarts the service so
 you get the new version with no extra steps. Logs are at
