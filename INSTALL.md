@@ -115,6 +115,22 @@ npm run cli -- scan
 npm run cli -- list --min-score 70
 ```
 
+### Add a `job-hunter` command (optional)
+
+So you can run `job-hunter <command>` from anywhere instead of `npm run cli -- <command>`, install a
+per-user command on your PATH (no admin required). The installer offers this during setup; you can
+also do it any time:
+
+```bash
+./command-install.sh     # macOS/Linux   (or  ./command-install.ps1  on Windows)
+```
+
+It symlinks a small wrapper into `~/.local/bin` (macOS/Linux) or writes a shim to
+`%USERPROFILE%\.local\bin` and adds it to your user PATH (Windows). If that directory isn't on your
+PATH yet, the script prints the one line to add. The wrapper runs the checked-out source, so it
+tracks `git pull` with no rebuild. Remove it with `./command-uninstall.sh` (or `.ps1`);
+`npm run cli -- …` keeps working either way.
+
 ### Keep the dashboard always running (optional)
 
 To have the dashboard start automatically at every login — no terminal needed —

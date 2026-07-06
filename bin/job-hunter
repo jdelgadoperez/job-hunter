@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# The `job-hunter` command. Symlinked onto your PATH by ./command-install.sh so you can run
+# `job-hunter <command>` from anywhere instead of `npm run cli -- <command>`.
+#
+# Resolves the repo from THIS script's real location (following the symlink), so it keeps working
+# no matter where the symlink lives. Runs the TypeScript CLI through the tsx loader — the same way
+# `npm run cli` does — so it always tracks the checked-out source (no build step, picks up `git pull`).
+set -euo pipefail
+
+# Resolve the real path of this script, following symlinks (readlink -f isn't on stock macOS).
+source="${BASH_SOURCE[0]}"
+while [ -h "$source" ]; do
+  dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+  source="$(readlink "$source")"
+  # A relative symlink target is relative to the link's directory.
+  [ "${source#/}" = "$source" ] && source="$dir/$source"
+done
+bin_dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+repo_dir="$(cd -P "$bin_dir/.." >/dev/null 2>&1 && pwd)"
+
+# Resolve tsx's loader by ABSOLUTE path from the repo's node_modules, not the bare `tsx` specifier:
+# the user runs this from their own working directory, and a bare `--import tsx` would try to resolve
+# tsx relative to that dir (which has no node_modules) and fail. Keeping the user's CWD (rather than
+# cd-ing into the repo) means relative arguments like `job-hunter profile ./resume.pdf` still work.
+tsx_loader="$(cd "$repo_dir" && node -e "process.stdout.write(require.resolve('tsx'))")"
+
+# tsx reads the `@app/*` path aliases from the repo's tsconfig, which it locates relative to the CWD
+# by default — wrong when the user runs from elsewhere. Point it at the repo's tsconfig explicitly.
+export TSX_TSCONFIG_PATH="$repo_dir/tsconfig.json"
+
+exec node --import "$tsx_loader" "$repo_dir/src/cli/main.ts" "$@"

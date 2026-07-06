@@ -47,8 +47,10 @@ The **recommended** way is the one-step installer — run it from the repo folde
 
 It runs `npm install` then guided setup, which: installs Chromium and warms it up, builds the web
 dashboard, seeds the skill dictionary, and asks for your **Anthropic API key** (optional) and
-**resume** so you're ready to scan. It's safe to re-run, never blocks, and degrades to free
-heuristic scoring if you skip the key.
+**resume** so you're ready to scan. It also offers to add a `job-hunter` command to your PATH (so you
+can run `job-hunter <command>` instead of `npm run cli -- <command>`) and to keep the dashboard
+running in the background. It's safe to re-run, never blocks, and degrades to free heuristic scoring
+if you skip the key.
 
 **Updating:** run `./update.sh` (or `./update.ps1`) to pull the latest version — it preserves your
 data and migrates the database automatically, and the dashboard shows an "update available" banner
@@ -65,7 +67,10 @@ progress), and browse ranked matches — all point-and-click. The CLI below driv
 for scripting, automation, and power users; anything you can do on the dashboard you can also do from
 the terminal.
 
-Run CLI commands with `npm run cli -- <command>` (the `--` passes flags through):
+Run CLI commands with `npm run cli -- <command>` (the `--` passes flags through). If you added the
+`job-hunter` command to your PATH during setup (or later with `./command-install.sh`), you can drop
+the `npm run cli --` prefix and just run `job-hunter <command>` from anywhere — e.g. `job-hunter scan`.
+The examples below use the `npm run cli --` form so they work without the shortcut installed.
 
 ```bash
 npm run cli -- scan                       # discover + free heuristic score, store matches (live status)

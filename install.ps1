@@ -27,6 +27,13 @@ npm run setup
 
 # Only prompt in an interactive session; a non-interactive run has no console to read from.
 if ([Environment]::UserInteractive) {
+    $reply = Read-Host "Add a 'job-hunter' command to your PATH (so you can skip 'npm run cli --')? [y/N]"
+    if ($reply -match '^[yY]') {
+        & "$PSScriptRoot\command-install.ps1"
+    } else {
+        Write-Host "Skipped. You can add it later with ./command-install.ps1"
+    }
+
     $reply = Read-Host "Keep the dashboard running in the background (start at logon)? [y/N]"
     if ($reply -match '^[yY]') {
         & "$PSScriptRoot\service-install.ps1"
@@ -34,5 +41,6 @@ if ([Environment]::UserInteractive) {
         Write-Host "Skipped. You can enable it later with ./service-install.ps1"
     }
 } else {
+    Write-Host "To add a 'job-hunter' command to your PATH, run ./command-install.ps1"
     Write-Host "To keep the dashboard running in the background, run ./service-install.ps1"
 }
