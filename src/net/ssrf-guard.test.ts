@@ -44,7 +44,7 @@ describe("assertAllowedUrl", () => {
   const lookupTo =
     (...addresses: string[]) =>
     async () =>
-      addresses.map((address) => ({ address }));
+      addresses.map((address) => ({ address, family: 4 as const }));
 
   it("rejects non-http(s) protocols", async () => {
     for (const url of ["ftp://example.com", "file:///etc/passwd", "gopher://x"]) {
@@ -73,14 +73,22 @@ describe("assertAllowedUrl", () => {
     ).rejects.toThrow();
   });
 
-  it("allows public IP-literal hosts", async () => {
-    await expect(assertAllowedUrl("https://1.1.1.1/x", lookupTo())).resolves.toBeUndefined();
+  it("allows public IP-literal hosts and reports no addresses to pin", async () => {
+    // An IP literal is checked directly (no DNS), so there is nothing to pin against rebinding.
+    await expect(assertAllowedUrl("https://1.1.1.1/x", lookupTo())).resolves.toEqual({
+      hostname: "1.1.1.1",
+      addresses: [],
+    });
   });
 
-  it("allows a hostname that resolves to a public address", async () => {
+  it("allows a hostname that resolves to a public address and returns the validated addresses", async () => {
+    // The returned addresses let the fetcher pin its connection to exactly what was validated.
     await expect(
       assertAllowedUrl("https://example.com/jobs", lookupTo("93.184.216.34")),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      hostname: "example.com",
+      addresses: [{ address: "93.184.216.34", family: 4 }],
+    });
   });
 
   it("rejects a hostname that resolves to an internal address (DNS-based bypass)", async () => {
