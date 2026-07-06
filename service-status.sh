@@ -10,7 +10,7 @@ if [ ! -f "$PLIST" ]; then
   exit 0
 fi
 if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
-  echo "Running. Dashboard at http://localhost:4317"
+  echo "Running. Dashboard at http://localhost:48373"
 else
   echo "Installed but not running. Run ./service-start.sh"
 fi

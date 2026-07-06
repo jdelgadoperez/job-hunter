@@ -7,4 +7,4 @@ if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) 
     exit 1
 }
 Start-ScheduledTask -TaskName $TaskName
-Write-Host "Started. Open http://localhost:4317"
+Write-Host "Started. Open http://localhost:48373"
