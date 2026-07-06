@@ -109,7 +109,7 @@ dashboard also shows an **"update available"** banner when newer commits exist u
 ## After installing
 
 ```bash
-npm run serve            # open the web dashboard (http://localhost:4317)
+npm run serve            # open the web dashboard (http://localhost:48373)
 # — or use the CLI —
 npm run cli -- scan
 npm run cli -- list --min-score 70

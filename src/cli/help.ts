@@ -97,7 +97,7 @@ export const COMMANDS: CommandHelp[] = [
     summary: "Start the local web dashboard (recommended)",
     details: "Starts the local web dashboard — the recommended way to use the tool.",
     options: [
-      ["--port N", "Port to listen on (default 4317)."],
+      ["--port N", "Port to listen on (default 48373)."],
       ["--no-open", "Don't open a browser window automatically."],
       ["--refresh-hours N", "Re-scan every N hours in the background (default 6, 0 disables)."],
     ],

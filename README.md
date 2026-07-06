@@ -115,7 +115,7 @@ posting's location text otherwise; an unknown location counts as remote so nothi
 ### Web dashboard
 
 `job-hunter serve` (or `npm run serve`) starts a local [Hono](https://hono.dev) server — by
-default on <http://localhost:4317>, bound to loopback so it isn't reachable from other machines —
+default on <http://localhost:48373>, bound to loopback so it isn't reachable from other machines —
 and opens a React dashboard in your browser:
 
 - **Overview** — upload your resume and run a scan. **Scan now** runs incrementally by default,
@@ -154,7 +154,7 @@ needed — install it as a background service. Same commands on macOS and Window
 ./service-install.sh     # macOS/Linux   (or  ./service-install.ps1  on Windows)
 ```
 
-The dashboard will be at <http://localhost:4317> after every login. Manage it with:
+The dashboard will be at <http://localhost:48373> after every login. Manage it with:
 
 | Command | What it does |
 | --- | --- |

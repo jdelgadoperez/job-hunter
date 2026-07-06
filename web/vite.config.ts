@@ -7,16 +7,17 @@ import { defineConfig } from "vite";
 //
 // The proxy target uses `127.0.0.1`, not `localhost`, on purpose: the server binds IPv4 loopback
 // only (see the DNS-rebinding guard in src/server), whereas `localhost` resolves to IPv6 `::1`
-// first on modern macOS/Node. If anything else holds `*:4317` on IPv6 (e.g. OrbStack's OTLP
-// telemetry listener, which defaults to 4317), a `localhost` target lands there instead and Vite's
-// HTTP/1.1 proxy fails to parse the reply ("Expected HTTP/, RTSP/ or ICE/"). Pinning IPv4 matches
-// the server's actual bind and sidesteps the collision.
+// first on modern macOS/Node. If anything else holds the same port on IPv6, a `localhost` target
+// lands there instead and Vite's HTTP/1.1 proxy fails to parse the reply ("Expected HTTP/, RTSP/ or
+// ICE/"). Pinning IPv4 matches the server's actual bind and sidesteps that collision.
+//
+// Keep this port in sync with DEFAULT_PORT in src/server/serve.ts.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: { outDir: "dist", emptyOutDir: true },
   server: {
     proxy: {
-      "/api": "http://127.0.0.1:4317",
+      "/api": "http://127.0.0.1:48373",
     },
   },
 });

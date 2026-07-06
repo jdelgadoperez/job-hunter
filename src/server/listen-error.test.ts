@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classifyListenError } from "./listen-error";
 
-const PORT = 4317;
+const PORT = 48373;
 
 describe("classifyListenError", () => {
   it("classifies EADDRINUSE as port-in-use with the port in the message", () => {
