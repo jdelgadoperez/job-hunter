@@ -12,6 +12,8 @@ type Bodies = {
   preview?: unknown;
   scanBody?: unknown;
   scoreBody?: unknown;
+  /** Substrings of request URLs that should respond 500 (to exercise error-state UI). */
+  failUrls?: string[];
 };
 
 function idleScan(state = "idle") {
@@ -50,6 +52,14 @@ function mockFetch(bodies: Bodies) {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, init?: RequestInit) => {
+      if (bodies.failUrls?.some((fragment) => url.includes(fragment))) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          statusText: "Internal Server Error",
+          json: () => Promise.resolve({ error: "boom" }),
+        });
+      }
       const body = (() => {
         if (url.includes("/api/settings")) {
           return {
@@ -287,6 +297,35 @@ describe("Home scan panel — warning details", () => {
 
     await screen.findByText(/Scan complete/i);
     expect(screen.queryByText(/warning\(s\)/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Home error states — failed fetches surface, don't masquerade as empty", () => {
+  it("shows an error (not the 'no profile yet' empty state) when /api/profile fails", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, failUrls: ["/api/profile"] });
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument());
+    // The false "you have no profile" message must NOT be shown on a failed fetch.
+    expect(screen.queryByText(/No profile yet/i)).not.toBeInTheDocument();
+  });
+
+  it("surfaces a scan status-poll failure instead of a silent frozen spinner", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, failUrls: ["/api/scan/status"] });
+    renderHome();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Lost contact with the scan/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("surfaces a deep-score status-poll failure instead of a silent frozen spinner", async () => {
+    mockFetch({ settings: { hasAnthropicKey: true }, failUrls: ["/api/score/status"] });
+    renderHome();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Lost contact with the deep-score run/i)).toBeInTheDocument(),
+    );
   });
 });
 

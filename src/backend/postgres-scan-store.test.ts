@@ -59,13 +59,17 @@ describe("PostgresScanStore.recordDirectory", () => {
 });
 
 describe("PostgresScanStore.expireStalePostings", () => {
-  test("counts only full scans in its staleness predicate", async () => {
+  test("counts only finished full scans in its staleness predicate", async () => {
     const sql = fakeSql([]);
     const store = new PostgresScanStore(sql as never);
     await store.expireStalePostings(10, 2);
     const update = sql.calls.find((c) =>
       c.strings.join("").includes("UPDATE postings SET expired_at"),
     );
-    expect(update?.strings.join("")).toContain("kind = 'full'");
+    const query = update?.strings.join("") ?? "";
+    expect(query).toContain("kind = 'full'");
+    // A crashed/unfinished scan (finished_at IS NULL) must not advance the staleness clock — parity
+    // with the SQLite Repository, so a worker that crashes twice can't expire live postings.
+    expect(query).toContain("finished_at IS NOT NULL");
   });
 });

@@ -47,19 +47,35 @@ export function isBlockedAddress(ip: string): boolean {
   return false;
 }
 
-export type LookupAddresses = (hostname: string) => Promise<{ address: string }[]>;
+export type ResolvedAddress = { address: string; family: 4 | 6 };
+export type LookupAddresses = (hostname: string) => Promise<ResolvedAddress[]>;
 
-const defaultLookup: LookupAddresses = (hostname) => dnsLookup(hostname, { all: true });
+const defaultLookup: LookupAddresses = async (hostname) => {
+  const results = await dnsLookup(hostname, { all: true });
+  // node's LookupAddress types `family` as `number`; narrow to the 4|6 our pin path expects.
+  return results.map(({ address, family }) => ({ address, family: family === 6 ? 6 : 4 }));
+};
+
+/** The validated addresses a hostname resolved to, so the caller can pin the connection to exactly
+ *  these — closing the DNS-rebinding TOCTOU where a re-resolution at connect time returns a
+ *  different (internal) address than the one we checked. Empty for IP-literal URLs (nothing to pin;
+ *  the literal itself was checked). */
+export type AllowedUrl = {
+  hostname: string;
+  /** Resolved public addresses, in DNS order. Empty when the URL host is already an IP literal. */
+  addresses: ResolvedAddress[];
+};
 
 /**
  * Throw `BlockedUrlError` unless `url` is an `http(s)` URL targeting a public address. A hostname is
  * resolved and rejected if *any* of its addresses is non-public (so a name pointed at 127.0.0.1
- * can't slip through). `lookup` is injectable for tests.
+ * can't slip through). Returns the validated addresses so the caller can pin its connection to them.
+ * `lookup` is injectable for tests.
  */
 export async function assertAllowedUrl(
   url: string,
   lookup: LookupAddresses = defaultLookup,
-): Promise<void> {
+): Promise<AllowedUrl> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -73,10 +89,10 @@ export async function assertAllowedUrl(
   const host = parsed.hostname.replace(/^\[|\]$/g, ""); // strip IPv6 brackets
   if (isIPv4(host) || isIPv6(host)) {
     if (isBlockedAddress(host)) throw new BlockedUrlError(`blocked address: ${host}`);
-    return;
+    return { hostname: host, addresses: [] };
   }
 
-  let addresses: { address: string }[];
+  let addresses: ResolvedAddress[];
   try {
     addresses = await lookup(host);
   } catch {
@@ -88,4 +104,5 @@ export async function assertAllowedUrl(
       throw new BlockedUrlError(`host ${host} resolves to a blocked address: ${address}`);
     }
   }
+  return { hostname: host, addresses };
 }

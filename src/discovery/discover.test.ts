@@ -717,6 +717,58 @@ describe("discover time budget", () => {
     expect(truncated).toBe(false);
   });
 
+  it("does not burn the inter-request delay on leads skipped after the budget is spent", async () => {
+    // Regression: waitTurn() used to be awaited for every lead BEFORE the budget was checked, so with
+    // a non-zero delayMs the crawl kept sleeping delayMs per remaining lead even after the budget was
+    // exhausted — eroding the safety margin against the runner's hard timeout. With the fix, an
+    // over-budget lead returns immediately without chaining a sleep.
+    let clockMs = 0;
+    const leadCount = 40;
+    const delayMs = 50;
+    const companies = Array.from({ length: leadCount }, (_, i) => ({
+      name: `Co${i}`,
+      url: `https://boards.greenhouse.io/co${i}`,
+    }));
+    const routes: Record<string, string> = {};
+    for (const c of companies) {
+      const token = c.url.split("/").pop() as string;
+      routes[`https://boards-api.greenhouse.io/v1/boards/${token}/jobs?content=true`] =
+        greenhouseFeed(token);
+    }
+    // The very first board fetch spends the whole budget, so leads 2..40 are all over-budget.
+    const fetcher: Fetcher = {
+      async fetch(url) {
+        clockMs += 30_000;
+        const body = routes[url];
+        return body === undefined
+          ? { statusCode: 404, finalUrl: url, bodyText: "" }
+          : { statusCode: 200, finalUrl: url, bodyText: body };
+      },
+    };
+    const reader = new FakeSharedViewReader(airtableData(companies));
+
+    const startedAt = Date.now();
+    const { truncated, postings } = await discover({
+      fetcher,
+      renderer: new GaugedRenderer("", "", new Gauge()),
+      sharedViewReader: reader,
+      shareUrl: SHARE_URL,
+      concurrency: 1,
+      delayMs,
+      budgetMs: 25_000,
+      now: () => clockMs,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(truncated).toBe(true);
+    expect(postings).toHaveLength(1);
+    // The buggy code would sleep ~delayMs × (leadCount − 1) ≈ 1950ms on the skipped leads; the fix
+    // skips the sleep entirely. A generous bound proves the delay is no longer accumulated per lead.
+    expect(elapsedMs).toBeLessThan(delayMs * (leadCount - 1));
+  });
+
   it("skips the retry pass for a lead that failed once the budget is exhausted", async () => {
     let clockMs = 0;
     let renderCalls = 0;
