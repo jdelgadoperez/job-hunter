@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/header.jpg" alt="job-hunter" width="100%" height="120" style="object-fit:cover;border-radius:6px">
+  <img src="assets/header.jpg" alt="job-hunter" width="100%" style="object-fit:cover;border-radius:6px">
 </p>
 
 # job-hunter
