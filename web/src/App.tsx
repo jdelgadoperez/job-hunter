@@ -49,7 +49,7 @@ export function App() {
           An update is available ({version.data.behind} new commit
           {version.data.behind === 1 ? "" : "s"}). Run{" "}
           <code className="font-mono">./update.sh</code> (or{" "}
-          <code className="font-mono">./update.ps1</code>) and restart.
+          <code className="font-mono">./update.ps1</code>), then reload this page.
         </div>
       ) : null}
       <header className="border-b border-border bg-surface">
