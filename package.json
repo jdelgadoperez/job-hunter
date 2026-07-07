@@ -32,10 +32,13 @@
     "scan:worker": "node --import tsx src/backend/scanner/main.ts",
     "analyze:directory": "node --import tsx scripts/analyze-directory.ts",
     "analyze:custom-domains": "node --import tsx scripts/probe-custom-domains.ts",
-    "build:skill-seed": "node --import tsx scripts/build-skill-seed.ts"
+    "build:skill-seed": "node --import tsx scripts/build-skill-seed.ts",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@commitlint/cli": "^21.2.0",
+    "@commitlint/config-conventional": "^21.2.0",
     "@tailwindcss/vite": "^4.3.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -47,6 +50,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.9",
+    "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "playwright": "^1.61.0",
     "tailwindcss": "^4.3.1",
