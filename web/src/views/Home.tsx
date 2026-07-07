@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useState } from "react";
-import type { CompanyRef, ScorePreview } from "../api";
+import type { CompanyRef, ScanRecord, ScorePreview } from "../api";
 import { Button, Card, ErrorNote, LiveStatus, Loading, ProgressBar } from "../components/ui";
-import { formatCount } from "../format";
+import { formatAbsoluteTime, formatCount, formatRelativeTime } from "../format";
 import {
   useLatestScan,
   useProfile,
@@ -15,6 +15,13 @@ import {
   useStartScan,
   useUploadResume,
 } from "../hooks";
+
+/** User-facing label for each scan kind, shown next to the "Last scan" timestamp. */
+const SCAN_KIND_LABEL: Record<ScanRecord["kind"], string> = {
+  full: "Full scan",
+  incremental: "Incremental scan",
+  retry: "Retry scan",
+};
 
 /** @param active Whether this tab is the one currently visible. When `false` (e.g. the user has
  *  switched to another tab), status polling is suppressed while the view stays mounted and its
@@ -223,7 +230,18 @@ export function Home({ active = true }: { active?: boolean } = {}) {
 
       {latestScan.data ? (
         <Card>
-          <h2 className="font-semibold text-fg">Last scan</h2>
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-semibold text-fg">Last scan</h2>
+            {(() => {
+              const ranAt = latestScan.data.finishedAt ?? latestScan.data.startedAt;
+              const relative = formatRelativeTime(ranAt);
+              return relative ? (
+                <span className="text-xs text-faint" title={formatAbsoluteTime(ranAt) ?? undefined}>
+                  {SCAN_KIND_LABEL[latestScan.data.kind]} · {relative}
+                </span>
+              ) : null;
+            })()}
+          </div>
           <p className="mt-1 text-sm text-muted">
             {formatCount(latestScan.data.companiesSeen ?? 0)} companies ·{" "}
             {formatCount(latestScan.data.postingsSeen ?? 0)} postings scored
