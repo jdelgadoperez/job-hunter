@@ -14,6 +14,6 @@ jobs:
       # This repo squash-merges, so the PR title becomes the Conventional Commit on main that
       # release-please parses. Lint it here so a malformed title can't slip a release-invisible
       # commit onto main. Mirrors the commit-msg hook (commitlint) that guards local commits.
-      - uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -15,7 +15,7 @@ jobs:
       # Reads Conventional Commits since the last release, opens/updates a "Release PR" that bumps
       # package.json + updates CHANGELOG.md, and — when that PR is merged — tags and cuts the GitHub
       # Release. No version numbers are chosen by hand; feat -> minor, fix -> patch.
-      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           # A fine-grained PAT (contents + pull-requests: write) rather than the default
           # GITHUB_TOKEN, which GitHub forbids from opening PRs. A PAT also lets the resulting
