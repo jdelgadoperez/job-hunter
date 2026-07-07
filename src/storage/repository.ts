@@ -58,6 +58,7 @@ export type ScoringCandidate = {
 /** A completed scan's outcome: counts plus the directory delta vs. the previous snapshot. */
 export type ScanRecord = {
   id: number;
+  kind: ScanScope;
   startedAt: string;
   finishedAt: string | null;
   postingsSeen: number | null;
@@ -65,6 +66,14 @@ export type ScanRecord = {
   newCompanies: CompanyRef[];
   removedCompanies: CompanyRef[];
 };
+
+/** Map the nullable stored scan `kind` to a known ScanScope, defaulting unknown/legacy rows to
+ *  "full" — matching the column's DB default. */
+function normalizeScanKind(kind: string | null): ScanScope {
+  if (kind === "incremental") return "incremental";
+  if (kind === "retry") return "retry";
+  return "full";
+}
 
 /** Map the nullable stored `scorer` string to a known ScorerTag, defaulting unknown/legacy to heuristic. */
 function normalizeScorerTag(scorer: string | null): ScorerTag {
@@ -867,6 +876,7 @@ export class Repository {
       .get() as
       | {
           id: number;
+          kind: string | null;
           started_at: string;
           finished_at: string;
           postings_seen: number | null;
@@ -878,6 +888,7 @@ export class Repository {
     if (!row) return undefined;
     return {
       id: row.id,
+      kind: normalizeScanKind(row.kind),
       startedAt: row.started_at,
       finishedAt: row.finished_at,
       postingsSeen: row.postings_seen,

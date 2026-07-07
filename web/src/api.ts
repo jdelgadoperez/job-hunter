@@ -70,6 +70,7 @@ export type NeedsAttentionEntry = z.infer<typeof NeedsAttentionEntrySchema>;
 /** A finished scan's outcome: counts plus the directory delta vs. the previous scan. */
 const ScanRecordSchema = z.object({
   id: z.number(),
+  kind: z.enum(["full", "incremental", "retry"]),
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   postingsSeen: z.number().nullable(),

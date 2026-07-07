@@ -167,6 +167,19 @@ describe("incremental scans — directory diff", () => {
     repo.close();
   });
 
+  it("reports the scan kind on the latest scan record", () => {
+    const repo = newRepo();
+    const s = repo.startScan("incremental");
+    repo.finishScan(s, {
+      postingsSeen: 0,
+      companiesSeen: 0,
+      newCompanies: [],
+      removedCompanies: [],
+    });
+    expect(repo.getLatestScan()?.kind).toBe("incremental");
+    repo.close();
+  });
+
   it("does not re-report a company removed in an earlier scan", () => {
     const repo = newRepo();
     repo.recordDirectory(repo.startScan(), [{ careersUrl: "https://b.com" }]); // baseline

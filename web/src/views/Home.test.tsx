@@ -12,6 +12,7 @@ type Bodies = {
   preview?: unknown;
   scanBody?: unknown;
   scoreBody?: unknown;
+  latestScan?: unknown;
   /** Substrings of request URLs that should respond 500 (to exercise error-state UI). */
   failUrls?: string[];
 };
@@ -77,8 +78,10 @@ function mockFetch(bodies: Bodies) {
         if (url.includes("/api/score/status"))
           return bodies.scoreBody ?? idleScore(bodies.scoreState);
         if (url.includes("/api/score") && init?.method === "POST") return idleScore("running");
+        // Check /api/scans/latest before /api/scan — the latter is a substring of the former.
+        if (url.includes("/api/scans/latest")) return bodies.latestScan ?? null;
         if (url.includes("/api/scan")) return bodies.scanBody ?? idleScan(bodies.scanState);
-        if (url.includes("/api/profile") || url.includes("/api/scans/latest")) return null;
+        if (url.includes("/api/profile")) return null;
         if (url.includes("/api/version"))
           return { version: "1.0.0", behind: null, updateAvailable: false };
         return [];
@@ -350,5 +353,49 @@ describe("Home progress live regions — aria-atomic", () => {
     const region = await screen.findByText(/Scoring posting 5 of 20/i);
     const live = region.closest("[aria-live]");
     expect(live).toHaveAttribute("aria-atomic", "true");
+  });
+});
+
+describe("Home last-scan card — kind and timestamp", () => {
+  function latestScan(kind: string, finishedAt: string) {
+    return {
+      id: 1,
+      kind,
+      startedAt: finishedAt,
+      finishedAt,
+      postingsSeen: 5,
+      companiesSeen: 2,
+      newCompanies: [],
+      removedCompanies: [],
+    };
+  }
+
+  // The kind + timestamp render as interleaved text nodes in one span, so locate the "Last scan"
+  // heading and read its card's text rather than matching a single fragmented text node.
+  async function lastScanCardText(): Promise<string> {
+    const heading = await screen.findByRole("heading", { name: "Last scan" });
+    // The card is the heading's containing <div> (the Card body).
+    const card = heading.closest("div");
+    return card?.textContent ?? "";
+  }
+
+  it("labels the scan kind and shows a relative timestamp", async () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    mockFetch({ latestScan: latestScan("incremental", twoHoursAgo) });
+    renderHome();
+
+    const text = await lastScanCardText();
+    expect(text).toContain("Incremental scan");
+    expect(text).toContain("2 hours ago");
+  });
+
+  it("labels a full scan distinctly from an incremental one", async () => {
+    const now = new Date().toISOString();
+    mockFetch({ latestScan: latestScan("full", now) });
+    renderHome();
+
+    const text = await lastScanCardText();
+    expect(text).toContain("Full scan");
+    expect(text).toContain("just now");
   });
 });
