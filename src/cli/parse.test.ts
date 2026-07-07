@@ -306,7 +306,7 @@ describe("config remote command", () => {
 
 describe("service command", () => {
   it("parses each lifecycle action", () => {
-    for (const action of ["install", "uninstall", "start", "stop", "status"] as const) {
+    for (const action of ["install", "uninstall", "start", "stop", "restart", "status"] as const) {
       expect(parseCli(["service", action])).toEqual({ kind: "service", action });
     }
   });
@@ -318,8 +318,8 @@ describe("service command", () => {
   });
 
   it("returns a help error for an unknown action", () => {
-    const result = parseCli(["service", "restart"]);
+    const result = parseCli(["service", "reload"]);
     expect(result.kind).toBe("help");
-    expect(result).toMatchObject({ error: expect.stringContaining("restart") });
+    expect(result).toMatchObject({ error: expect.stringContaining("reload") });
   });
 });

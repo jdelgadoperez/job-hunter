@@ -105,7 +105,7 @@ export const COMMANDS: CommandHelp[] = [
   },
   {
     name: "service",
-    invocation: "service <install|uninstall|start|stop|status>",
+    invocation: "service <install|uninstall|start|stop|restart|status>",
     summary: "Keep the dashboard running in the background (at login)",
     details:
       "Runs the dashboard as a per-user background service so it starts at login and survives closing the terminal — no admin rights required. Uses launchd on macOS and Task Scheduler on Windows under the hood. `install` sets it up (and starts it now); `status` shows whether it's running plus recent logs.",
@@ -115,6 +115,7 @@ export const COMMANDS: CommandHelp[] = [
       ["uninstall", "Remove the service (stops keeping the dashboard running)."],
       ["start", "Start the service now."],
       ["stop", "Stop the service now."],
+      ["restart", "Restart the service now (stop then start)."],
       ["status", "Show whether the dashboard is running, plus recent log lines."],
     ],
     examples: ["job-hunter service install", "job-hunter service status"],

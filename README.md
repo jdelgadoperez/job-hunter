@@ -147,7 +147,7 @@ per-user background service (no admin required). One command, same on macOS and 
 job-hunter service install
 ```
 
-Then manage it with `job-hunter service start` / `stop` / `status` / `uninstall`. The full command
+Then manage it with `job-hunter service start` / `stop` / `restart` / `status` / `uninstall`. The full command
 table, how it works (launchd / Task Scheduler), and log locations are in the
 **[Using the Dashboard → Keep the dashboard always running](https://github.com/jdelgadoperez/job-hunter/wiki/Using-the-Dashboard#keep-the-dashboard-always-running)**
 guide.
