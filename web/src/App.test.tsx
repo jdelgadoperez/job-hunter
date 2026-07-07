@@ -80,6 +80,33 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("update banner", () => {
+  it("shows the update notice with a reload hint when an update is available", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () =>
+            Promise.resolve(
+              url.includes("/api/version")
+                ? { version: "1.0.0", behind: 2, updateAvailable: true }
+                : bodyFor(url),
+            ),
+        }),
+      ),
+    );
+    renderApp();
+
+    const banner = await screen.findByText(/An update is available/i);
+    expect(banner).toHaveTextContent("2 new commits");
+    expect(banner).toHaveTextContent("reload this page");
+    expect(banner).not.toHaveTextContent("restart");
+  });
+});
+
 describe("App tab navigation", () => {
   it("keeps Matches filter state when switching tabs and back", async () => {
     mockAllEndpoints();
