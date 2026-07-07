@@ -62,10 +62,15 @@ function makeApp(overrides: Partial<ServerDeps> = {}) {
 
 beforeEach(() => {
   repo = new Repository(":memory:");
+  // Neutralize any ANTHROPIC_API_KEY in the dev shell: the settings reader falls back to it, so a
+  // key present in the environment would make "no key configured" tests see a key and fail. Tests
+  // that need an env key stub their own value (which overrides this reset).
+  vi.stubEnv("ANTHROPIC_API_KEY", "");
 });
 
 afterEach(() => {
   repo.close();
+  vi.unstubAllEnvs();
 });
 
 describe("GET /api/health", () => {
