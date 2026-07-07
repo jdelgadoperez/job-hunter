@@ -142,7 +142,7 @@ works on macOS and Windows:
 job-hunter service install
 ```
 
-Manage it with `job-hunter service start`, `stop`, `status`, and `uninstall`.
+Manage it with `job-hunter service start`, `stop`, `restart`, `status`, and `uninstall`.
 `./update.sh` / `./update.ps1` restart the service automatically so updates go
 live with no extra steps. See
 [Using the Dashboard → Keep the dashboard always running](https://github.com/jdelgadoperez/job-hunter/wiki/Using-the-Dashboard#keep-the-dashboard-always-running)

@@ -6,7 +6,7 @@ describe("isServiceAction", () => {
     for (const action of SERVICE_ACTIONS) {
       expect(isServiceAction(action)).toBe(true);
     }
-    for (const other of ["restart", "reload", "", "INSTALL"]) {
+    for (const other of ["reload", "", "INSTALL"]) {
       expect(isServiceAction(other)).toBe(false);
     }
   });

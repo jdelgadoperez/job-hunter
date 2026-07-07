@@ -57,7 +57,7 @@ describe("renderHelp", () => {
   it("documents the service lifecycle subcommands", () => {
     const out = renderHelp("service");
     expect(out).toContain("SUBCOMMANDS");
-    for (const verb of ["install", "uninstall", "start", "stop", "status"]) {
+    for (const verb of ["install", "uninstall", "start", "stop", "restart", "status"]) {
       expect(out).toContain(verb);
     }
   });

@@ -3,7 +3,14 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** The lifecycle verbs the background-service scripts expose. */
-export const SERVICE_ACTIONS = ["install", "uninstall", "start", "stop", "status"] as const;
+export const SERVICE_ACTIONS = [
+  "install",
+  "uninstall",
+  "start",
+  "stop",
+  "restart",
+  "status",
+] as const;
 export type ServiceAction = (typeof SERVICE_ACTIONS)[number];
 
 export function isServiceAction(value: string): value is ServiceAction {
