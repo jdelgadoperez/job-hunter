@@ -8,9 +8,8 @@ if [ ! -f "$PLIST" ]; then
   echo "Not installed. Run ./service-install.sh first." >&2
   exit 1
 fi
-# Mirror stop (bootout) then start (bootstrap + kickstart): with KeepAlive=true a plain kickstart
-# restarts in place, but bootout first guarantees a clean reload of any changed plist/environment.
-launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || true
-launchctl kickstart -k "gui/$(id -u)/$LABEL"
-echo "Restarted. Open http://localhost:48373"
+# Delegate to the proven stop + start scripts rather than re-implementing the launchctl dance.
+# bootout is asynchronous, so running them as separate processes lets launchd settle the unload
+# before start's bootstrap runs — inlining the calls races and can leave the agent unloaded.
+./service-stop.sh
+./service-start.sh

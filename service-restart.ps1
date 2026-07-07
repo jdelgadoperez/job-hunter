@@ -6,6 +6,6 @@ if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) 
     Write-Error "Not installed. Run ./service-install.ps1 first."
     exit 1
 }
-Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-Start-ScheduledTask -TaskName $TaskName
-Write-Host "Restarted. Open http://localhost:48373"
+# Delegate to the proven stop + start scripts rather than re-implementing the task control.
+& (Join-Path $PSScriptRoot "service-stop.ps1")
+& (Join-Path $PSScriptRoot "service-start.ps1")
