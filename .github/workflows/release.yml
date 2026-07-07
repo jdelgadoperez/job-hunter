@@ -12,14 +12,21 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      # Mint a short-lived GitHub App installation token. Unlike a user PAT, commits made with an
+      # App token are automatically marked "Verified" by GitHub — and it can open PRs (which the
+      # default GITHUB_TOKEN can't) and lets the Release PR trigger CI. Requires an installed App
+      # whose id + private key are stored as the RELEASE_APP_ID / RELEASE_APP_PRIVATE_KEY secrets.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       # Reads Conventional Commits since the last release, opens/updates a "Release PR" that bumps
       # package.json + updates CHANGELOG.md, and — when that PR is merged — tags and cuts the GitHub
       # Release. No version numbers are chosen by hand; feat -> minor, fix -> patch.
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
-          # A fine-grained PAT (contents + pull-requests: write) rather than the default
-          # GITHUB_TOKEN, which GitHub forbids from opening PRs. A PAT also lets the resulting
-          # Release PR trigger CI, which a GITHUB_TOKEN-created PR would not.
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
