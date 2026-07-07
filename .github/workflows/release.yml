@@ -17,5 +17,9 @@ jobs:
       # Release. No version numbers are chosen by hand; feat -> minor, fix -> patch.
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
+          # A fine-grained PAT (contents + pull-requests: write) rather than the default
+          # GITHUB_TOKEN, which GitHub forbids from opening PRs. A PAT also lets the resulting
+          # Release PR trigger CI, which a GITHUB_TOKEN-created PR would not.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
