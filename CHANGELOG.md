@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.2.0...job-hunter-v0.2.1) (2026-07-07)
+
+
+### Bug Fixes
+
+* **web:** correct update-banner copy and reuse service-restart in update scripts ([#119](https://github.com/jdelgadoperez/job-hunter/issues/119)) ([8754861](https://github.com/jdelgadoperez/job-hunter/commit/8754861a924dd43cf8ceb484ebc98c5b3d6b2915))
+
 ## [0.2.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.1.0...job-hunter-v0.2.0) (2026-07-07)
 
 
