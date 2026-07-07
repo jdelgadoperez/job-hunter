@@ -52,10 +52,26 @@ lines 93) — keep new code green rather than lowering the floor.
 
 - Follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
   (`feat:`, `fix:`, `chore:`, `docs:`, …). Prefer smaller, themed commits over one large
-  grouped commit.
+  grouped commit. This format is **enforced**, not just encouraged:
+  - A Husky `commit-msg` hook runs [commitlint](https://commitlint.js.org) on every commit
+    (installed automatically by `npm install` via the `prepare` script).
+  - A CI check lints your **PR title** — because PRs are squash-merged, the title becomes the
+    commit on `main`, so it must be a valid Conventional Commit too.
 - Keep the PR description focused on **what changed and why** to ease review.
 - Update the README, `INSTALL.md`, or `CLAUDE.md` when your change affects user-facing
   behavior or the architecture.
+
+## Releases and dependencies
+
+- **Releases are automated** by [release-please](https://github.com/googleapis/release-please).
+  You don't bump `package.json` or edit `CHANGELOG.md` by hand — merged Conventional Commits drive
+  the next version (`feat:` → minor, `fix:` → patch). The bot opens a "release" PR; merging it tags
+  and publishes the GitHub Release. This is the reason the commit format is enforced above.
+- **Dependencies are updated by Dependabot** (weekly, for npm packages and GitHub Actions). Its PRs
+  use `chore(deps):` / `chore(deps-dev):` prefixes and don't trigger a release on their own.
+- **GitHub Actions are pinned to commit SHAs** in `.github/workflows/`, with the version in a
+  trailing `# vX.Y.Z` comment. This is a deliberate supply-chain safeguard — don't "simplify" a
+  pinned SHA back to a floating tag (`@v4`). Dependabot advances the SHA and the comment together.
 
 ## License
 
