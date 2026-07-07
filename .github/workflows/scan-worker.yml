@@ -28,9 +28,9 @@ jobs:
     # mid-crawl with nothing written. Headroom covers directory read + the post-crawl DB write.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
