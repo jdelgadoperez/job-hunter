@@ -9,6 +9,11 @@ type Route = Parameters<Parameters<Page["route"]>[1]>[0];
 /** Redirect hops we'll follow per navigation before refusing — matches HttpFetcher's cap. */
 const MAX_REDIRECTS = 5;
 
+/** Best-effort extra wait after `load` for a page to go network-idle, giving an SPA time to finish
+ *  its post-load data fetch and inject JSON-LD before we read page.content(). Short and independent
+ *  of `timeoutMs` — see the comment on `load()` for why we don't make the whole render wait on this. */
+const SETTLE_IDLE_MS = 3_000;
+
 /**
  * Decide how to handle an intercepted browser request. Main-frame navigations (the initial load,
  * HTTP redirects, and client-side document navigation) are re-validated against the SSRF guard, so a
@@ -94,7 +99,17 @@ export class PlaywrightRenderer implements PageRenderer {
       // first URL and a public careers page could bounce us onto an internal address (127.0.0.1,
       // 169.254.169.254 metadata, LAN).
       await page.route("**/*", (route: Route) => this.routeNavigation(route));
-      await page.goto(url, { waitUntil: "networkidle", timeout: this.timeoutMs });
+      // Waiting on `networkidle` for the main goto (500ms of zero in-flight requests) sounds like the
+      // right signal for "the SPA finished rendering," but pages with a persistent chat widget,
+      // analytics beacon, or ad tracker (in practice, a meaningful share of real careers pages) never
+      // go fully idle — they burn the entire `timeoutMs` budget even though their job content rendered
+      // in the first second or two. Playwright's own docs mark `networkidle` DISCOURAGED for exactly
+      // this reason. `load` is a bounded, reliable signal instead: after it fires, make a best-effort,
+      // short, independent attempt at network-idle (catching its own timeout) so an SPA that finishes
+      // its post-load data fetch quickly still gets read at the more complete "truly idle" point, while
+      // a chatty-but-loaded page just proceeds after the short grace window instead of hanging.
+      await page.goto(url, { waitUntil: "load", timeout: this.timeoutMs });
+      await page.waitForLoadState("networkidle", { timeout: SETTLE_IDLE_MS }).catch(() => {});
       return await page.content();
     } finally {
       // A route handler still awaiting route.fetch() for another in-flight request when the page
