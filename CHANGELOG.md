@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.3.0...job-hunter-v0.3.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **net:** stop waiting on networkidle for the whole render timeout ([#126](https://github.com/jdelgadoperez/job-hunter/issues/126)) ([35b7010](https://github.com/jdelgadoperez/job-hunter/commit/35b7010034c0628d21c0af9b51c54a21eed0729b))
+* scan-worker crash and its silently-green CI report ([#124](https://github.com/jdelgadoperez/job-hunter/issues/124)) ([f4794a9](https://github.com/jdelgadoperez/job-hunter/commit/f4794a9144146f13f94fa1a870c3ca4ada311ccb))
+
 ## [0.3.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.2.1...job-hunter-v0.3.0) (2026-07-07)
 
 
