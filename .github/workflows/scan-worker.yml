@@ -44,42 +44,52 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run the scanner worker
-        # Tee the worker output to a file so the next step can build a run summary from it. The
-        # default shell runs with `set -eo pipefail`, so a worker failure still fails the step.
-        run: npm run scan:worker 2>&1 | tee scan.log
+        # Tee the worker output to a file so the next step can build a run summary from it. Without
+        # `set -o pipefail`, this shell only has `-e`, so the pipeline's exit code is tee's (always 0)
+        # and a worker crash silently reports as a passing step — set it explicitly so a crash fails.
+        run: |
+          set -o pipefail
+          npm run scan:worker 2>&1 | tee scan.log
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           JOB_HUNTER_THE_MUSE_API_KEY: ${{ secrets.THE_MUSE_API_KEY }}
 
       - name: Run summary
         # Render a quick, human-readable summary on the run's page (no log-digging). Runs even on
-        # failure so a failed run still gets a one-line verdict instead of a silent red X.
+        # failure so a failed run still gets a one-line verdict instead of a silent red X. Also fails
+        # this step (not just relies on the worker step) when the worker never reached its `done:`
+        # line, so a crash can't report green even if a prior step's pipefail is ever bypassed again
+        # (e.g. a rerun of just this step, or the run: block changing shape).
         if: always()
         run: |
+          worker_ok=1
           {
             echo "## 🛰️ scan-worker"
             echo
             if [ ! -f scan.log ]; then
               echo "Worker produced no output (failed before logging) — see job logs."
-              exit 0
-            fi
-            done_line=$(grep -E '^\[scanner\] done:' scan.log | tail -n1 || true)
-            if [ -n "$done_line" ]; then
-              echo "✅ **${done_line#"[scanner] "}**"
+              worker_ok=0
             else
-              echo "❌ Worker did not finish — see job logs."
-            fi
-            echo
-            warn_count=$(grep -cE '^\[scanner\] ! ' scan.log || true)
-            echo "**Warnings:** ${warn_count:-0}"
-            if [ "${warn_count:-0}" -gt 0 ]; then
+              done_line=$(grep -E '^\[scanner\] done:' scan.log | tail -n1 || true)
+              if [ -n "$done_line" ]; then
+                echo "✅ **${done_line#"[scanner] "}**"
+              else
+                echo "❌ Worker did not finish — see job logs."
+                worker_ok=0
+              fi
               echo
-              echo "<details><summary>Show warnings</summary>"
-              echo
-              echo '```'
-              grep -E '^\[scanner\] ! ' scan.log
-              echo '```'
-              echo
-              echo "</details>"
+              warn_count=$(grep -cE '^\[scanner\] ! ' scan.log || true)
+              echo "**Warnings:** ${warn_count:-0}"
+              if [ "${warn_count:-0}" -gt 0 ]; then
+                echo
+                echo "<details><summary>Show warnings</summary>"
+                echo
+                echo '```'
+                grep -E '^\[scanner\] ! ' scan.log
+                echo '```'
+                echo
+                echo "</details>"
+              fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+          [ "$worker_ok" -eq 1 ]

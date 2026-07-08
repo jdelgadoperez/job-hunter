@@ -97,6 +97,11 @@ export class PlaywrightRenderer implements PageRenderer {
       await page.goto(url, { waitUntil: "networkidle", timeout: this.timeoutMs });
       return await page.content();
     } finally {
+      // A route handler still awaiting route.fetch() for another in-flight request when the page
+      // closes throws TargetClosedError on its own detached promise — outside this try/catch and
+      // outside withTimeout's race — which Node surfaces as an unhandled rejection and crashes the
+      // whole scan process. unrouteAll's 'ignoreErrors' discards exactly those in-flight failures.
+      await page.unrouteAll({ behavior: "ignoreErrors" });
       await page.close();
     }
   }
