@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.2.1...job-hunter-v0.3.0) (2026-07-07)
+
+
+### Features
+
+* **web:** show scan kind and last-run time on the Home "Last scan" card ([#121](https://github.com/jdelgadoperez/job-hunter/issues/121)) ([d66abb3](https://github.com/jdelgadoperez/job-hunter/commit/d66abb3dfabda3504b02ebf236c48cbd605e0393))
+
 ## [0.2.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.2.0...job-hunter-v0.2.1) (2026-07-07)
 
 
