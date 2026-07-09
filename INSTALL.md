@@ -26,9 +26,10 @@ Clone or download this repository, then from its folder run:
 ```
 
 If Node.js is missing or older than 22, the installer first offers to install the latest LTS. On
-macOS/Linux it uses whichever version manager you already have — **fnm** or **nvm** — and only
-offers to bootstrap nvm if you have neither; on Windows it uses `winget`. Decline and it points you
-at [nodejs.org](https://nodejs.org) instead. It then runs `npm install` and `npm run setup`.
+macOS/Linux it uses whichever version manager you already have — **fnm** or **nvm** — and offers to
+install **fnm** (the lighter option) if you have neither; on Windows it uses `winget`. Decline and
+it points you at [nodejs.org](https://nodejs.org) instead. It then runs `npm install` and
+`npm run setup`.
 
 ## What the installer does
 
