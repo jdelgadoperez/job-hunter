@@ -67,6 +67,11 @@ const MatchCard = memo(function MatchCard({
   const setAction = useMatchAction();
   const pending = setAction.isPending;
   const saved = action === "saved";
+  // `action` is a single-value field (saved | dismissed | applied — see repository.ts's
+  // user_actions table), so marking a saved posting applied silently replaces "saved" with no way
+  // back short of re-saving. Un-applying doesn't restore it either. Arm a confirm step only for
+  // that specific transition — applying an unsaved posting (the common path) stays a single click.
+  const [confirmingApply, setConfirmingApply] = useState(false);
   // When the user is filtering by country, flag postings whose country couldn't be parsed — they're
   // kept in the results (we never silently drop unknowns) but the user should know why they appear.
   const showUnknownCountry = countryFilterActive && posting.country === undefined;
@@ -138,16 +143,42 @@ const MatchCard = memo(function MatchCard({
         >
           {saved ? "★ Saved" : "☆ Save"}
         </Button>
-        <Button
-          variant="ghost"
-          disabled={pending}
-          onClick={() =>
-            setAction.mutate({ id: posting.id, action: action === "applied" ? null : "applied" })
-          }
-          className={action === "applied" ? "text-success" : ""}
-        >
-          {action === "applied" ? "✓ Applied" : "Mark applied"}
-        </Button>
+        {confirmingApply ? (
+          <span className="flex items-center gap-2 text-sm">
+            <span className="text-muted">This will replace Saved.</span>
+            <Button
+              variant="ghost"
+              disabled={pending}
+              onClick={() => {
+                setConfirmingApply(false);
+                setAction.mutate({ id: posting.id, action: "applied" });
+              }}
+              className="text-danger"
+            >
+              Confirm
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmingApply(false)}>
+              Cancel
+            </Button>
+          </span>
+        ) : (
+          <Button
+            variant="ghost"
+            disabled={pending}
+            onClick={() => {
+              if (action === "applied") {
+                setAction.mutate({ id: posting.id, action: null });
+              } else if (saved) {
+                setConfirmingApply(true);
+              } else {
+                setAction.mutate({ id: posting.id, action: "applied" });
+              }
+            }}
+            className={action === "applied" ? "text-success" : ""}
+          >
+            {action === "applied" ? "✓ Applied" : "Mark applied"}
+          </Button>
+        )}
         {action === "dismissed" ? (
           <Button
             variant="ghost"
