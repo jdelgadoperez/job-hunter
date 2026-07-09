@@ -59,7 +59,17 @@ lines 93) — keep new code green rather than lowering the floor.
     commit on `main`, so it must be a valid Conventional Commit too.
 - Keep the PR description focused on **what changed and why** to ease review.
 - Update the README, `INSTALL.md`, or `CLAUDE.md` when your change affects user-facing
-  behavior or the architecture.
+  behavior or the architecture. This is **enforced**: the `Docs & Wiki` CI check fails a PR
+  that touches product source (`src/`, `web/src/`) without also touching a doc surface
+  (`README`/`INSTALL`/`CONTRIBUTING`/`CLAUDE` or `docs/**`). If a change genuinely needs no docs
+  (a pure refactor, internal plumbing), add the `skip-docs` label or put `[skip docs]` in the PR
+  title to bypass it.
+- The same check validates the **wiki**. The [user guide wiki](https://github.com/jdelgadoperez/job-hunter/wiki)
+  is a *separate* git repo, so it can't be edited in a PR — but CI clones it and fails if any
+  `.../wiki/<Page>` link in the repo no longer resolves to a real wiki page or heading. If you
+  rename or remove a wiki page, fix the links here (or run `npm run check:wiki-links -- <wiki-dir>`
+  locally against a checkout of the wiki repo). Keeping the wiki *content* current is a manual
+  review — see the `doc-currency-audit` skill.
 
 ## Releases and dependencies
 

@@ -33,6 +33,7 @@
     "analyze:directory": "node --import tsx scripts/analyze-directory.ts",
     "analyze:custom-domains": "node --import tsx scripts/probe-custom-domains.ts",
     "build:skill-seed": "node --import tsx scripts/build-skill-seed.ts",
+    "check:wiki-links": "node --import tsx scripts/check-wiki-links.ts",
     "prepare": "husky"
   },
   "devDependencies": {
