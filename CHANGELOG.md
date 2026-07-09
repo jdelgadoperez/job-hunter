@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.3.1...job-hunter-v0.4.0) (2026-07-09)
+
+
+### Features
+
+* **installer:** auto-install Node LTS when missing or too old ([#128](https://github.com/jdelgadoperez/job-hunter/issues/128)) ([c4ff100](https://github.com/jdelgadoperez/job-hunter/commit/c4ff100bdd3b7c27173274a7e6e89bbe97e9576b))
+
+
+### Bug Fixes
+
+* **web:** add clear-filters control to Matches view ([#134](https://github.com/jdelgadoperez/job-hunter/issues/134)) ([dbbe241](https://github.com/jdelgadoperez/job-hunter/commit/dbbe2418a528f96137f4e5b2a2ccd503a73a8a84))
+* **web:** paginate the Matches list instead of rendering every card ([#135](https://github.com/jdelgadoperez/job-hunter/issues/135)) ([e12617d](https://github.com/jdelgadoperez/job-hunter/commit/e12617d61d6fcc1bff54ab4410b8e916773f22e2))
+
 ## [0.3.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.3.0...job-hunter-v0.3.1) (2026-07-08)
 
 
