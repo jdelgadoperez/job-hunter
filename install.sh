@@ -19,23 +19,37 @@ load_nvm() {
   command -v nvm >/dev/null 2>&1
 }
 
-# Install the latest Node LTS without root, via nvm. Returns non-zero if it couldn't.
+# Install the latest Node LTS without root, via whichever version manager is available
+# (fnm or nvm — whichever the user already has). Returns non-zero if it couldn't.
 install_node_lts() {
-  if ! load_nvm; then
-    # No nvm yet. Fetching and running a remote install script is meaningful, so only do it
-    # after an explicit yes — and never unprompted in a non-interactive run (CI, curl | bash).
-    if [ ! -t 0 ]; then
-      return 1
-    fi
-    read -r -p "Install nvm (Node Version Manager) now to set up Node LTS? [y/N] " reply
-    case "$reply" in
-      [yY]*) ;;
-      *) return 1 ;;
-    esac
-    echo "Installing nvm ($NVM_INSTALL_VERSION)…"
-    curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_INSTALL_VERSION/install.sh" | bash || return 1
-    load_nvm || return 1
+  # Prefer a version manager that's already installed.
+  if command -v fnm >/dev/null 2>&1; then
+    echo "Installing the latest Node LTS via fnm…"
+    fnm install --lts || return 1
+    eval "$(fnm env)"   # make fnm's shims active in this shell so `node` resolves below
+    fnm use lts-latest
+    return
   fi
+  if load_nvm; then
+    echo "Installing the latest Node LTS via nvm…"
+    nvm install --lts && nvm use --lts
+    return
+  fi
+
+  # Neither fnm nor nvm is installed. Fetching and running a remote install script is
+  # meaningful, so only do it after an explicit yes — and never unprompted in a
+  # non-interactive run (CI, curl | bash).
+  if [ ! -t 0 ]; then
+    return 1
+  fi
+  read -r -p "No Node version manager (fnm/nvm) found. Install nvm now to set up Node LTS? [y/N] " reply
+  case "$reply" in
+    [yY]*) ;;
+    *) return 1 ;;
+  esac
+  echo "Installing nvm ($NVM_INSTALL_VERSION)…"
+  curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_INSTALL_VERSION/install.sh" | bash || return 1
+  load_nvm || return 1
   echo "Installing the latest Node LTS via nvm…"
   nvm install --lts && nvm use --lts
 }

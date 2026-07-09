@@ -6,7 +6,7 @@ steps are listed at the end if you'd rather do it by hand.
 
 ## Prerequisites
 
-- **Node.js 22 or newer** (24 recommended; see `.nvmrc`) ([nodejs.org](https://nodejs.org)). If it's missing or too old, the installer offers to set up the latest LTS for you — via [nvm](https://github.com/nvm-sh/nvm) on macOS/Linux, or `winget` on Windows — so you can also install it beforehand yourself.
+- **Node.js 22 or newer** (24 recommended; see `.nvmrc`) ([nodejs.org](https://nodejs.org)). If it's missing or too old, the installer offers to set up the latest LTS for you — using a version manager you already have ([fnm](https://github.com/Schniz/fnm) or [nvm](https://github.com/nvm-sh/nvm)) on macOS/Linux, or `winget` on Windows — so you can also install it beforehand yourself.
 - macOS (Intel or Apple Silicon), Windows 11+, or Linux.
 - *Optional:* an [Anthropic API key](https://console.anthropic.com) for high-quality Claude scoring.
   Without one, job-hunter uses the free offline scorer (keyword matching).
@@ -25,9 +25,10 @@ Clone or download this repository, then from its folder run:
 ./install.ps1
 ```
 
-If Node.js is missing or older than 22, the installer first offers to install the latest LTS
-(nvm on macOS/Linux, `winget` on Windows). Decline and it points you at
-[nodejs.org](https://nodejs.org) instead. It then runs `npm install` and `npm run setup`.
+If Node.js is missing or older than 22, the installer first offers to install the latest LTS. On
+macOS/Linux it uses whichever version manager you already have — **fnm** or **nvm** — and only
+offers to bootstrap nvm if you have neither; on Windows it uses `winget`. Decline and it points you
+at [nodejs.org](https://nodejs.org) instead. It then runs `npm install` and `npm run setup`.
 
 ## What the installer does
 

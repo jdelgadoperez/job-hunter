@@ -13,18 +13,27 @@ function Test-NodeOk {
     return [int](node -p 'process.versions.node.split(".")[0]') -ge $NodeMinMajor
 }
 
-# Install the latest Node LTS via winget. Returns $true only if Node is usable afterwards.
+# Install the latest Node LTS, preferring an already-installed fnm and otherwise winget.
+# Returns $true only if Node is usable afterwards.
 function Install-NodeLts {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        return $false
+    if (Get-Command fnm -ErrorAction SilentlyContinue) {
+        Write-Host "Installing the latest Node LTS via fnm..."
+        fnm install --lts
+        # Make fnm's shims active in this session so `node` resolves below.
+        fnm env | Out-String | Invoke-Expression
+        fnm use lts-latest
+        return (Test-NodeOk)
     }
-    Write-Host "Installing the latest Node LTS via winget..."
-    winget install --id OpenJS.NodeJS.LTS -e --source winget `
-        --accept-package-agreements --accept-source-agreements
-    # Refresh PATH for this session so the freshly installed node is found without a restart.
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-                [System.Environment]::GetEnvironmentVariable("Path", "User")
-    return (Test-NodeOk)
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "Installing the latest Node LTS via winget..."
+        winget install --id OpenJS.NodeJS.LTS -e --source winget `
+            --accept-package-agreements --accept-source-agreements
+        # Refresh PATH for this session so the freshly installed node is found without a restart.
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                    [System.Environment]::GetEnvironmentVariable("Path", "User")
+        return (Test-NodeOk)
+    }
+    return $false
 }
 
 if (-not (Test-NodeOk)) {
