@@ -29,9 +29,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-type PostingSeed = { id: string; title: string; company: string };
+type PostingSeed = { id: string; title: string; company: string; country?: string };
 
-function scored({ id, title, company }: PostingSeed) {
+function scored({ id, title, company, country }: PostingSeed) {
   return {
     posting: {
       id,
@@ -41,6 +41,7 @@ function scored({ id, title, company }: PostingSeed) {
       source: "greenhouse",
       description: "",
       remote: true,
+      ...(country ? { country } : {}),
       fetchedAt: new Date("2026-06-17T00:00:00Z").toISOString(),
     },
     result: { score: 90, matchedSkills: [], missingSkills: [] },
@@ -57,6 +58,26 @@ function mockSearchableMatches(all: PostingSeed[]) {
       const search = new URL(url, "http://localhost").searchParams.get("search");
       const matched = search
         ? all.filter((p) => `${p.title} ${p.company}`.toLowerCase().includes(search.toLowerCase()))
+        : all;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(matched.map(scored)),
+      });
+    }),
+  );
+}
+
+// Mock that mirrors the server's country filter (keep an exact match OR an unknown-country
+// posting), so we can assert the aggregate count reflects what the server actually returns.
+function mockCountryFilterableMatches(all: PostingSeed[]) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) => {
+      const country = new URL(url, "http://localhost").searchParams.get("country");
+      const matched = country
+        ? all.filter((p) => p.country === country || p.country === undefined)
         : all;
       return Promise.resolve({
         ok: true,
@@ -316,5 +337,60 @@ describe("Matches count header", () => {
 
     await waitFor(() => expect(screen.getByText(/clearing filters/i)).toBeInTheDocument());
     expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Matches country filter count", () => {
+  // Selecting "Germany" also returns unknown-country postings (the server never silently drops
+  // them, per repository.ts), so the aggregate count should call that split out.
+  const withCountry: PostingSeed = {
+    id: "a",
+    title: "Berlin Engineer",
+    company: "Acme",
+    country: "Germany",
+  };
+  const unknownCountry: PostingSeed = { id: "b", title: "Remote Engineer", company: "Globex" };
+
+  it("appends an unknown-location count once a country filter is applied", async () => {
+    mockCountryFilterableMatches([withCountry, unknownCountry]);
+    renderMatches();
+
+    // The dropdown only lists countries already seen, so this shows up once the unfiltered
+    // query returns "Germany" from the seed above.
+    const select = await screen.findByLabelText(/country/i);
+    fireEvent.change(select, { target: { value: "Germany" } });
+
+    await waitFor(() =>
+      expect(screen.getByText(/Showing/)).toHaveTextContent(
+        "Showing 2 matches at the current filters (1 with unknown location)",
+      ),
+    );
+  });
+
+  it("omits the unknown-location count when no country filter is applied", async () => {
+    mockCountryFilterableMatches([withCountry, unknownCountry]);
+    renderMatches();
+
+    await waitFor(() =>
+      expect(screen.getByText(/Showing/)).toHaveTextContent(
+        "Showing 2 matches at the current filters",
+      ),
+    );
+    expect(screen.queryByText(/unknown location/i)).not.toBeInTheDocument();
+  });
+
+  it("omits the unknown-location count when every result has a confirmed country", async () => {
+    mockCountryFilterableMatches([withCountry]);
+    renderMatches();
+
+    const select = await screen.findByLabelText(/country/i);
+    fireEvent.change(select, { target: { value: "Germany" } });
+
+    await waitFor(() =>
+      expect(screen.getByText(/Showing/)).toHaveTextContent(
+        "Showing 1 match at the current filters",
+      ),
+    );
+    expect(screen.queryByText(/unknown location/i)).not.toBeInTheDocument();
   });
 });

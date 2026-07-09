@@ -260,6 +260,16 @@ export function Matches() {
   const visibleMatches = matches.data?.slice(0, visiblePages * PAGE_SIZE) ?? [];
   const hasMore = (matches.data?.length ?? 0) > visibleMatches.length;
 
+  // When filtering by country, the server also returns postings whose location couldn't be parsed
+  // (so they're never silently dropped — see repository.ts's listScoredPostings). Individually those
+  // are flagged with the "Unknown location" badge (see showUnknownCountry above), but the aggregate
+  // "Showing N matches" figure looked like N confirmed hits without that same caveat. Count them here
+  // so the summary line can call that out too.
+  const unknownCountryCount =
+    country !== undefined
+      ? (matches.data?.filter((m) => m.posting.country === undefined).length ?? 0)
+      : 0;
+
   // Resets every filter to its default value in one action. minScore goes back to the "relevant"
   // floor (not 0) so clearing filters mirrors the initial mount state, not a maximally-broad one.
   const clearFilters = () => {
@@ -388,6 +398,9 @@ export function Matches() {
           </span>{" "}
           {matches.data.length === 1 ? "match" : "matches"}
           {filtersAreActive ? " at the current filters" : ""}
+          {unknownCountryCount > 0
+            ? ` (${formatCount(unknownCountryCount)} with unknown location)`
+            : ""}
         </p>
       ) : null}
 
