@@ -128,7 +128,8 @@ and opens a React dashboard in your browser. It has five tabs:
 - **Home** — upload your resume, run a scan (incremental by default; **Rescan all** to re-visit
   everything), and deep-score the best matches with Claude — both with live progress.
 - **Matches** — your ranked roles, best-first, with a minimum-score slider (default **50**),
-  remote/country filters, matched & missing skills, Claude rationales, and save / dismiss /
+  a search box, remote/country filters, show expired/dismissed/applied toggles, a **Clear
+  filters** shortcut, matched & missing skills, Claude rationales, and save / dismiss /
   mark-applied actions.
 - **Skills** — edit the skills on your profile and the skill dictionary the resume parser recognizes.
 - **Companies** — add or remove the companies you track by careers-page URL.
