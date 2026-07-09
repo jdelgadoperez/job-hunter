@@ -1,0 +1,94 @@
+name: Docs & Wiki
+
+# Two guards that keep user-facing documentation from silently rotting:
+#
+#   docs-updated  — an in-PR gate: a PR that changes product source (src/, web/src/) must also touch
+#                   a doc surface (README/INSTALL/CONTRIBUTING/CLAUDE or docs/**). Escape hatch for
+#                   changes that genuinely need no docs: add the `skip-docs` label or put `[skip docs]`
+#                   in the PR title.
+#   wiki-links    — a cross-repo check: the wiki is a SEPARATE git repo (<repo>.wiki.git) and never
+#                   appears in a PR diff, so we can't gate on "was the wiki edited". What we CAN do is
+#                   clone it and prove every repo→wiki link still resolves to a real page + heading.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-updated:
+    # In-PR gate only — there is no PR context on a push to main.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require a docs change when source changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'skip-docs') }}
+        run: |
+          set -euo pipefail
+
+          if [ "$SKIP_LABEL" = "true" ] || printf '%s' "$PR_TITLE" | grep -qiF '[skip docs]'; then
+            echo "Docs gate bypassed (skip-docs label or [skip docs] in title)."
+            exit 0
+          fi
+
+          git fetch --no-tags origin "$BASE_REF"
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+          echo "Changed files:"; echo "$changed" | sed 's/^/  /'
+
+          # Product source, minus tests and fixtures (a test-only change needs no docs).
+          code=$(echo "$changed" | grep -E '^(src|web/src)/' \
+            | grep -vE '\.test\.tsx?$' | grep -vE '__fixtures__/' || true)
+          # Doc surfaces. docs/superpowers/** is dev scratch and does NOT count as documentation.
+          docs=$(echo "$changed" \
+            | grep -E '^(README|INSTALL|CONTRIBUTING|CLAUDE)\.md$|^docs/' \
+            | grep -vE '^docs/superpowers/' || true)
+
+          if [ -n "$code" ] && [ -z "$docs" ]; then
+            echo "::error::This PR changes product source but no documentation."
+            echo "Update a doc (README/INSTALL/CONTRIBUTING/CLAUDE or docs/**), or bypass with the"
+            echo "'skip-docs' label / a '[skip docs]' tag in the PR title if no docs are needed."
+            exit 1
+          fi
+          echo "Docs gate satisfied."
+
+  wiki-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Clone the wiki
+        id: wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          if git clone --quiet --depth 1 "$url" "$RUNNER_TEMP/wiki"; then
+            echo "dir=$RUNNER_TEMP/wiki" >> "$GITHUB_OUTPUT"
+          else
+            # No wiki (or empty) — nothing to validate. Don't block on it.
+            echo "::notice::No wiki repo found for ${GITHUB_REPOSITORY}; skipping wiki link check."
+            echo "dir=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate repo → wiki links
+        if: steps.wiki.outputs.dir != ''
+        run: npm run check:wiki-links -- "${{ steps.wiki.outputs.dir }}"
