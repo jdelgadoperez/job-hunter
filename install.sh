@@ -5,17 +5,63 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js is required but was not found. Install Node 24 (see .nvmrc) from https://nodejs.org and re-run." >&2
-  exit 1
-fi
+NODE_DOWNLOAD_URL="https://nodejs.org"
+NVM_INSTALL_VERSION="v0.40.1"
 
 # The CLI uses APIs that require Node 22+ (array-format util.styleText); .nvmrc pins 24.
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "$NODE_MAJOR" -lt 22 ]; then
-  echo "job-hunter needs Node 22 or newer (found $(node -v)). Install Node 24 (see .nvmrc) from https://nodejs.org and re-run." >&2
-  exit 1
+NODE_MIN_MAJOR=22
+
+# nvm is a shell function, not an executable on PATH — source it so we can call it from here.
+load_nvm() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  # shellcheck disable=SC1091
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+  command -v nvm >/dev/null 2>&1
+}
+
+# Install the latest Node LTS without root, via nvm. Returns non-zero if it couldn't.
+install_node_lts() {
+  if ! load_nvm; then
+    # No nvm yet. Fetching and running a remote install script is meaningful, so only do it
+    # after an explicit yes — and never unprompted in a non-interactive run (CI, curl | bash).
+    if [ ! -t 0 ]; then
+      return 1
+    fi
+    read -r -p "Install nvm (Node Version Manager) now to set up Node LTS? [y/N] " reply
+    case "$reply" in
+      [yY]*) ;;
+      *) return 1 ;;
+    esac
+    echo "Installing nvm ($NVM_INSTALL_VERSION)…"
+    curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_INSTALL_VERSION/install.sh" | bash || return 1
+    load_nvm || return 1
+  fi
+  echo "Installing the latest Node LTS via nvm…"
+  nvm install --lts && nvm use --lts
+}
+
+# True (0) when a usable Node is missing or older than we support.
+need_node() {
+  command -v node >/dev/null 2>&1 || return 0
+  [ "$(node -p 'process.versions.node.split(".")[0]')" -lt "$NODE_MIN_MAJOR" ]
+}
+
+if need_node; then
+  if command -v node >/dev/null 2>&1; then
+    echo "job-hunter needs Node $NODE_MIN_MAJOR or newer (found $(node -v))."
+  else
+    echo "Node.js is required but was not found."
+  fi
+  if install_node_lts && ! need_node; then
+    echo "Using $(node -v)."
+  else
+    echo "Couldn't set up a compatible Node automatically." >&2
+    echo "Install Node 24 (see .nvmrc) from $NODE_DOWNLOAD_URL and re-run ./install.sh" >&2
+    exit 1
+  fi
 fi
+
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 if [ "$NODE_MAJOR" -lt 24 ]; then
   echo "Note: Node 24 is recommended (see .nvmrc) — you're on $(node -v). Continuing…"
 fi

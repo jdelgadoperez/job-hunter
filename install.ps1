@@ -4,17 +4,44 @@ $ErrorActionPreference = "Stop"
 
 Set-Location -Path $PSScriptRoot
 
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Error "Node.js is required but was not found. Install Node 24 (see .nvmrc) from https://nodejs.org and re-run."
-    exit 1
+# The CLI uses APIs that require Node 22+ (array-format util.styleText); .nvmrc pins 24.
+$NodeMinMajor = 22
+
+# True when a usable Node is present and new enough.
+function Test-NodeOk {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $false }
+    return [int](node -p 'process.versions.node.split(".")[0]') -ge $NodeMinMajor
 }
 
-# The CLI uses APIs that require Node 22+ (array-format util.styleText); .nvmrc pins 24.
-$nodeMajor = [int](node -p 'process.versions.node.split(".")[0]')
-if ($nodeMajor -lt 22) {
-    Write-Error "job-hunter needs Node 22 or newer (found $(node -v)). Install Node 24 (see .nvmrc) from https://nodejs.org and re-run."
-    exit 1
+# Install the latest Node LTS via winget. Returns $true only if Node is usable afterwards.
+function Install-NodeLts {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+    Write-Host "Installing the latest Node LTS via winget..."
+    winget install --id OpenJS.NodeJS.LTS -e --source winget `
+        --accept-package-agreements --accept-source-agreements
+    # Refresh PATH for this session so the freshly installed node is found without a restart.
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path", "User")
+    return (Test-NodeOk)
 }
+
+if (-not (Test-NodeOk)) {
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        Write-Host "job-hunter needs Node $NodeMinMajor or newer (found $(node -v))."
+    } else {
+        Write-Host "Node.js is required but was not found."
+    }
+    if (Install-NodeLts) {
+        Write-Host "Using $(node -v)."
+    } else {
+        Write-Error "Couldn't set up a compatible Node automatically. Install Node 24 (see .nvmrc) from https://nodejs.org and re-run ./install.ps1"
+        exit 1
+    }
+}
+
+$nodeMajor = [int](node -p 'process.versions.node.split(".")[0]')
 if ($nodeMajor -lt 24) {
     Write-Host "Note: Node 24 is recommended (see .nvmrc) - you're on $(node -v). Continuing..."
 }
