@@ -118,6 +118,9 @@ paid Claude deep-score, so they still appear at the bottom of your matches at no
 non-remote roles, use the **Remote only** toggle in the dashboard Matches view (or `list --remote-only`
 on the CLI). "Remote" is read from the ATS feed's structured flag when available and falls back to the
 posting's location text otherwise; an unknown location counts as remote so nothing is silently hidden.
+The **Country** filter follows the same rule: postings whose location couldn't be resolved to a
+country are kept (badged "Unknown location") rather than dropped, and the Matches count line notes
+how many of the shown results fall into that bucket.
 
 ### Web dashboard
 
