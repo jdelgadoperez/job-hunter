@@ -159,6 +159,72 @@ describe("Matches empty state", () => {
   });
 });
 
+describe("Matches pagination", () => {
+  function manySeeds(count: number): PostingSeed[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `p${i}`,
+      title: `Posting Number ${i}`,
+      company: "Acme",
+    }));
+  }
+
+  it("renders only the first page and offers Show more for a large result set", async () => {
+    mockMatches(manySeeds(120).map(scored));
+    renderMatches();
+
+    await screen.findByText(/Posting Number 0/);
+    expect(screen.queryByText(/Posting Number 49/)).toBeInTheDocument();
+    expect(screen.queryByText(/Posting Number 50/)).not.toBeInTheDocument();
+
+    expect(screen.getByText(/Showing/)).toHaveTextContent("Showing 50 of 120 matches");
+    expect(screen.getByRole("button", { name: /show more \(70 remaining\)/i })).toBeInTheDocument();
+  });
+
+  it("reveals another page per click and removes the button once everything is shown", async () => {
+    mockMatches(manySeeds(120).map(scored));
+    renderMatches();
+
+    await screen.findByText(/Posting Number 0/);
+    fireEvent.click(screen.getByRole("button", { name: /show more/i }));
+
+    await waitFor(() => expect(screen.getByText(/Posting Number 99/)).toBeInTheDocument());
+    expect(screen.queryByText(/Posting Number 100/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /show more/i }));
+
+    await waitFor(() => expect(screen.getByText(/Posting Number 119/)).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /show more/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Showing/)).toHaveTextContent(
+      "Showing 120 matches at the current filters",
+    );
+  });
+
+  it("does not show a Show more button when the result set fits in one page", async () => {
+    mockMatches(manySeeds(10).map(scored));
+    renderMatches();
+
+    await screen.findByText(/Posting Number 0/);
+    expect(screen.queryByRole("button", { name: /show more/i })).not.toBeInTheDocument();
+  });
+
+  it("resets back to the first page when a filter changes the query", async () => {
+    mockSearchableMatches(manySeeds(120));
+    renderMatches();
+
+    await screen.findByText(/Posting Number 0/);
+    fireEvent.click(screen.getByRole("button", { name: /show more/i }));
+    await waitFor(() => expect(screen.getByText(/Posting Number 99/)).toBeInTheDocument());
+
+    const remoteOnly = screen.getByLabelText(/remote only/i);
+    fireEvent.click(remoteOnly);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Showing/)).toHaveTextContent("Showing 50 of 120 matches"),
+    );
+    expect(screen.queryByText(/Posting Number 99/)).not.toBeInTheDocument();
+  });
+});
+
 describe("Matches clear filters", () => {
   it("hides the clear-filters control when no filter is active", async () => {
     mockMatches([scored({ id: "a", title: "Staff Platform Engineer", company: "Acme" })]);

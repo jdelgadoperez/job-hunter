@@ -130,7 +130,8 @@ and opens a React dashboard in your browser. It has five tabs:
 - **Matches** — your ranked roles, best-first, with a minimum-score slider (default **50**),
   a search box, remote/country filters, show expired/dismissed/applied toggles, a **Clear
   filters** shortcut, matched & missing skills, Claude rationales, and save / dismiss /
-  mark-applied actions.
+  mark-applied actions. Results load 50 at a time with a **Show more** button, so widening
+  filters on a large database stays responsive instead of rendering everything at once.
 - **Skills** — edit the skills on your profile and the skill dictionary the resume parser recognizes.
 - **Companies** — add or remove the companies you track by careers-page URL.
 - **Settings** — your Anthropic API key, scorer model, home country, scan-freshness window, and

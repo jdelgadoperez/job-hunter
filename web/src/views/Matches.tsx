@@ -53,6 +53,10 @@ function CompanyLinksRow({ posting }: { posting: ScoredPosting["posting"] }) {
 // Wrapped in memo so an optimistic save/dismiss/apply mutation on one card only re-renders that
 // card, not the whole list — React.memo compares incoming props, and only the touched posting's
 // `action`/`result` identity changes after a mutation.
+// Rendering every match at once can mean 12,000+ cards in a single unvirtualized list (e.g. at
+// minScore=0 on a large DB), which is slow enough to make the page feel hung. Paginate instead.
+const PAGE_SIZE = 50;
+
 const MatchCard = memo(function MatchCard({
   posting,
   result,
@@ -230,6 +234,32 @@ export function Matches() {
     // country could appear; recomputing then keeps the superset current.
   }, [matches.data]);
 
+  // How many pages of PAGE_SIZE cards to render. Resets to 1 whenever the query itself changes
+  // (any filter, including the committed search term) so a new, narrower result set doesn't stay
+  // scrolled past its own end, and a widened one doesn't dump every page back in at once.
+  //
+  // This is "adjusting state during render" (see react.dev/learn/you-might-not-need-an-effect):
+  // comparing the new key against a ref and resetting on mismatch, rather than useEffect, avoids an
+  // extra render after every filter change.
+  const queryKey = JSON.stringify({
+    minScore,
+    includeExpired,
+    includeDismissed,
+    remoteOnly,
+    country,
+    includeApplied,
+    onlyApplied,
+    search,
+  });
+  const [visiblePages, setVisiblePages] = useState(1);
+  const previousQueryKey = useRef(queryKey);
+  if (previousQueryKey.current !== queryKey) {
+    previousQueryKey.current = queryKey;
+    setVisiblePages(1);
+  }
+  const visibleMatches = matches.data?.slice(0, visiblePages * PAGE_SIZE) ?? [];
+  const hasMore = (matches.data?.length ?? 0) > visibleMatches.length;
+
   // Resets every filter to its default value in one action. minScore goes back to the "relevant"
   // floor (not 0) so clearing filters mirrors the initial mount state, not a maximally-broad one.
   const clearFilters = () => {
@@ -350,7 +380,12 @@ export function Matches() {
 
       {matches.data && matches.data.length > 0 ? (
         <p className="text-sm text-muted">
-          Showing <span className="font-semibold text-fg">{formatCount(matches.data.length)}</span>{" "}
+          Showing{" "}
+          <span className="font-semibold text-fg">
+            {hasMore
+              ? `${formatCount(visibleMatches.length)} of ${formatCount(matches.data.length)}`
+              : formatCount(matches.data.length)}
+          </span>{" "}
           {matches.data.length === 1 ? "match" : "matches"}
           {filtersAreActive ? " at the current filters" : ""}
         </p>
@@ -367,18 +402,27 @@ export function Matches() {
             : "No matches yet. Run a scan from the Home tab."}
         </Empty>
       ) : (
-        <div className="space-y-3">
-          {matches.data.map((m) => (
-            <MatchCard
-              key={m.posting.id}
-              posting={m.posting}
-              result={m.result}
-              action={m.action}
-              expired={m.expired}
-              countryFilterActive={country !== undefined}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-3">
+            {visibleMatches.map((m) => (
+              <MatchCard
+                key={m.posting.id}
+                posting={m.posting}
+                result={m.result}
+                action={m.action}
+                expired={m.expired}
+                countryFilterActive={country !== undefined}
+              />
+            ))}
+          </div>
+          {hasMore ? (
+            <div className="flex justify-center">
+              <Button variant="ghost" onClick={() => setVisiblePages((n) => n + 1)}>
+                Show more ({formatCount(matches.data.length - visibleMatches.length)} remaining)
+              </Button>
+            </div>
+          ) : null}
+        </>
       )}
     </section>
   );
