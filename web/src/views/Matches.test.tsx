@@ -159,6 +159,53 @@ describe("Matches empty state", () => {
   });
 });
 
+describe("Matches clear filters", () => {
+  it("hides the clear-filters control when no filter is active", async () => {
+    mockMatches([scored({ id: "a", title: "Staff Platform Engineer", company: "Acme" })]);
+    renderMatches();
+
+    await screen.findByText(/Staff Platform Engineer/);
+    // Default mount has minScore=50, which counts as active, so drop it to 0 first.
+    const slider = screen.getByLabelText(/minimum score/i);
+    fireEvent.change(slider, { target: { value: "0" } });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /clear filters/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("resets search, score, and remote-only back to defaults in one click", async () => {
+    mockSearchableMatches([
+      { id: "a", title: "Staff Platform Engineer", company: "Acme" },
+      { id: "b", title: "Frontend Engineer", company: "Globex" },
+    ]);
+    renderMatches();
+
+    await screen.findByText(/Staff Platform Engineer/);
+
+    const box = screen.getByLabelText(/search matches/i);
+    fireEvent.change(box, { target: { value: "Globex" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() =>
+      expect(screen.queryByText(/Staff Platform Engineer/)).not.toBeInTheDocument(),
+    );
+
+    const remoteOnly = screen.getByLabelText(/remote only/i);
+    fireEvent.click(remoteOnly);
+
+    const clearButton = await screen.findByRole("button", { name: /clear filters/i });
+    fireEvent.click(clearButton);
+
+    await waitFor(() => expect(screen.getByText(/Staff Platform Engineer/)).toBeInTheDocument());
+    expect(screen.getByText(/Frontend Engineer/)).toBeInTheDocument();
+    expect(box).toHaveValue("");
+    expect(remoteOnly).not.toBeChecked();
+    // minScore reverts to its default (SCORE_THRESHOLDS.relevant), which still counts as an
+    // active filter by design, so the button itself remains visible after a clear.
+    expect(screen.getByRole("button", { name: /clear filters/i })).toBeInTheDocument();
+  });
+});
+
 describe("Matches expired postings", () => {
   it("carries a non-color signal (accessible label) beyond the dimming class", async () => {
     mockMatches([{ ...scored({ id: "a", title: "Stale Role", company: "Acme" }), expired: true }]);

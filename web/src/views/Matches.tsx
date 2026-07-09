@@ -230,6 +230,20 @@ export function Matches() {
     // country could appear; recomputing then keeps the superset current.
   }, [matches.data]);
 
+  // Resets every filter to its default value in one action. minScore goes back to the "relevant"
+  // floor (not 0) so clearing filters mirrors the initial mount state, not a maximally-broad one.
+  const clearFilters = () => {
+    setMinScore(SCORE_THRESHOLDS.relevant);
+    setIncludeExpired(false);
+    setIncludeDismissed(false);
+    setRemoteOnly(false);
+    setCountry(undefined);
+    setIncludeApplied(false);
+    setOnlyApplied(false);
+    setSearchInput("");
+    setSearch(undefined);
+  };
+
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -326,6 +340,11 @@ export function Matches() {
             />
             Show applied
           </label>
+        ) : null}
+        {filtersAreActive ? (
+          <Button variant="ghost" onClick={clearFilters} className="px-2 py-0.5">
+            Clear filters
+          </Button>
         ) : null}
       </div>
 
