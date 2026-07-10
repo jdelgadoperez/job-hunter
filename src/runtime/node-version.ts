@@ -13,5 +13,5 @@ export function checkNodeVersion(
   const major = Number.parseInt(versionString.split(".")[0] ?? "", 10);
   if (!Number.isInteger(major)) return null;
   if (major >= floorMajor) return null;
-  return `job-hunter needs Node ${floorMajor} or newer (you have ${versionString}). Some features may not work; see .nvmrc.`;
+  return `job-hunter needs Node ${floorMajor} or newer (you have ${versionString}). Some features may not work; please upgrade Node.`;
 }
