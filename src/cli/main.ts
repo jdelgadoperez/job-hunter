@@ -314,6 +314,7 @@ export async function main(): Promise<void> {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error(style.error(String(error)));
+    console.error(style.dim("Report this: https://github.com/jdelgadoperez/job-hunter/issues/new"));
     process.exitCode = 1;
   });
 }
