@@ -323,3 +323,25 @@ describe("service command", () => {
     expect(result).toMatchObject({ error: expect.stringContaining("reload") });
   });
 });
+
+describe("short flag aliases", () => {
+  it("accepts -p as an alias for --port on serve", () => {
+    expect(parseCli(["serve", "-p", "3000"])).toMatchObject({ kind: "serve", port: 3000 });
+  });
+
+  it("accepts -a as an alias for --all on scan", () => {
+    expect(parseCli(["scan", "-a"])).toMatchObject({ kind: "scan", all: true });
+  });
+
+  it("accepts -l as an alias for --limit on score", () => {
+    expect(parseCli(["score", "-l", "5"])).toMatchObject({ kind: "score", limit: 5 });
+  });
+
+  it("accepts -n as an alias for --name on track add", () => {
+    expect(parseCli(["track", "add", "https://x.com/careers", "-n", "Acme"])).toMatchObject({
+      kind: "track-add",
+      url: "https://x.com/careers",
+      name: "Acme",
+    });
+  });
+});

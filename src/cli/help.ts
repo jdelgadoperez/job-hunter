@@ -20,7 +20,7 @@ type CommandHelp = {
 export const COMMANDS: CommandHelp[] = [
   {
     name: "scan",
-    invocation: "scan [--retry-failed] [--all] [--freshness-hours N]",
+    invocation: "scan [--retry-failed] [-a|--all] [--freshness-hours N]",
     summary: "Discover and store new postings (free heuristic scoring)",
     details:
       "Reads the public job directory plus any tracked companies, stores postings with a free heuristic score, and expires roles that have gone offline. Run `score` afterward for LLM scoring. Defaults to an incremental scan that skips companies scanned recently.",
@@ -30,7 +30,7 @@ export const COMMANDS: CommandHelp[] = [
         "Rescan only companies that have failed to fetch on several consecutive scans (the 'needs attention' list), instead of the full directory. Note: when a remote feed is configured, the feed is scoped to these needs-attention companies once the shared worker emits company ids.",
       ],
       [
-        "--all",
+        "-a, --all",
         "Rescan every company, ignoring the freshness window (default: skip recently-scanned ones).",
       ],
       [
@@ -43,7 +43,7 @@ export const COMMANDS: CommandHelp[] = [
   {
     name: "score",
     invocation:
-      "score [--min-heuristic N] [--limit N] [--remote|--no-remote] [--rescore] [--dry-run]",
+      "score [--min-heuristic N] [-l|--limit N] [--remote|--no-remote] [--rescore] [--dry-run]",
     summary: "LLM-score the best postings from the last scan",
     details:
       "Ranks stored postings by their heuristic score, batch-triages titles with the LLM, then deep-scores the survivors. Bounded by --min-heuristic (floor) and --limit (cap). Use --dry-run to preview the plan and estimated cost without spending.",
@@ -52,7 +52,7 @@ export const COMMANDS: CommandHelp[] = [
         "--min-heuristic N",
         "Only consider postings scoring at least N heuristically (default 30).",
       ],
-      ["--limit N", "Deep-score at most N postings (default 100)."],
+      ["-l, --limit N", "Deep-score at most N postings (default 100)."],
       ["--remote / --no-remote", "Override the saved remote-only filter for this run."],
       ["--rescore", "Re-score postings already LLM-scored in a prior run."],
       ["--dry-run", "Print the plan + estimated cost and exit without calling the LLM."],
@@ -93,11 +93,11 @@ export const COMMANDS: CommandHelp[] = [
   },
   {
     name: "serve",
-    invocation: "serve [--port N] [--no-open] [--refresh-hours N]",
+    invocation: "serve [-p|--port N] [--no-open] [--refresh-hours N]",
     summary: "Start the local web dashboard (recommended)",
     details: "Starts the local web dashboard — the recommended way to use the tool.",
     options: [
-      ["--port N", "Port to listen on (default 48373)."],
+      ["-p, --port N", "Port to listen on (default 48373)."],
       ["--no-open", "Don't open a browser window automatically."],
       ["--refresh-hours N", "Re-scan every N hours in the background (default 6, 0 disables)."],
     ],
@@ -135,7 +135,7 @@ export const COMMANDS: CommandHelp[] = [
     details: "Manage companies scanned alongside the public directory.",
     optionsLabel: "SUBCOMMANDS",
     options: [
-      ["add <url> [--name <name>]", "Track a company by its careers-page URL."],
+      ["add <url> [-n, --name <name>]", "Track a company by its careers-page URL."],
       ["list", "List tracked companies."],
       ["remove <url>", "Stop tracking a company."],
     ],

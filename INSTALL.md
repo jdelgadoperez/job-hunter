@@ -163,3 +163,6 @@ overview.
 - **"No profile yet"** — run `npm run cli -- profile <resume>` (or re-run `npm run setup`).
 - **Where your data lives** — a single SQLite file: `~/.job-hunter/jobhunter.db` (macOS/Linux) or
   `%APPDATA%\job-hunter\jobhunter.db` (Windows). Override with `JOB_HUNTER_HOME`.
+- **The CLI crashed with an error** — it prints a link to file a bug report. You can also open one
+  directly at [github.com/jdelgadoperez/job-hunter/issues/new](https://github.com/jdelgadoperez/job-hunter/issues/new);
+  the bug-report template asks for `job-hunter --version`, your OS, and your Node version.

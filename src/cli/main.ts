@@ -26,6 +26,7 @@ import { AnthropicTriageClient } from "@app/matching/triage-client";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import { readResumeText } from "@app/profile/read-resume";
+import { checkNodeVersion } from "@app/runtime/node-version";
 import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
 import { getVersion } from "@app/runtime/version";
 import { startServer } from "@app/server/serve";
@@ -217,6 +218,9 @@ export async function runScoreCommand(
 }
 
 export async function main(): Promise<void> {
+  const versionWarning = checkNodeVersion(process.versions.node);
+  if (versionWarning) console.error(style.warn(versionWarning));
+
   const command = parseCli(process.argv.slice(2));
   const log: Logger = (message) => console.log(message);
 
@@ -310,6 +314,7 @@ export async function main(): Promise<void> {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error(style.error(String(error)));
+    console.error(style.dim("Report this: https://github.com/jdelgadoperez/job-hunter/issues/new"));
     process.exitCode = 1;
   });
 }

@@ -93,7 +93,7 @@ export function parseCli(argv: string[]): Command {
         args: rest,
         options: {
           "retry-failed": { type: "boolean" },
-          all: { type: "boolean" },
+          all: { type: "boolean", short: "a" },
           "freshness-hours": { type: "string" },
         },
         allowPositionals: true,
@@ -121,7 +121,7 @@ export function parseCli(argv: string[]): Command {
       const parsed = safeParse({
         args: rest,
         options: {
-          port: { type: "string" },
+          port: { type: "string", short: "p" },
           "no-open": { type: "boolean" },
           "refresh-hours": { type: "string" },
         },
@@ -189,7 +189,7 @@ export function parseCli(argv: string[]): Command {
       if (sub === "add") {
         const parsed = safeParse({
           args: trackRest,
-          options: { name: { type: "string" } },
+          options: { name: { type: "string", short: "n" } },
           allowPositionals: true,
         });
         if (!parsed.ok) return { kind: "help", error: parsed.error };
@@ -214,7 +214,7 @@ export function parseCli(argv: string[]): Command {
         args: rest,
         options: {
           "min-heuristic": { type: "string" },
-          limit: { type: "string" },
+          limit: { type: "string", short: "l" },
           remote: { type: "boolean" },
           "no-remote": { type: "boolean" },
           rescore: { type: "boolean" },
