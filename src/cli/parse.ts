@@ -23,6 +23,7 @@ export type Command =
       country?: string;
       includeApplied: boolean;
       onlyApplied: boolean;
+      json: boolean;
     }
   | {
       kind: "score";
@@ -31,6 +32,7 @@ export type Command =
       remoteOnly?: boolean;
       rescore: boolean;
       dryRun: boolean;
+      json: boolean;
     }
   | { kind: "config-remote"; on: boolean }
   | { kind: "service"; action: ServiceAction }
@@ -74,8 +76,16 @@ function describeParseError(err: unknown): string {
  * Pure argv → `Command` parser (no I/O), so dispatch logic is unit-tested without spawning a
  * process. `argv` is the arguments after `node script` (i.e. `process.argv.slice(2)`).
  */
+/** `--verbose` is global (applies to any command); detect it anywhere in argv, like `-h`/`-v`. */
+export function hasVerboseFlag(argv: string[]): boolean {
+  return argv.some((a) => a === "--verbose");
+}
+
 export function parseCli(argv: string[]): Command {
-  const [command, ...rest] = argv;
+  // `--verbose` is consumed globally (see hasVerboseFlag in main); remove it before per-command
+  // parsing so option-less subcommands don't reject it as an unknown flag.
+  const argvForCommand = argv.filter((a) => a !== "--verbose");
+  const [command, ...rest] = argvForCommand;
 
   // Help/version win wherever they appear, so `job-hunter scan --help` shows scan's help rather
   // than running a scan — the behavior people expect from any CLI. The topic is the first
@@ -157,6 +167,7 @@ export function parseCli(argv: string[]): Command {
           country: { type: "string" },
           "include-applied": { type: "boolean" },
           "only-applied": { type: "boolean" },
+          json: { type: "boolean" },
         },
         allowPositionals: true,
       });
@@ -171,6 +182,7 @@ export function parseCli(argv: string[]): Command {
         ...(values.country ? { country: values.country } : {}),
         includeApplied: Boolean(values["include-applied"]),
         onlyApplied: Boolean(values["only-applied"]),
+        json: Boolean(values.json),
       };
     }
 
@@ -219,6 +231,7 @@ export function parseCli(argv: string[]): Command {
           "no-remote": { type: "boolean" },
           rescore: { type: "boolean" },
           "dry-run": { type: "boolean" },
+          json: { type: "boolean" },
         },
         allowPositionals: true,
       });
@@ -240,6 +253,7 @@ export function parseCli(argv: string[]): Command {
         limit,
         rescore: Boolean(values.rescore),
         dryRun: Boolean(values["dry-run"]),
+        json: Boolean(values.json),
       };
       // --remote / --no-remote are explicit overrides; absent means "use the saved setting".
       if (values.remote) cmd.remoteOnly = true;
