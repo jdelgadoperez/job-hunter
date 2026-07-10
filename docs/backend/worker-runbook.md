@@ -28,29 +28,33 @@ The worker never needs the anon key or any per-user data.
 ## Database schema & migrations
 
 The shared-feed schema lives in [`supabase/migrations/`](../../supabase/migrations) — versioned,
-ordered SQL files that are the **single source of truth**. They are applied to the hosted database by
-CI, not by hand and not by the worker:
+ordered SQL files that are the **single source of truth**.
 
-- **On merge to `main`** (or a manual **Actions → migrate → Run workflow**), the
-  [`migrate`](../../.github/workflows/migrate.yml) workflow runs `supabase db push`, which applies any
-  migration versions not yet in the database's ledger. On a PR that touches `supabase/migrations/**`
-  it runs `--dry-run` so review can preview the change. It needs the repo Actions secret
-  **`SUPABASE_DB_URL`** — a *session*/direct Postgres connection with DDL rights (Supabase → Project
-  Settings → Database → "Session pooler" or the direct connection on **port 5432**, *not* the
-  transaction pooler on 6543). Until that secret is set the job no-ops green.
-- **The worker only verifies.** On startup it checks the database's applied-migration version against
-  `EXPECTED_SCHEMA_VERSION` (`src/backend/schema-version.ts`) and **exits fast with an actionable
-  message if the database is behind** — it never mutates schema itself.
-
-**Rebuild recovery:** if the database is ever reset/rebuilt, its migration ledger reverts and the
-worker will refuse to run ("schema is behind"). Restore it by running the `migrate` workflow manually
-(**Actions → migrate → Run workflow**); `db push` re-applies whatever versions are missing.
+- **The worker self-heals.** On startup it reads the database's migration ledger and applies any
+  migration in `supabase/migrations/` that isn't recorded yet, in version order, each in its own
+  transaction, then records it (`src/backend/apply-migrations.ts`). So a **fresh, rebuilt, or drifted
+  database is brought current on the next scan** — no manual step, and no more `column "…" does not
+  exist` crashes. An up-to-date database is a no-op. Migrations are additive-idempotent, so
+  re-applying is always safe; a migration that fails aborts the run (its transaction rolls back)
+  rather than crawling into a half-migrated schema.
+- **Rebuild recovery is automatic.** If the database is ever reset/rebuilt, the next scheduled scan
+  re-applies the migrations and the feed recovers on its own. To recover immediately instead of
+  waiting for the cron, trigger a run by hand (**Actions → scan-worker → Run workflow**) or use the
+  optional `migrate` workflow below.
+- **`migrate` workflow (optional).** [`.github/workflows/migrate.yml`](../../.github/workflows/migrate.yml)
+  can also apply migrations via `supabase db push` — a `--dry-run` **preview** on PRs that touch
+  `supabase/migrations/**`, and an immediate apply on merge to `main` so you don't wait for the next
+  scan. It needs the repo secret **`SUPABASE_DB_URL`** (a *session*/direct Postgres connection with DDL
+  rights — Supabase → Project Settings → Database → "Session pooler" or the direct connection on **port
+  5432**, *not* the transaction pooler on 6543). It's purely a convenience: leave the secret unset and
+  the worker still handles everything.
 
 **Authoring a migration:** `supabase migration new <name>` → edit the generated
-`supabase/migrations/<timestamp>_<name>.sql` → open a PR (the dry-run check previews it) → on merge it
-applies automatically. Bump `EXPECTED_SCHEMA_VERSION` to the new version in the same PR (a test
-enforces it equals the newest migration filename). **Never edit a migration already merged to `main`**
-— applied migrations are immutable; ship a new file instead.
+`supabase/migrations/<timestamp>_<name>.sql` → open a PR. It applies on the next worker run after merge
+(or immediately, if the `migrate` workflow is wired up). **Never edit a migration already merged to
+`main`** — applied migrations are immutable; ship a new file instead. Keep migrations
+additive-idempotent; a destructive change (drop/rename/backfill) would run automatically at scan time,
+so gate it deliberately before shipping one.
 
 ## Deploy options
 

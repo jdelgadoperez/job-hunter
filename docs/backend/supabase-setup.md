@@ -23,21 +23,20 @@ Two roles use the database, with very different trust:
 
 ## 2. Apply the schema (migrations)
 
-The schema lives in [`supabase/migrations/`](../../supabase/migrations) as versioned SQL files and is
-applied with the Supabase CLI. Add the repo Actions secret **`SUPABASE_DB_URL`** — a *session*/direct
-Postgres connection with DDL rights (Supabase → Project Settings → Database → "Session pooler" or the
-direct connection on **port 5432**, not the transaction pooler on 6543) — then let CI apply it:
+The schema lives in [`supabase/migrations/`](../../supabase/migrations) as versioned SQL files.
+**You don't have to apply it by hand** — the scanner worker self-heals: on its first run it applies
+any migration the database is missing (in version order) and records it, so a brand-new database is
+set up automatically the first time the worker runs. The migrations create the tables/indexes and
+enable RLS so the anon key can only read `postings`/`companies`; every write requires the service-role
+key, which only the worker holds.
 
-- **CI (normal path):** the [`migrate`](../../.github/workflows/migrate.yml) workflow runs
-  `supabase db push` on merge to `main` and on **Actions → migrate → Run workflow**. Use the manual
-  run to apply the schema to a brand-new (or rebuilt) database.
-- **Locally, if you prefer:** `supabase db push --db-url "<session-connection-string>"`.
-
-The migrations create the tables/indexes and enable RLS so the anon key can only read
-`postings`/`companies`; every write requires the service-role key, which only the worker holds. They
-are idempotent and `db push` skips versions already applied, so re-running is always safe. See the
-"Database schema & migrations" section of [`worker-runbook.md`](./worker-runbook.md) for authoring and
-rebuild-recovery details.
+To apply the schema **before** the first scan (or to preview a change), the optional
+[`migrate`](../../.github/workflows/migrate.yml) workflow runs `supabase db push` on merge to `main`,
+on **Actions → migrate → Run workflow**, and as a `--dry-run` on PRs. It needs the repo secret
+**`SUPABASE_DB_URL`** — a *session*/direct Postgres connection with DDL rights (Supabase → Project
+Settings → Database → "Session pooler" or the direct connection on **port 5432**, not the transaction
+pooler on 6543). Locally you can run `supabase db push --db-url "<session-connection-string>"`. See the
+"Database schema & migrations" section of [`worker-runbook.md`](./worker-runbook.md) for details.
 
 ## 3. The feed endpoint (what the client reads)
 

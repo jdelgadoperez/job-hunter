@@ -4,11 +4,11 @@ This is a coordinated deploy of the hosted worker plus the shared-feed schema. T
 (SQLite `companyId` + local retry scoping) works as soon as the PR merges.
 
 > **Note (superseded):** the schema is now applied via versioned migrations in
-> [`supabase/migrations/`](../supabase/migrations) by the `migrate` CI workflow, not the manual
-> `psql -f schema.sql` step described below. The companyId columns are part of migration
-> `20260706023908`; on a current database they are already applied. This runbook is kept as a record
-> of the original rollout — see [`docs/backend/worker-runbook.md`](./backend/worker-runbook.md) for the
-> migration workflow. The feed-scoping payoff — retry scoping across the shared feed, not just the local crawl —
+> [`supabase/migrations/`](../supabase/migrations) — the scanner worker self-heals by applying any
+> pending migration on startup, so no manual `psql -f schema.sql` step is needed. The companyId
+> columns are part of migration `20260706023908`; on a current database they are already applied. This
+> runbook is kept as a record of the original rollout — see
+> [`docs/backend/worker-runbook.md`](./backend/worker-runbook.md) for the migration flow. The feed-scoping payoff — retry scoping across the shared feed, not just the local crawl —
 only activates once the hosted worker starts emitting `company_id` on `postings` rows in Supabase.
 
 **Ordering note (read first):** shipping the local client before the worker has run is SAFE.
@@ -22,10 +22,9 @@ worker catches up.
 
 ### 1. Apply the additive schema to Supabase
 
-Apply the migrations (normally via the `migrate` CI workflow — **Actions → migrate → Run workflow** —
-or locally with `supabase db push --db-url "<session-connection-string>"`). The relevant change is
-migration `20260706023908`, which is additive and idempotent (`add column if not exists`), so it's
-safe to re-run. It adds:
+The migrations apply automatically on the next worker run (self-heal), or immediately via the optional
+`migrate` CI workflow. The relevant change is migration `20260706023908`, which is additive and
+idempotent (`add column if not exists`), so it's safe to re-run. It adds:
 
 - `companies.id` plus its (non-unique) index
 - `postings.company_id` plus its index

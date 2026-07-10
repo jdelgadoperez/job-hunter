@@ -1,14 +1,16 @@
 name: migrate
 
-# Applies the versioned Postgres migrations in supabase/migrations/ to the hosted Supabase database.
-# supabase/migrations/ is the single source of truth for the shared-feed schema, and this workflow is
-# the only thing that applies it — the worker no longer mutates schema, it just verifies the version
-# (src/backend/schema-version.ts). See docs/backend/worker-runbook.md.
+# OPTIONAL convenience: apply the versioned Postgres migrations in supabase/migrations/ to the hosted
+# Supabase database from CI. supabase/migrations/ is the single source of truth; the scanner **worker
+# already self-heals** (it applies any pending migration on startup — src/backend/apply-migrations.ts),
+# so this workflow is not required. It exists for two conveniences: a `--dry-run` PREVIEW on PRs that
+# touch migrations, and applying IMMEDIATELY on merge instead of waiting for the next scheduled scan.
+# See docs/backend/worker-runbook.md.
 #
-# Requires the repo Actions secret SUPABASE_DB_URL: a SESSION / direct Postgres connection with DDL
-# rights (Supabase → Project Settings → Database → "Session pooler" or the direct connection on port
-# 5432 — NOT the transaction pooler on 6543, which `db push` can't use). Until the secret is set the
-# job no-ops green, so it never blocks a PR before migrations are wired up.
+# Needs the repo Actions secret SUPABASE_DB_URL: a SESSION / direct Postgres connection with DDL rights
+# (Supabase → Project Settings → Database → "Session pooler" or the direct connection on port 5432 —
+# NOT the transaction pooler on 6543, which `db push` can't use). Until the secret is set the job
+# no-ops green — the worker handles migrations regardless, so leaving it unset is fine.
 
 on:
   pull_request:
