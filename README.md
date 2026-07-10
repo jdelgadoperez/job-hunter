@@ -135,6 +135,8 @@ and opens a React dashboard in your browser. It has five tabs:
   filters** shortcut, matched & missing skills, Claude rationales, and save / dismiss /
   mark-applied actions. Results load 50 at a time with a **Show more** button, so widening
   filters on a large database stays responsive instead of rendering everything at once.
+  Saved and applied are mutually exclusive (one action per role), so marking a **saved**
+  role **applied** asks you to confirm first rather than silently dropping the save.
 - **Skills** — edit the skills on your profile and the skill dictionary the resume parser recognizes.
 - **Companies** — add or remove the companies you track by careers-page URL.
 - **Settings** — your Anthropic API key, scorer model, home country, scan-freshness window, and

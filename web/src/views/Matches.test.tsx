@@ -89,6 +89,51 @@ function mockCountryFilterableMatches(all: PostingSeed[]) {
   );
 }
 
+// Mock that also answers PUT/DELETE on /api/matches/:id/action, tracking each posting's action
+// server-side so a GET fired by useMatchAction's onSettled refetch reflects it. Without this, the
+// refetch that follows every mutation would overwrite the optimistic cache patch back to whatever
+// `scored()`'s hardcoded `action: null` says, masking any real button-state bug.
+function mockMatchesWithActions(seeds: PostingSeed[]) {
+  const actions = new Map<string, "saved" | "dismissed" | "applied" | null>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) => {
+      const match = String(url).match(/\/api\/matches\/([^/]+)\/action/);
+      const rawId = match?.[1];
+      if (rawId !== undefined) {
+        const id = decodeURIComponent(rawId);
+        if (init?.method === "DELETE") {
+          actions.set(id, null);
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            json: () => Promise.resolve({ removed: true }),
+          });
+        }
+        const { action } = JSON.parse(String(init?.body));
+        actions.set(id, action);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.resolve({ ok: true }),
+        });
+      }
+      const body = seeds.map((seed) => ({
+        ...scored(seed),
+        action: actions.get(seed.id) ?? null,
+      }));
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve(body),
+      });
+    }),
+  );
+}
+
 describe("Matches search filter", () => {
   const seeds: PostingSeed[] = [
     { id: "a", title: "Staff Platform Engineer", company: "Acme" },
@@ -290,6 +335,71 @@ describe("Matches clear filters", () => {
     // minScore reverts to its default (SCORE_THRESHOLDS.relevant), which still counts as an
     // active filter by design, so the button itself remains visible after a clear.
     expect(screen.getByRole("button", { name: /clear filters/i })).toBeInTheDocument();
+  });
+});
+
+describe("Matches applied overwrites saved", () => {
+  it("marks applied immediately when the posting isn't saved", async () => {
+    mockMatchesWithActions([{ id: "a", title: "Staff Platform Engineer", company: "Acme" }]);
+    renderMatches();
+
+    const markApplied = await screen.findByRole("button", { name: "Mark applied" });
+    fireEvent.click(markApplied);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /✓ Applied/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/this will replace saved/i)).not.toBeInTheDocument();
+  });
+
+  it("arms a confirm step instead of applying immediately when the posting is saved", async () => {
+    mockMatchesWithActions([{ id: "a", title: "Staff Platform Engineer", company: "Acme" }]);
+    renderMatches();
+
+    fireEvent.click(await screen.findByRole("button", { name: "☆ Save" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark applied" }));
+
+    expect(screen.getByText(/this will replace saved/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /✓ Applied/i })).not.toBeInTheDocument();
+    // The saved state is untouched until the user actually confirms.
+    expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument();
+  });
+
+  it("applies and drops the saved state once the overwrite is confirmed", async () => {
+    mockMatchesWithActions([{ id: "a", title: "Staff Platform Engineer", company: "Acme" }]);
+    renderMatches();
+
+    fireEvent.click(await screen.findByRole("button", { name: "☆ Save" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mark applied" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /✓ Applied/i })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "☆ Save" })).toBeInTheDocument();
+  });
+
+  it("backs out without applying when the confirm step is cancelled", async () => {
+    mockMatchesWithActions([{ id: "a", title: "Staff Platform Engineer", company: "Acme" }]);
+    renderMatches();
+
+    fireEvent.click(await screen.findByRole("button", { name: "☆ Save" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mark applied" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark applied" })).toBeInTheDocument();
+    expect(screen.queryByText(/this will replace saved/i)).not.toBeInTheDocument();
   });
 });
 
