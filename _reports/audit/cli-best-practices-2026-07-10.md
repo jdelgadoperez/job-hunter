@@ -23,17 +23,23 @@ Scope: the terminal CLI (`src/cli/`, `bin/job-hunter`, `package.json`). The web 
 
 Ranked by value for a local-first data CLI. All selected by the user.
 
-| # | Gap | File(s) touched | Effort |
-|---|-----|-----------------|--------|
-| 3.2 | No `--json` output on `list`/`score` | `parse.ts`, `commands.ts`, `main.ts` | Med |
-| 1.8 | No `SIGINT`/`SIGTERM` handling (`serve`, `scan`) | `serve.ts`, `main.ts` | Med |
-| 4.3 | No `engines.node` field | `package.json` | Trivial |
-| 6.3 | No debug mode (`--verbose`/`DEBUG=`) | `main.ts`, `style.ts`/new logger | Med |
-| 6.5 | No bug-report URL on crash; no `.github/ISSUE_TEMPLATE/` | `main.ts`, `.github/` | Low |
-| 1.1 | Sparse short flag aliases (`-p` for `--port`, etc.) | `parse.ts`, `help.ts` | Low |
-| 10.1 | Audit `service` child-process spawns for arg injection | `src/cli/service.ts` | Low |
-| 3.7 | No shell completion | new completion command | High |
-| 4.4 | bin is a bash+tsx wrapper, not `#!/usr/bin/env node` | `bin/`, build, install | Med-High |
+| # | Gap | File(s) touched | Effort | Status |
+|---|-----|-----------------|--------|--------|
+| 3.2 | No `--json` output on `list`/`score` | `parse.ts`, `commands.ts`, `main.ts` | Med | Not yet done (PR B/C) |
+| 1.8 | No `SIGINT`/`SIGTERM` handling (`serve`, `scan`) | `serve.ts`, `main.ts` | Med | Not yet done (PR B/C) |
+| 4.3 | No `engines.node` field | `package.json` | Trivial | **Done — PR A** |
+| 6.3 | No debug mode (`--verbose`/`DEBUG=`) | `main.ts`, `style.ts`/new logger | Med | Not yet done (PR B/C) |
+| 6.5 | No bug-report URL on crash; no `.github/ISSUE_TEMPLATE/` | `main.ts`, `.github/` | Low | **Done — PR A** |
+| 1.1 | Sparse short flag aliases (`-p` for `--port`, etc.) | `parse.ts`, `help.ts` | Low | **Done — PR A** |
+| 10.1 | Audit `service` child-process spawns for arg injection | `src/cli/service.ts` | Low | **Done — PR A** |
+| 3.7 | No shell completion | new completion command | High | Not yet done (PR B/C) |
+| 4.4 | bin is a bash+tsx wrapper, not `#!/usr/bin/env node` | `bin/`, build, install | Med-High | Not yet done (PR B/C) |
+
+**PR A shipped (2026-07-10):** 4.3 (`engines.node` + runtime guard), 1.1 (short flag aliases
+`-p`/`-a`/`-l`/`-n`), 6.5 (bug-report URL on crash + issue template), and 10.1 (service
+argument-injection audit test) landed on `feat/cli-quick-wins`. Plan:
+`docs/superpowers/plans/2026-07-10-cli-pr-a-quick-wins.md`. Remaining rows (3.2, 1.8, 6.3, 3.7, 4.4)
+are scoped to future PRs (B/C) and are not yet implemented.
 
 ## Deliberately skipped (not defects for this tool)
 
