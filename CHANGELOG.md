@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.4.0...job-hunter-v0.4.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **web:** confirm before Mark applied overwrites a saved posting ([#138](https://github.com/jdelgadoperez/job-hunter/issues/138)) ([793a4d5](https://github.com/jdelgadoperez/job-hunter/commit/793a4d5213157d55accc49b9dcd4362d2742864e))
+* **web:** split confirmed vs unknown-location count in Matches ([#136](https://github.com/jdelgadoperez/job-hunter/issues/136)) ([aac565c](https://github.com/jdelgadoperez/job-hunter/commit/aac565c09ddc2a2c0f59a8928dad66c6676c5ccf))
+
 ## [0.4.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.3.1...job-hunter-v0.4.0) (2026-07-09)
 
 
