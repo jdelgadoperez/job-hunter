@@ -21,16 +21,23 @@ Two roles use the database, with very different trust:
 3. Note the direct Postgres connection string from **Project Settings → Database** → `DATABASE_URL`
    (the worker uses this; the client never does).
 
-## 2. Apply the schema
+## 2. Apply the schema (migrations)
 
-Run `src/backend/schema.sql` once — it creates the tables, indexes, and RLS policies, and is
-idempotent (safe to re-run after edits):
+The schema lives in [`supabase/migrations/`](../../supabase/migrations) as versioned SQL files and is
+applied with the Supabase CLI. Add the repo Actions secret **`SUPABASE_DB_URL`** — a *session*/direct
+Postgres connection with DDL rights (Supabase → Project Settings → Database → "Session pooler" or the
+direct connection on **port 5432**, not the transaction pooler on 6543) — then let CI apply it:
 
-- **SQL editor:** paste the file's contents and run, **or**
-- **psql:** `psql "$DATABASE_URL" -f src/backend/schema.sql`
+- **CI (normal path):** the [`migrate`](../../.github/workflows/migrate.yml) workflow runs
+  `supabase db push` on merge to `main` and on **Actions → migrate → Run workflow**. Use the manual
+  run to apply the schema to a brand-new (or rebuilt) database.
+- **Locally, if you prefer:** `supabase db push --db-url "<session-connection-string>"`.
 
-The script enables RLS so the anon key can only read `postings`/`companies`; every write requires the
-service-role key, which only the worker holds.
+The migrations create the tables/indexes and enable RLS so the anon key can only read
+`postings`/`companies`; every write requires the service-role key, which only the worker holds. They
+are idempotent and `db push` skips versions already applied, so re-running is always safe. See the
+"Database schema & migrations" section of [`worker-runbook.md`](./worker-runbook.md) for authoring and
+rebuild-recovery details.
 
 ## 3. The feed endpoint (what the client reads)
 

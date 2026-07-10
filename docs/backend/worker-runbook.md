@@ -25,6 +25,33 @@ Run it where a real browser is available — a container or a CI runner with the
 
 The worker never needs the anon key or any per-user data.
 
+## Database schema & migrations
+
+The shared-feed schema lives in [`supabase/migrations/`](../../supabase/migrations) — versioned,
+ordered SQL files that are the **single source of truth**. They are applied to the hosted database by
+CI, not by hand and not by the worker:
+
+- **On merge to `main`** (or a manual **Actions → migrate → Run workflow**), the
+  [`migrate`](../../.github/workflows/migrate.yml) workflow runs `supabase db push`, which applies any
+  migration versions not yet in the database's ledger. On a PR that touches `supabase/migrations/**`
+  it runs `--dry-run` so review can preview the change. It needs the repo Actions secret
+  **`SUPABASE_DB_URL`** — a *session*/direct Postgres connection with DDL rights (Supabase → Project
+  Settings → Database → "Session pooler" or the direct connection on **port 5432**, *not* the
+  transaction pooler on 6543). Until that secret is set the job no-ops green.
+- **The worker only verifies.** On startup it checks the database's applied-migration version against
+  `EXPECTED_SCHEMA_VERSION` (`src/backend/schema-version.ts`) and **exits fast with an actionable
+  message if the database is behind** — it never mutates schema itself.
+
+**Rebuild recovery:** if the database is ever reset/rebuilt, its migration ledger reverts and the
+worker will refuse to run ("schema is behind"). Restore it by running the `migrate` workflow manually
+(**Actions → migrate → Run workflow**); `db push` re-applies whatever versions are missing.
+
+**Authoring a migration:** `supabase migration new <name>` → edit the generated
+`supabase/migrations/<timestamp>_<name>.sql` → open a PR (the dry-run check previews it) → on merge it
+applies automatically. Bump `EXPECTED_SCHEMA_VERSION` to the new version in the same PR (a test
+enforces it equals the newest migration filename). **Never edit a migration already merged to `main`**
+— applied migrations are immutable; ship a new file instead.
+
 ## Deploy options
 
 ### A. Scheduled GitHub Action (simplest) — shipped

@@ -1,0 +1,62 @@
+-- Shared sourcing backend — Postgres schema baseline (Supabase).
+--
+-- Reconciled to the migration recorded remotely as version 20260627222515: the original hosted-feed
+-- schema. Mirrors the PUBLIC subset of the local SQLite schema (src/storage/schema.ts): postings,
+-- companies, and scans. The per-user tables (profiles, match_results, user_actions, settings) are
+-- intentionally absent — they never leave the device. The hosted scanner worker writes these tables
+-- (service-role key); the local client reads them through PostgREST with the anon key (see RLS).
+--
+-- Later columns/indexes are added by subsequent migrations, NOT by editing this file — applied
+-- migrations are immutable.
+
+create table if not exists companies (
+  careers_url text primary key,
+  name text,
+  first_seen_scan bigint not null,
+  last_seen_scan bigint not null,
+  last_seen_at timestamptz not null default now()
+);
+
+create table if not exists scans (
+  id bigserial primary key,
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  postings_seen integer,
+  companies_seen integer,
+  new_companies jsonb,
+  removed_companies jsonb
+);
+
+create table if not exists postings (
+  id text primary key,
+  company text not null,
+  title text not null,
+  url text not null,
+  source text not null,
+  description text not null,
+  location text,
+  posted_at timestamptz,
+  fetched_at timestamptz not null,
+  -- Incremental-scan bookkeeping: the scan that last saw this posting, and when it was judged gone.
+  last_seen_scan bigint,
+  expired_at timestamptz
+);
+
+-- Drives the feed query (live postings, newest first) and the "not seen this scan" liveness sweep.
+create index if not exists postings_live_idx on postings (expired_at, fetched_at desc);
+create index if not exists postings_last_seen_idx on postings (last_seen_scan);
+
+-- Row Level Security: the feed is public read-only; all writes require the service role (worker).
+-- The anon role (used by the local client via PostgREST) can SELECT postings/companies and nothing
+-- else. With RLS enabled and no insert/update/delete policy, anon writes are rejected; the
+-- service-role key bypasses RLS, so only the worker can populate the tables. `scans` is internal
+-- bookkeeping with no anon policy, so it isn't exposed to the feed at all.
+alter table postings enable row level security;
+alter table companies enable row level security;
+alter table scans enable row level security;
+
+drop policy if exists "anon reads live postings" on postings;
+create policy "anon reads live postings" on postings for select to anon using (true);
+
+drop policy if exists "anon reads companies" on companies;
+create policy "anon reads companies" on companies for select to anon using (true);

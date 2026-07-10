@@ -1,5 +1,5 @@
-import { ensureSchema } from "@app/backend/ensure-schema";
 import { PostgresScanStore } from "@app/backend/postgres-scan-store";
+import { assertSchemaVersion, EXPECTED_SCHEMA_VERSION } from "@app/backend/schema-version";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
@@ -49,10 +49,11 @@ async function main(): Promise<void> {
   const sql = postgres(url);
   const store = new PostgresScanStore(sql);
   try {
-    // Self-heal any schema drift (a rebuilt DB, or one predating a recent column) before the first
-    // query touches it — schema.sql is idempotent, so this is a no-op on an up-to-date database.
-    await ensureSchema(sql);
-    console.log("[scanner] schema ensured.");
+    // Fail fast with an actionable message if the database is behind the migrations this build needs,
+    // before any query touches a missing column. Migrations are applied by CI (the `migrate` workflow
+    // over supabase/migrations/), not here — the worker only verifies the version.
+    await assertSchemaVersion(sql);
+    console.log(`[scanner] schema version OK (>= ${EXPECTED_SCHEMA_VERSION}).`);
     const outcome = await runScannerOnce({
       store,
       discoverDeps: {
