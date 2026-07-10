@@ -20,4 +20,4 @@ What you expected, and what happened instead.
 - Node version (`node --version`):
 
 **Logs**
-Re-run with `--verbose` and paste relevant output (redact anything sensitive).
+Paste the relevant terminal output, including any error message (redact anything sensitive).

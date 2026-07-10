@@ -94,6 +94,9 @@ npm run cli -- --help                      # full command reference (also `<comm
 npm run cli -- --version
 ```
 
+Short flags are available for the common options: `-a` (`--all`), `-l` (`--limit`), `-p` (`--port`),
+and `-n` (`--name`). Run `<command> --help` for each command's full option list.
+
 **Two-step scanning.** `scan` is free — it discovers postings and ranks them with the free offline
 scorer. By default a scan is **incremental**: it re-visits only the companies it hasn't checked
 recently — anything scanned within the freshness window (the `scanFreshnessHours` setting, default
