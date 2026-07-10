@@ -7,6 +7,9 @@
   "bin": {
     "job-hunter": "bin/job-hunter"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
