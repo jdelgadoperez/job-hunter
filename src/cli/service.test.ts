@@ -40,3 +40,28 @@ describe("resolveServiceInvocation", () => {
     expect(invocation.args[invocation.args.length - 1]).toMatch(/service-status\.ps1$/);
   });
 });
+
+describe("service argument-injection invariants (10.1)", () => {
+  it("rejects any action outside the fixed allow-list before it reaches spawn", () => {
+    expect(isServiceAction("install; rm -rf /")).toBe(false);
+    expect(isServiceAction("--version")).toBe(false);
+    for (const action of SERVICE_ACTIONS) {
+      expect(isServiceAction(action)).toBe(true);
+    }
+  });
+
+  it("passes the script path as an array arg, never a shell string, on posix", () => {
+    const invocation = resolveServiceInvocation("start", "linux", "/repo");
+    expect(Array.isArray(invocation.args)).toBe(true);
+    expect(invocation.command).toContain("service-start.sh");
+    expect(invocation.command).not.toContain(" ");
+  });
+
+  it("passes the script via -File as a discrete arg on win32", () => {
+    const invocation = resolveServiceInvocation("stop", "win32", "C:/repo");
+    expect(invocation.command).toBe("powershell");
+    expect(invocation.args).toContain("-File");
+    const fileIndex = invocation.args.indexOf("-File");
+    expect(invocation.args[fileIndex + 1]).toContain("service-stop.ps1");
+  });
+});
