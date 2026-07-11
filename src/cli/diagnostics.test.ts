@@ -12,6 +12,11 @@ describe("debugEnabledFromEnv", () => {
     expect(debugEnabledFromEnv({})).toBe(false);
     expect(debugEnabledFromEnv({ DEBUG: "other-app" })).toBe(false);
   });
+
+  it("honors a comma-separated DEBUG list", () => {
+    expect(debugEnabledFromEnv({ DEBUG: "other,job-hunter:scan" })).toBe(true);
+    expect(debugEnabledFromEnv({ DEBUG: "foo,bar" })).toBe(false);
+  });
 });
 
 describe("createDiagnostics", () => {
@@ -33,5 +38,13 @@ describe("createDiagnostics", () => {
     expect(on).toHaveBeenCalledTimes(1);
     expect(on.mock.calls[0]?.[0]).toContain("scan");
     expect(on.mock.calls[0]?.[0]).toContain("hi");
+  });
+
+  it("debug() is enabled by a matching DEBUG env var even without --verbose", () => {
+    vi.stubEnv("DEBUG", "job-hunter:scan");
+    const write = vi.fn();
+    createDiagnostics({ verbose: false, json: false }, write).debug("scan", "hi");
+    expect(write).toHaveBeenCalledTimes(1);
+    vi.unstubAllEnvs();
   });
 });

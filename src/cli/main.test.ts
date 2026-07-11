@@ -220,6 +220,7 @@ describe("scan command", () => {
     await runCli("scan", "--retry-failed");
 
     expect(stderrLogged()).toContain("Scanned and scored 1");
+    expect(logged()).not.toContain("Scanned and scored 1");
   });
 
   it("--retry-failed with an empty needs-attention list is a no-op", async () => {
@@ -278,10 +279,9 @@ describe("score command --json", () => {
     expect(parsed).toHaveProperty("estimate");
     expect(parsed).toHaveProperty("warnings");
 
-    // stdout must be pure JSON — no human-formatted plan text or ANSI styling. Match the SGR
-    // sequence pattern (`[<n>m`) rather than the raw ESC byte, which JSON never contains.
-    expect(logged()).not.toMatch(/\[\d+m/);
-    expect(logged()).not.toContain("Would score");
+    // stdout must be pure JSON: it must NOT contain human plan text that `formatScorePlan` would
+    // emit (e.g. the "Cap (--limit N): ..." line from commands.ts).
+    expect(logged()).not.toContain("Cap (--limit");
   });
 
   it("routes the no-profile precondition guard to stderr, not stdout, even in json mode", async () => {

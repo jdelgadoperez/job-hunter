@@ -104,6 +104,7 @@ export async function runScanCommand(
       ? (opts.freshnessHours ?? resolveScanFreshnessHours(settings))
       : undefined;
 
+  diagnostics.debug("scan", `scope=${scanScope} tracked=${trackedCompanies.length}`);
   const result = await runScan(
     {
       repo,
@@ -128,6 +129,7 @@ export async function runScanCommand(
     // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.
     () => {},
   );
+  diagnostics.debug("scan", `warnings=${result.warnings.length}`);
   // Surface discovery warnings after the summary.
   for (const warning of result.warnings) {
     diagnostics.diag(style.warn(`  ! [${warning.source}] ${warning.message}`));
@@ -160,6 +162,7 @@ export async function runScoreCommand(
   }
 
   const model = resolveScorerModel(settings, provider);
+  diagnostics.debug("score", `model=${model}`);
   const dictionary = repo.getSkillDictionary();
   const warnings: Warning[] = [];
   const remoteOnly = resolveRemoteOnly(settings, options.remoteOnly);
@@ -206,6 +209,10 @@ export async function runScoreCommand(
     },
     onWarning: (warning) => warnings.push(warning),
   });
+  diagnostics.debug(
+    "score",
+    `deepScored=${outcome.counts.deepScored} aborted=${outcome.abortedOnLimit}`,
+  );
 
   if (options.json) {
     log(JSON.stringify(outcome, null, 2));

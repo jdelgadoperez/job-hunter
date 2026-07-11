@@ -43,7 +43,7 @@ export const COMMANDS: CommandHelp[] = [
   {
     name: "score",
     invocation:
-      "score [--min-heuristic N] [-l|--limit N] [--remote|--no-remote] [--rescore] [--dry-run]",
+      "score [--min-heuristic N] [-l|--limit N] [--remote|--no-remote] [--rescore] [--dry-run] [--json]",
     summary: "LLM-score the best postings from the last scan",
     details:
       "Ranks stored postings by their heuristic score, batch-triages titles with the LLM, then deep-scores the survivors. Bounded by --min-heuristic (floor) and --limit (cap). Use --dry-run to preview the plan and estimated cost without spending.",
@@ -56,6 +56,7 @@ export const COMMANDS: CommandHelp[] = [
       ["--remote / --no-remote", "Override the saved remote-only filter for this run."],
       ["--rescore", "Re-score postings already LLM-scored in a prior run."],
       ["--dry-run", "Print the plan + estimated cost and exit without calling the LLM."],
+      ["--json", "Output the score run summary as JSON (machine-readable)."],
     ],
     examples: ["job-hunter score --dry-run", "job-hunter score --limit 50 --remote"],
   },
@@ -72,7 +73,7 @@ export const COMMANDS: CommandHelp[] = [
   {
     name: "list",
     invocation:
-      "list [--min-score N] [--remote-only] [--country CC] [--only-applied] [--include-applied]",
+      "list [--min-score N] [--remote-only] [--country CC] [--only-applied] [--include-applied] [--json]",
     summary: "Show stored matches (default min score 50)",
     details:
       "Prints stored matches, highest score first. Expired and dismissed postings are hidden.",
@@ -88,6 +89,7 @@ export const COMMANDS: CommandHelp[] = [
         "Show only roles you've marked applied (including ones that have since expired).",
       ],
       ["--include-applied", "Also include applied roles, which are hidden by default."],
+      ["--json", "Output matches as a JSON array (machine-readable; diagnostics go to stderr)."],
     ],
     examples: ["job-hunter list", "job-hunter list --min-score 70 --remote-only"],
   },
@@ -196,6 +198,7 @@ function globalHelp(): string {
     style.bold("OPTIONS"),
     row("-h, --help", "Show help (use `job-hunter <command> --help` for a command)"),
     row("-v, --version", "Print the installed version"),
+    row("--verbose", "Verbose diagnostic logging to stderr (also enabled by DEBUG=job-hunter*)."),
     "",
     style.dim("Run `job-hunter serve` for the web dashboard — the recommended experience."),
   ];
