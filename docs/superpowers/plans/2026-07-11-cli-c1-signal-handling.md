@@ -319,11 +319,19 @@ git commit -m "feat(cli): close the dashboard listener and scheduler on SIGINT/S
 
 **Interfaces:**
 - Consumes: `onShutdown`, `SignalTarget` from `./signals` (Task 1).
-- Produces: `runScanCommand(repo, log, opts, diagnostics, signals?: SignalTarget)`.
+- Produces: `runScanCommand(repo, log, opts, signals?: SignalTarget)`.
 
-Design: `runScanCommand` builds `new PlaywrightRenderer()` inline (`main.ts:121`). Lift it to a local
-so the signal handler can dispose it. Register the handler before `runScan`; deregister in a `finally`
-so it never leaks into a later in-process command (tests, serve's background scans).
+> **Branch note (IMPORTANT):** C1 is based on `origin/main`, NOT stacked on PR B (#142). On this
+> branch `runScanCommand`'s signature is `(repo, log, opts)` — there is **no `diagnostics` param**
+> (that's a PR B addition), and the trailing warnings loop uses `log(...)`, not `diagnostics.diag`.
+> So: (a) append `signals` as the **4th** param — `runScanCommand(repo, log, opts, signals = process)`;
+> (b) leave the warnings loop on `log`. Ignore any `diagnostics`/`createDiagnostics` references below —
+> they are stale from authoring; use the corrected test/impl in the edited steps. When C1 and PR B
+> both merge, the param list gains both `diagnostics` and `signals` — a trivial, expected reconcile.
+
+Design: `runScanCommand` builds `new PlaywrightRenderer()` inline (currently `main.ts:117`). Lift it to
+a local so the signal handler can dispose it. Register the handler before `runScan`; deregister in a
+`finally` so it never leaks into a later in-process command (tests, serve's background scans).
 
 - [ ] **Step 1: Write the failing test**
 
