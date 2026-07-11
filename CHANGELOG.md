@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.4.1...job-hunter-v0.5.0) (2026-07-11)
+
+
+### Features
+
+* **backend:** versioned Postgres migrations (supabase/migrations + CI apply + worker schema guard) ([#99](https://github.com/jdelgadoperez/job-hunter/issues/99)) ([ae535dd](https://github.com/jdelgadoperez/job-hunter/commit/ae535dd1f3a83640b96ba432ae9ba53b7442cd8d))
+* **cli:** CLI best-practices quick wins (PR A) — engines, aliases, bug-report, injection-audit test ([#139](https://github.com/jdelgadoperez/job-hunter/issues/139)) ([bef1841](https://github.com/jdelgadoperez/job-hunter/commit/bef1841a7ad83bb3c3bd90ebc2adda63c8590fc0))
+
 ## [0.4.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.4.0...job-hunter-v0.4.1) (2026-07-10)
 
 
