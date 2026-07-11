@@ -10,6 +10,7 @@ import { Repository } from "@app/storage/repository";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Hono } from "hono";
+import { onShutdown, type SignalTarget } from "../cli/signals";
 import { createApp } from "./app";
 import { classifyListenError } from "./listen-error";
 import { ScanJobManager } from "./scan-job";
@@ -85,11 +86,28 @@ function openBrowser(url: string): void {
 }
 
 /**
+ * Wire graceful shutdown for the running dashboard: on SIGINT/SIGTERM, stop the refresh scheduler and
+ * close the listener, then let the event loop drain and exit 0 (no `process.exit` — the repo never
+ * force-exits). Pure over its injected resources so it unit-tests without binding a real port.
+ */
+export function registerServerShutdown(deps: {
+  server: { close(): void };
+  timer: NodeJS.Timeout | undefined;
+  signals?: SignalTarget;
+}): () => void {
+  return onShutdown(() => {
+    if (deps.timer) clearInterval(deps.timer);
+    deps.server.close();
+    process.exitCode = 0;
+  }, deps.signals);
+}
+
+/**
  * Start the local web dashboard: open the SQLite-backed `Repository`, build the Hono app with the
  * real scan pipeline, and listen. Binds a port and launches a browser, so this is the integration
  * seam — `createApp` holds the unit-tested logic. Runs until the process is stopped.
  */
-export function startServer(opts: ServeOptions = {}): void {
+export function startServer(opts: ServeOptions = {}, signals: SignalTarget = process): void {
   ensureDataDir();
   const repo = new Repository(resolveDbPath());
   const jobs = new ScanJobManager();
@@ -116,7 +134,11 @@ export function startServer(opts: ServeOptions = {}): void {
   });
 
   mountDashboard(app);
-  scheduleRefresh(jobs, runScanForScope, opts.refreshHours ?? DEFAULT_REFRESH_HOURS);
+  const refreshTimer = scheduleRefresh(
+    jobs,
+    runScanForScope,
+    opts.refreshHours ?? DEFAULT_REFRESH_HOURS,
+  );
 
   const port = opts.port ?? DEFAULT_PORT;
   // Bind to loopback only: this is an unauthenticated local-first dashboard, so it must not be
@@ -137,6 +159,8 @@ export function startServer(opts: ServeOptions = {}): void {
     process.exitCode = 1;
     server.close();
   });
+
+  registerServerShutdown({ server, timer: refreshTimer, signals });
 }
 
 /**
@@ -148,8 +172,8 @@ function scheduleRefresh(
   jobs: ScanJobManager,
   runScanForScope: (scope: "full" | "incremental") => ScanRunner,
   hours: number,
-): void {
-  if (!Number.isFinite(hours) || hours <= 0) return;
+): NodeJS.Timeout | undefined {
+  if (!Number.isFinite(hours) || hours <= 0) return undefined;
   const intervalMs = hours * 60 * 60 * 1000;
   const timer = setInterval(() => {
     // Routine background refresh is incremental — don't re-crawl the whole directory each tick.
@@ -158,4 +182,5 @@ function scheduleRefresh(
   // Don't let the scheduler alone keep the process alive (the listener already does).
   timer.unref();
   console.log(`Auto-refresh every ${hours}h (use --refresh-hours 0 to disable).`);
+  return timer;
 }
