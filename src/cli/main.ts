@@ -41,8 +41,9 @@ import {
   trackList,
   trackRemove,
 } from "./commands";
+import { createDiagnostics } from "./diagnostics";
 import { renderHelp } from "./help";
-import { parseCli } from "./parse";
+import { hasVerboseFlag, parseCli } from "./parse";
 import { runServiceCommand } from "./service";
 import { style } from "./style";
 
@@ -223,6 +224,9 @@ export async function main(): Promise<void> {
 
   const command = parseCli(process.argv.slice(2));
   const log: Logger = (message) => console.log(message);
+  const verbose = hasVerboseFlag(process.argv.slice(2));
+  const jsonMode = command.kind === "list" || command.kind === "score" ? command.json : false;
+  const diagnostics = createDiagnostics({ verbose, json: jsonMode });
 
   if (command.kind === "help") {
     if (command.error) console.error(style.error(`Error: ${command.error}\n`));
@@ -276,6 +280,8 @@ export async function main(): Promise<void> {
           country: command.country,
           includeApplied: command.includeApplied,
           onlyApplied: command.onlyApplied,
+          json: command.json,
+          diag: diagnostics.diag,
         });
         break;
       case "scan":

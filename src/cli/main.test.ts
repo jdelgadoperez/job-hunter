@@ -138,9 +138,14 @@ describe("main dispatch", () => {
     repo.close();
   });
 
-  it("reports an empty list before any scan", async () => {
+  it("reports an empty list before any scan, on stderr not stdout", async () => {
+    const stderrWriteSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     await runCli("list");
-    expect(logged()).toContain("No matches yet");
+    expect(stderrWriteSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n")).toContain(
+      "No matches yet",
+    );
+    expect(logged()).not.toContain("No matches yet");
+    stderrWriteSpy.mockRestore();
   });
 
   it("starts the web server for the serve command, passing through options", async () => {
