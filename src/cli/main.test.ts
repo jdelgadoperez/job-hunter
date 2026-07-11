@@ -71,10 +71,16 @@ function openDb(): Repository {
 
 let logSpy: ReturnType<typeof vi.spyOn>;
 let errSpy: ReturnType<typeof vi.spyOn>;
+let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
 let tmp: string;
 
 function logged(): string {
   return logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+}
+
+/** Diagnostics (`diagnostics.diag`) write via `process.stderr.write`, not `console.error`. */
+function stderrLogged(): string {
+  return stderrWriteSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
 }
 
 beforeEach(() => {
@@ -88,11 +94,13 @@ beforeEach(() => {
   vi.stubEnv("ANTHROPIC_API_KEY", undefined);
   logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  stderrWriteSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 });
 
 afterEach(() => {
   logSpy.mockRestore();
   errSpy.mockRestore();
+  stderrWriteSpy.mockRestore();
   vi.unstubAllEnvs();
   process.argv = process.argv.slice(0, 2);
   process.exitCode = 0;
@@ -139,13 +147,9 @@ describe("main dispatch", () => {
   });
 
   it("reports an empty list before any scan, on stderr not stdout", async () => {
-    const stderrWriteSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     await runCli("list");
-    expect(stderrWriteSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n")).toContain(
-      "No matches yet",
-    );
+    expect(stderrLogged()).toContain("No matches yet");
     expect(logged()).not.toContain("No matches yet");
-    stderrWriteSpy.mockRestore();
   });
 
   it("starts the web server for the serve command, passing through options", async () => {
@@ -177,7 +181,9 @@ describe("scan command", () => {
 
   it("aborts with exit 1 when no profile exists", async () => {
     await runCli("scan");
-    expect(logged()).toContain("No profile yet");
+    // The precondition guard is a diagnostic (3.2/3.6) — it belongs on stderr, not stdout.
+    expect(stderrLogged()).toContain("No profile yet");
+    expect(logged()).not.toContain("No profile yet");
     expect(process.exitCode).toBe(1);
   });
 
@@ -188,9 +194,10 @@ describe("scan command", () => {
 
     await runCli("scan");
 
-    // Scan is heuristic-only — no LLM calls, no scorer warning even without an API key.
-    expect(logged()).toContain("Scanned and scored 1");
-    expect(logged()).not.toContain("No LLM key");
+    // Scan progress is a diagnostic — routed to stderr via onProgress, not stdout.
+    expect(stderrLogged()).toContain("Scanned and scored 1");
+    expect(logged()).not.toContain("Scanned and scored 1");
+    expect(stderrLogged()).not.toContain("No LLM key");
 
     const repo = openDb();
     expect(repo.listScoredPostings(0)).toHaveLength(1);
@@ -212,7 +219,7 @@ describe("scan command", () => {
 
     await runCli("scan", "--retry-failed");
 
-    expect(logged()).toContain("Scanned and scored 1");
+    expect(stderrLogged()).toContain("Scanned and scored 1");
   });
 
   it("--retry-failed with an empty needs-attention list is a no-op", async () => {
@@ -246,6 +253,55 @@ describe("scan command", () => {
     };
     expect(latestScan.kind).toBe("retry");
     verifyRepo.close();
+  });
+});
+
+describe("score command --json", () => {
+  function seedProfile(): void {
+    const repo = openDb();
+    repo.saveProfile(profile);
+    repo.close();
+  }
+
+  it("prints the ScoreOutcome as pure JSON to stdout and routes usage/warnings to stderr", async () => {
+    // Dry-run short-circuits `runScoreRun` before any triager/scorer network call (see
+    // src/matching/score-run.ts), so a dummy API key + --dry-run stays fully offline while still
+    // exercising the json-mode branch past the "no key configured" early return.
+    seedProfile();
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-dummy-offline-key");
+
+    await runCli("score", "--dry-run", "--json");
+
+    const parsed = JSON.parse(logged());
+    expect(parsed).toHaveProperty("counts");
+    expect(parsed).toHaveProperty("abortedOnLimit");
+    expect(parsed).toHaveProperty("estimate");
+    expect(parsed).toHaveProperty("warnings");
+
+    // stdout must be pure JSON — no human-formatted plan text or ANSI styling. Match the SGR
+    // sequence pattern (`[<n>m`) rather than the raw ESC byte, which JSON never contains.
+    expect(logged()).not.toMatch(/\[\d+m/);
+    expect(logged()).not.toContain("Would score");
+  });
+
+  it("routes the no-profile precondition guard to stderr, not stdout, even in json mode", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-dummy-offline-key");
+
+    await runCli("score", "--dry-run", "--json");
+
+    expect(stderrLogged()).toContain("No profile yet");
+    expect(logged()).toBe("");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("routes the no-key precondition warning to stderr in human mode", async () => {
+    seedProfile();
+    // beforeEach already stubs ANTHROPIC_API_KEY to undefined.
+
+    await runCli("score", "--dry-run");
+
+    expect(stderrLogged()).toContain("No LLM key configured");
+    expect(logged()).not.toContain("No LLM key configured");
   });
 });
 
