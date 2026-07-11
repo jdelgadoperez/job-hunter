@@ -1,4 +1,4 @@
-import { ensureSchema } from "@app/backend/ensure-schema";
+import { applyPendingMigrations } from "@app/backend/apply-migrations";
 import { PostgresScanStore } from "@app/backend/postgres-scan-store";
 import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
@@ -49,10 +49,15 @@ async function main(): Promise<void> {
   const sql = postgres(url);
   const store = new PostgresScanStore(sql);
   try {
-    // Self-heal any schema drift (a rebuilt DB, or one predating a recent column) before the first
-    // query touches it — schema.sql is idempotent, so this is a no-op on an up-to-date database.
-    await ensureSchema(sql);
-    console.log("[scanner] schema ensured.");
+    // Self-heal the schema before crawling: apply any migrations not yet in the database's ledger
+    // (supabase/migrations/, in version order). A fresh/rebuilt/drifted database is brought current on
+    // this run instead of crashing on a missing column; an up-to-date one is a no-op.
+    const applied = await applyPendingMigrations(sql);
+    console.log(
+      applied.length > 0
+        ? `[scanner] applied ${applied.length} pending migration(s).`
+        : "[scanner] schema up to date.",
+    );
     const outcome = await runScannerOnce({
       store,
       discoverDeps: {

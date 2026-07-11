@@ -1,0 +1,5 @@
+# Supabase project config. The migrations in supabase/migrations/ are the single source of truth for
+# the shared-feed schema and are applied to the hosted database by CI (.github/workflows/migrate.yml)
+# via `supabase db push --db-url "$SUPABASE_DB_URL"`. Only project_id is needed for that flow;
+# `supabase start` (local dev) fills in everything else from the CLI defaults.
+project_id = "hhikmneqnygzighbksao"

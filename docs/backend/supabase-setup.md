@@ -21,16 +21,22 @@ Two roles use the database, with very different trust:
 3. Note the direct Postgres connection string from **Project Settings → Database** → `DATABASE_URL`
    (the worker uses this; the client never does).
 
-## 2. Apply the schema
+## 2. Apply the schema (migrations)
 
-Run `src/backend/schema.sql` once — it creates the tables, indexes, and RLS policies, and is
-idempotent (safe to re-run after edits):
+The schema lives in [`supabase/migrations/`](../../supabase/migrations) as versioned SQL files.
+**You don't have to apply it by hand** — the scanner worker self-heals: on its first run it applies
+any migration the database is missing (in version order) and records it, so a brand-new database is
+set up automatically the first time the worker runs. The migrations create the tables/indexes and
+enable RLS so the anon key can only read `postings`/`companies`; every write requires the service-role
+key, which only the worker holds.
 
-- **SQL editor:** paste the file's contents and run, **or**
-- **psql:** `psql "$DATABASE_URL" -f src/backend/schema.sql`
-
-The script enables RLS so the anon key can only read `postings`/`companies`; every write requires the
-service-role key, which only the worker holds.
+To apply the schema **before** the first scan (or to preview a change), the optional
+[`migrate`](../../.github/workflows/migrate.yml) workflow runs `supabase db push` on merge to `main`,
+on **Actions → migrate → Run workflow**, and as a `--dry-run` on PRs. It needs the repo secret
+**`SUPABASE_DB_URL`** — a *session*/direct Postgres connection with DDL rights (Supabase → Project
+Settings → Database → "Session pooler" or the direct connection on **port 5432**, not the transaction
+pooler on 6543). Locally you can run `supabase db push --db-url "<session-connection-string>"`. See the
+"Database schema & migrations" section of [`worker-runbook.md`](./worker-runbook.md) for details.
 
 ## 3. The feed endpoint (what the client reads)
 

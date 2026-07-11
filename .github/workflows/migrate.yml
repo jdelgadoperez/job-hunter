@@ -1,0 +1,70 @@
+name: migrate
+
+# OPTIONAL convenience: apply the versioned Postgres migrations in supabase/migrations/ to the hosted
+# Supabase database from CI. supabase/migrations/ is the single source of truth; the scanner **worker
+# already self-heals** (it applies any pending migration on startup — src/backend/apply-migrations.ts),
+# so this workflow is not required. It exists for two conveniences: a `--dry-run` PREVIEW on PRs that
+# touch migrations, and applying IMMEDIATELY on merge instead of waiting for the next scheduled scan.
+# See docs/backend/worker-runbook.md.
+#
+# Needs the repo Actions secret SUPABASE_DB_URL: a SESSION / direct Postgres connection with DDL rights
+# (Supabase → Project Settings → Database → "Session pooler" or the direct connection on port 5432 —
+# NOT the transaction pooler on 6543, which `db push` can't use). Until the secret is set the job
+# no-ops green — the worker handles migrations regardless, so leaving it unset is fine.
+
+on:
+  pull_request:
+    paths: ["supabase/migrations/**"]
+  push:
+    branches: [main]
+    paths: ["supabase/migrations/**"]
+  workflow_dispatch: {} # manual apply — e.g. to restore a rebuilt/reset database
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let two applies overlap (a merge racing a manual dispatch). The ledger is idempotent, but
+  # concurrent `db push` runs against one database are asking for trouble.
+  group: db-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for the database secret
+        id: secret
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SUPABASE_DB_URL is not set — skipping. Add it (Settings → Secrets and variables → Actions) to enable migration apply/dry-run."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install the Supabase CLI
+        if: steps.secret.outputs.present == 'true'
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply migrations
+        if: steps.secret.outputs.present == 'true'
+        # A pull_request run only previews (`--dry-run`) so review can see what would change; a push to
+        # main and a manual dispatch actually apply. `db push` skips versions already recorded in the
+        # remote ledger, so re-running is safe and applying an up-to-date database is a no-op.
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
+          else
+            supabase db push --db-url "$SUPABASE_DB_URL"
+          fi

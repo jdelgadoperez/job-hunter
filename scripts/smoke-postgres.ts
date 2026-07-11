@@ -4,8 +4,8 @@ import postgres from "postgres";
  *
  *   DATABASE_URL="postgres://...service-role-conn..." npm run smoke:postgres
  *
- * Runs a tiny real sourcing cycle against a Postgres database that has the schema applied
- * (src/backend/schema.sql): startScan → savePosting → savePostings (batch) → finishScan →
+ * Runs a tiny real sourcing cycle against a Postgres database that has the migrations applied
+ * (supabase/migrations/, via `supabase db push`): startScan → savePosting → savePostings (batch) → finishScan →
  * listLivePostingsNotSeen → markPostingExpired → expireStalePostings, printing each result. Use a
  * THROWAWAY project/database — it writes (and expires) probe postings. Requires the `DATABASE_URL` to
  * be a service-role connection (writes bypass RLS).

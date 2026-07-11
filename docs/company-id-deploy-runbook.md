@@ -1,8 +1,14 @@
 # companyId — Worker/Feed Deploy Runbook
 
-This is a coordinated manual deploy — there is no CI runner for the Supabase schema or the
-hosted worker. The local half (SQLite `companyId` + local retry scoping) works as soon as the PR
-merges. The feed-scoping payoff — retry scoping across the shared feed, not just the local crawl —
+This is a coordinated deploy of the hosted worker plus the shared-feed schema. The local half
+(SQLite `companyId` + local retry scoping) works as soon as the PR merges.
+
+> **Note (superseded):** the schema is now applied via versioned migrations in
+> [`supabase/migrations/`](../supabase/migrations) — the scanner worker self-heals by applying any
+> pending migration on startup, so no manual `psql -f schema.sql` step is needed. The companyId
+> columns are part of migration `20260706023908`; on a current database they are already applied. This
+> runbook is kept as a record of the original rollout — see
+> [`docs/backend/worker-runbook.md`](./backend/worker-runbook.md) for the migration flow. The feed-scoping payoff — retry scoping across the shared feed, not just the local crawl —
 only activates once the hosted worker starts emitting `company_id` on `postings` rows in Supabase.
 
 **Ordering note (read first):** shipping the local client before the worker has run is SAFE.
@@ -16,11 +22,8 @@ worker catches up.
 
 ### 1. Apply the additive schema to Supabase
 
-```bash
-psql "$DATABASE_URL" -f src/backend/schema.sql
-```
-
-`DATABASE_URL` is the service-role Postgres connection string. The migration is additive and
+The migrations apply automatically on the next worker run (self-heal), or immediately via the optional
+`migrate` CI workflow. The relevant change is migration `20260706023908`, which is additive and
 idempotent (`add column if not exists`), so it's safe to re-run. It adds:
 
 - `companies.id` plus its (non-unique) index
@@ -28,10 +31,10 @@ idempotent (`add column if not exists`), so it's safe to re-run. It adds:
 
 `companies.id` is intentionally **non-unique** — it is a content-hash of the normalized careers URL,
 so distinct `careers_url` rows (case / trailing-slash / query-string near-duplicates) can share an
-id. `schema.sql` drops any pre-existing `companies_id_idx` before recreating it non-unique, because
+id. The migration drops any pre-existing `companies_id_idx` before recreating it non-unique, because
 `create index if not exists` matches by name only and would otherwise leave a stale unique index in
 place. (An early companyId build shipped this index as `unique`; that was corrected — a DB that
-already has the unique index self-heals on the next `schema.sql` apply.)
+already has the unique index self-heals when the migration re-applies.)
 
 ### 2. Backfill — not required
 
