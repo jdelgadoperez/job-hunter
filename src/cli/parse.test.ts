@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT, parseCli } from "./parse";
+import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT, hasVerboseFlag, parseCli } from "./parse";
 
 describe("parseCli", () => {
   it("parses scan", () => {
@@ -56,6 +56,7 @@ describe("parseCli", () => {
       remoteOnly: false,
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
     expect(parseCli(["list", "--min-score", "70"])).toEqual({
       kind: "list",
@@ -63,6 +64,7 @@ describe("parseCli", () => {
       remoteOnly: false,
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
     // An explicit 0 is honored (show everything).
     expect(parseCli(["list", "--min-score", "0"])).toEqual({
@@ -71,6 +73,7 @@ describe("parseCli", () => {
       remoteOnly: false,
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
     // Non-numeric falls back to the default rather than NaN.
     expect(parseCli(["list", "--min-score", "abc"])).toEqual({
@@ -79,6 +82,7 @@ describe("parseCli", () => {
       remoteOnly: false,
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
   });
 
@@ -89,6 +93,7 @@ describe("parseCli", () => {
       remoteOnly: true,
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
     expect(parseCli(["list", "--min-score", "60", "--remote-only"])).toEqual({
       kind: "list",
@@ -96,6 +101,7 @@ describe("parseCli", () => {
       remoteOnly: true,
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
   });
 
@@ -107,6 +113,7 @@ describe("parseCli", () => {
       country: "US",
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
     expect(parseCli(["list", "--min-score", "60", "--country", "CA"])).toEqual({
       kind: "list",
@@ -115,6 +122,7 @@ describe("parseCli", () => {
       country: "CA",
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
     // Without --country the field is absent (undefined); remoteOnly defaults to false.
     expect(parseCli(["list"])).toEqual({
@@ -123,6 +131,7 @@ describe("parseCli", () => {
       remoteOnly: false,
       includeApplied: false,
       onlyApplied: false,
+      json: false,
     });
   });
 
@@ -133,6 +142,7 @@ describe("parseCli", () => {
       remoteOnly: false,
       includeApplied: true,
       onlyApplied: false,
+      json: false,
     });
     expect(parseCli(["list", "--only-applied"])).toEqual({
       kind: "list",
@@ -140,6 +150,7 @@ describe("parseCli", () => {
       remoteOnly: false,
       includeApplied: false,
       onlyApplied: true,
+      json: false,
     });
   });
 
@@ -256,6 +267,7 @@ describe("score command", () => {
       limit: DEFAULT_SCORE_LIMIT,
       rescore: false,
       dryRun: false,
+      json: false,
     });
   });
 
@@ -278,6 +290,7 @@ describe("score command", () => {
       remoteOnly: true,
       rescore: true,
       dryRun: true,
+      json: false,
     });
   });
 
@@ -343,5 +356,30 @@ describe("short flag aliases", () => {
       url: "https://x.com/careers",
       name: "Acme",
     });
+  });
+});
+
+describe("--json flag", () => {
+  it("sets json on list", () => {
+    expect(parseCli(["list", "--json"])).toMatchObject({ kind: "list", json: true });
+  });
+  it("defaults json to false on list", () => {
+    expect(parseCli(["list"])).toMatchObject({ kind: "list", json: false });
+  });
+  it("sets json on score", () => {
+    expect(parseCli(["score", "--json"])).toMatchObject({ kind: "score", json: true });
+  });
+  it("defaults json to false on score", () => {
+    expect(parseCli(["score"])).toMatchObject({ kind: "score", json: false });
+  });
+});
+
+describe("hasVerboseFlag", () => {
+  it("detects --verbose anywhere in argv", () => {
+    expect(hasVerboseFlag(["scan", "--verbose"])).toBe(true);
+    expect(hasVerboseFlag(["--verbose", "list"])).toBe(true);
+  });
+  it("is false when absent", () => {
+    expect(hasVerboseFlag(["scan"])).toBe(false);
   });
 });

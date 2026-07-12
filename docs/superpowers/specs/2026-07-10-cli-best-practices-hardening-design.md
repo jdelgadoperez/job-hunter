@@ -96,13 +96,18 @@ Establishes the stderr discipline, then layers `--json` and `--verbose` on top.
 
 **3.2 — `--json` structured output**
 - Add `--json` boolean flag to `list` and `score`.
-- Emit a JSON **array of match records** to stdout — the same underlying data the human
-  table renders (e.g. `score`, `company`, `title`, `url`, `location`, `remote`, `country`,
-  `applied`, and for `score`: the scored fields). Exact fields finalized in the plan from
-  the existing row type; no new data invented.
-- Define the shape with a zod schema (repo already uses zod at the web contract boundary)
-  so the CLI JSON output has a validated, stable contract. One schema, reused by the test.
-- In `--json` mode: results to stdout as a single `JSON.stringify(array, null, 2)`; ALL
+- **`list --json`** emits a JSON **array of match records** to stdout — the flattened form of
+  the `ScoredPosting` rows `listScoredPostings` returns: `score`, `company`, `title`, `url`,
+  `source`, `location`, `remote`, `country`, `postedAt` (ISO or null), `applied` (bool),
+  `expired` (bool). `Date` fields serialize as ISO strings. No new data invented.
+- **`score --json`** emits the `ScoreOutcome` run summary as a JSON **object**
+  `{ counts, estimate, warnings, abortedOnLimit }` — the machine-readable form of what
+  `formatScorePlan` prints. Refinement (2026-07-10): `score` produces a run summary, NOT a
+  list of matches, so forcing it into a match array would misrepresent it. The object form is
+  honest to the command and is the natural target for `--dry-run` cost scripting.
+- Define both shapes with zod schemas (repo already uses zod at the web contract boundary)
+  so the CLI JSON output has a validated, stable contract. Schemas reused by the tests.
+- In `--json` mode: result to stdout as a single `JSON.stringify(value, null, 2)`; ALL
   diagnostics (progress, warnings) to stderr via the PR-B sink. No human table, no ANSI.
 
 **6.3 — Debug mode (`--verbose` + `DEBUG`)**

@@ -41,8 +41,9 @@ import {
   trackList,
   trackRemove,
 } from "./commands";
+import { createDiagnostics, type Diagnostics } from "./diagnostics";
 import { renderHelp } from "./help";
-import { parseCli } from "./parse";
+import { hasVerboseFlag, parseCli } from "./parse";
 import { runServiceCommand } from "./service";
 import { style } from "./style";
 
@@ -52,6 +53,7 @@ export type ScoreCliOptions = {
   remoteOnly?: boolean;
   rescore: boolean;
   dryRun: boolean;
+  json: boolean;
 };
 
 export type ScanCliOptions = {
@@ -64,10 +66,11 @@ export async function runScanCommand(
   repo: Repository,
   log: Logger,
   opts: ScanCliOptions,
+  diagnostics: Diagnostics,
 ): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
-    log(style.warn("No profile yet. Run `job-hunter profile <resume-file>` first."));
+    diagnostics.diag(style.warn("No profile yet. Run `job-hunter profile <resume-file>` first."));
     process.exitCode = 1;
     return;
   }
@@ -101,6 +104,7 @@ export async function runScanCommand(
       ? (opts.freshnessHours ?? resolveScanFreshnessHours(settings))
       : undefined;
 
+  diagnostics.debug("scan", `scope=${scanScope} tracked=${trackedCompanies.length}`);
   const result = await runScan(
     {
       repo,
@@ -111,7 +115,7 @@ export async function runScanCommand(
       ...(freshnessHours !== undefined ? { freshnessHours } : {}),
       // Live status so a scan is never silent: directory read, per-company, scoring.
       // Dimmed as secondary chatter — the final summary stands out in full color.
-      onProgress: (event) => log(style.dim(formatProgress(event))),
+      onProgress: (event) => diagnostics.diag(style.dim(formatProgress(event))),
       discoverDeps: {
         fetcher,
         renderer: new PlaywrightRenderer(),
@@ -125,9 +129,10 @@ export async function runScanCommand(
     // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.
     () => {},
   );
+  diagnostics.debug("scan", `warnings=${result.warnings.length}`);
   // Surface discovery warnings after the summary.
   for (const warning of result.warnings) {
-    log(style.warn(`  ! [${warning.source}] ${warning.message}`));
+    diagnostics.diag(style.warn(`  ! [${warning.source}] ${warning.message}`));
   }
 }
 
@@ -135,10 +140,11 @@ export async function runScoreCommand(
   repo: Repository,
   options: ScoreCliOptions,
   log: Logger,
+  diagnostics: Diagnostics,
 ): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
-    log(style.warn("No profile yet. Run `job-hunter profile <resume-file>` first."));
+    diagnostics.diag(style.warn("No profile yet. Run `job-hunter profile <resume-file>` first."));
     process.exitCode = 1;
     return;
   }
@@ -147,7 +153,7 @@ export async function runScoreCommand(
   const provider = resolveProvider(settings);
   const apiKey = resolveApiKey(settings, provider);
   if (!apiKey) {
-    log(
+    diagnostics.diag(
       style.warn(
         "No LLM key configured; nothing to score (scan already heuristic-scored everything).",
       ),
@@ -156,6 +162,7 @@ export async function runScoreCommand(
   }
 
   const model = resolveScorerModel(settings, provider);
+  diagnostics.debug("score", `model=${model}`);
   const dictionary = repo.getSkillDictionary();
   const warnings: Warning[] = [];
   const remoteOnly = resolveRemoteOnly(settings, options.remoteOnly);
@@ -202,18 +209,26 @@ export async function runScoreCommand(
     },
     onWarning: (warning) => warnings.push(warning),
   });
-
-  log(
-    formatScorePlan(outcome, {
-      remoteOnly,
-      limit: options.limit,
-      dryRun: options.dryRun,
-    }),
+  diagnostics.debug(
+    "score",
+    `deepScored=${outcome.counts.deepScored} aborted=${outcome.abortedOnLimit}`,
   );
-  const usageSummary = formatUsageSummary(usage);
-  if (usageSummary) log(style.dim(usageSummary));
+
+  if (options.json) {
+    log(JSON.stringify(outcome, null, 2));
+  } else {
+    log(
+      formatScorePlan(outcome, {
+        remoteOnly,
+        limit: options.limit,
+        dryRun: options.dryRun,
+      }),
+    );
+    const usageSummary = formatUsageSummary(usage);
+    if (usageSummary) diagnostics.diag(style.dim(usageSummary));
+  }
   for (const warning of warnings) {
-    log(style.warn(`  ! [${warning.source}] ${warning.message}`));
+    diagnostics.diag(style.warn(`  ! [${warning.source}] ${warning.message}`));
   }
 }
 
@@ -223,6 +238,9 @@ export async function main(): Promise<void> {
 
   const command = parseCli(process.argv.slice(2));
   const log: Logger = (message) => console.log(message);
+  const verbose = hasVerboseFlag(process.argv.slice(2));
+  const jsonMode = command.kind === "list" || command.kind === "score" ? command.json : false;
+  const diagnostics = createDiagnostics({ verbose, json: jsonMode });
 
   if (command.kind === "help") {
     if (command.error) console.error(style.error(`Error: ${command.error}\n`));
@@ -276,16 +294,23 @@ export async function main(): Promise<void> {
           country: command.country,
           includeApplied: command.includeApplied,
           onlyApplied: command.onlyApplied,
+          json: command.json,
+          diag: diagnostics.diag,
         });
         break;
       case "scan":
-        await runScanCommand(repo, log, {
-          retryFailed: command.retryFailed,
-          all: command.all,
-          ...(command.freshnessHours !== undefined
-            ? { freshnessHours: command.freshnessHours }
-            : {}),
-        });
+        await runScanCommand(
+          repo,
+          log,
+          {
+            retryFailed: command.retryFailed,
+            all: command.all,
+            ...(command.freshnessHours !== undefined
+              ? { freshnessHours: command.freshnessHours }
+              : {}),
+          },
+          diagnostics,
+        );
         break;
       case "score":
         await runScoreCommand(
@@ -296,8 +321,10 @@ export async function main(): Promise<void> {
             ...(command.remoteOnly !== undefined ? { remoteOnly: command.remoteOnly } : {}),
             rescore: command.rescore,
             dryRun: command.dryRun,
+            json: command.json,
           },
           log,
+          diagnostics,
         );
         break;
       case "config-remote":

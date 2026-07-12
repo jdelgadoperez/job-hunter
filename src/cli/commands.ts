@@ -18,6 +18,7 @@ import { buildProfile } from "@app/profile/build-profile";
 import { detectHomeCountry } from "@app/profile/detect-home-country";
 import type { CompanyRef, Repository } from "@app/storage/repository";
 import pLimit from "p-limit";
+import { toMatchJson } from "./json-output";
 import { scoreBadge, style } from "./style";
 
 export type Logger = (message: string) => void;
@@ -495,6 +496,8 @@ export function listMatches(
     country?: string;
     includeApplied?: boolean;
     onlyApplied?: boolean;
+    json?: boolean;
+    diag?: (message: string) => void;
   } = {},
 ): void {
   const scored = repo.listScoredPostings(minScore, {
@@ -503,8 +506,14 @@ export function listMatches(
     includeApplied: opts.includeApplied,
     onlyApplied: opts.onlyApplied,
   });
+
+  if (opts.json) {
+    log(JSON.stringify(toMatchJson(scored), null, 2));
+    return;
+  }
+
   if (scored.length === 0) {
-    log(style.dim("No matches yet. Run `job-hunter scan` first."));
+    (opts.diag ?? log)(style.dim("No matches yet. Run `job-hunter scan` first."));
     return;
   }
   for (const { posting, result } of scored) {

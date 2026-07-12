@@ -864,3 +864,59 @@ describe("runScan + listMatches", () => {
     repo.close();
   });
 });
+
+describe("listMatches --json", () => {
+  it("prints a JSON array of match records to the log (stdout) and nothing human", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "We need TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const out = capture();
+    const diagLines: string[] = [];
+    listMatches(repo, 0, out.log, { json: true, diag: (m) => diagLines.push(m) });
+
+    const parsed = JSON.parse(out.lines.join("\n"));
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0]).toHaveProperty("score");
+    expect(out.lines.join("\n")).not.toMatch(/\[\d+m/); // no ANSI escape codes on stdout
+    repo.close();
+  });
+
+  it("prints [] to stdout (not a human hint) when there are no matches in json mode", () => {
+    const repo = newRepo();
+    const out = capture();
+    listMatches(repo, 0, out.log, { json: true, diag: () => {} });
+    expect(JSON.parse(out.lines.join("\n"))).toEqual([]);
+    repo.close();
+  });
+});
