@@ -84,6 +84,8 @@ npm run cli -- list --min-score 70        # show matches scoring 70+
 npm run cli -- list --remote-only         # only remote matches
 npm run cli -- list --country US          # only matches in a country (parsed from the posting location)
 npm run cli -- list --only-applied        # only roles you've marked applied (include-applied reveals them inline)
+npm run cli -- list --json                # machine-readable matches (JSON array on stdout; pipe to jq)
+npm run cli -- score --dry-run --json     # machine-readable score-run summary (JSON object on stdout)
 npm run cli -- serve                       # start the web dashboard (--port N, --no-open, --refresh-hours N)
 npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
@@ -96,6 +98,12 @@ npm run cli -- --version
 
 Short flags are available for the common options: `-a` (`--all`), `-l` (`--limit`), `-p` (`--port`),
 and `-n` (`--name`). Run `<command> --help` for each command's full option list.
+
+**Scripting & debugging.** `list` and `score` accept `--json` for machine-readable output — `list`
+prints a JSON array of matches, `score` a JSON summary object — written to stdout as pure JSON (all
+progress and warnings go to stderr), so `list --json | jq` works cleanly. Pass `--verbose` (or set
+`DEBUG=job-hunter*`) on any command for extra diagnostic logging on stderr; it never pollutes stdout,
+so `list --json --verbose 2>/dev/null` still yields clean JSON.
 
 **Two-step scanning.** `scan` is free — it discovers postings and ranks them with the free offline
 scorer. By default a scan is **incremental**: it re-visits only the companies it hasn't checked
