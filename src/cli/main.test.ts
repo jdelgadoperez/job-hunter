@@ -1,10 +1,14 @@
+import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JobPosting, SkillProfile, Warning } from "@app/domain/types";
 import { settingsWithEnvKey } from "@app/matching/resolve-settings";
+import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import { Repository } from "@app/storage/repository";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createDiagnostics, type Diagnostics } from "./diagnostics";
+import type { SignalTarget } from "./signals";
 
 // Holder mutated per-test and read by the hoisted mock factories below.
 const h = vi.hoisted(() => ({
@@ -14,6 +18,9 @@ const h = vi.hoisted(() => ({
   resumeText: "Experienced with TypeScript and React.",
   startServer: vi.fn(),
   runServiceCommand: vi.fn(),
+  // When set, `discover` awaits this instead of resolving immediately — lets a test hold a scan
+  // in flight so it can emit a signal mid-scan instead of after `runScanCommand` has settled.
+  discoverGate: null as Promise<void> | null,
 }));
 
 // Point the CLI at a per-test temp database instead of the real data dir.
@@ -24,7 +31,10 @@ vi.mock("@app/runtime/paths", () => ({
 
 // Stub discovery so `scan` runs fully offline (no browser, no network).
 vi.mock("@app/discovery/discover", () => ({
-  discover: async () => ({ postings: h.postings, warnings: h.warnings }),
+  discover: async () => {
+    if (h.discoverGate) await h.discoverGate;
+    return { postings: h.postings, warnings: h.warnings };
+  },
 }));
 
 // Avoid reading a real file in the `profile` command.
@@ -44,7 +54,7 @@ vi.mock("./service", async (importOriginal) => ({
   runServiceCommand: (action: unknown) => h.runServiceCommand(action),
 }));
 
-import { main } from "./main";
+import { main, runScanCommand } from "./main";
 
 const profile: SkillProfile = {
   skills: ["typescript", "react"],
@@ -88,6 +98,7 @@ beforeEach(() => {
   h.dbPath = join(tmp, "test.db");
   h.postings = [];
   h.warnings = [];
+  h.discoverGate = null;
   h.startServer.mockReset();
   h.runServiceCommand.mockReset().mockResolvedValue(0);
   process.exitCode = 0;
@@ -302,6 +313,82 @@ describe("score command --json", () => {
 
     expect(stderrLogged()).toContain("No LLM key configured");
     expect(logged()).not.toContain("No LLM key configured");
+  });
+});
+
+describe("scan command signal handling", () => {
+  function seedProfileForScan(): void {
+    const repo = openDb();
+    repo.saveProfile(profile);
+    repo.close();
+  }
+  function fakeSignals(): EventEmitter & SignalTarget {
+    return new EventEmitter();
+  }
+  // Diagnostics is a required arg since PR B; a silent sink keeps these tests off the console.
+  function quietDiagnostics(): Diagnostics {
+    return createDiagnostics({ verbose: false, json: false }, () => {});
+  }
+
+  it("disposes the Playwright renderer and exits 130 on SIGINT", async () => {
+    seedProfileForScan();
+    h.postings = [posting("1")];
+    // Hold discovery in flight so the scan is still running when SIGINT fires — otherwise the
+    // try/finally would have already deregistered the handler before we get to emit it.
+    let releaseDiscovery: () => void = () => {};
+    h.discoverGate = new Promise((resolve) => {
+      releaseDiscovery = resolve;
+    });
+    const signals = fakeSignals();
+    const disposeSpy = vi
+      .spyOn(PlaywrightRenderer.prototype, "dispose")
+      .mockResolvedValue(undefined);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const repo = openDb();
+
+    const scanPromise = runScanCommand(
+      repo,
+      () => {},
+      { retryFailed: false, all: false },
+      quietDiagnostics(),
+      signals,
+    );
+    signals.emit("SIGINT");
+    releaseDiscovery();
+    await scanPromise;
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(exitSpy).toHaveBeenCalledWith(130);
+
+    repo.close();
+    disposeSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("removes the signal handler after a normal scan (no leak)", async () => {
+    seedProfileForScan();
+    h.postings = [posting("1")];
+    const signals = fakeSignals();
+    const disposeSpy = vi
+      .spyOn(PlaywrightRenderer.prototype, "dispose")
+      .mockResolvedValue(undefined);
+    const repo = openDb();
+
+    await runScanCommand(
+      repo,
+      () => {},
+      { retryFailed: false, all: false },
+      quietDiagnostics(),
+      signals,
+    );
+    disposeSpy.mockClear(); // ignore the normal end-of-discovery dispose
+    signals.emit("SIGINT"); // handler should be gone
+
+    expect(disposeSpy).not.toHaveBeenCalled();
+    expect(signals.listenerCount("SIGINT")).toBe(0);
+
+    repo.close();
+    disposeSpy.mockRestore();
   });
 });
 
