@@ -45,6 +45,7 @@ import { createDiagnostics, type Diagnostics } from "./diagnostics";
 import { renderHelp } from "./help";
 import { hasVerboseFlag, parseCli } from "./parse";
 import { runServiceCommand } from "./service";
+import { onShutdown, type SignalTarget } from "./signals";
 import { style } from "./style";
 
 export type ScoreCliOptions = {
@@ -67,6 +68,7 @@ export async function runScanCommand(
   log: Logger,
   opts: ScanCliOptions,
   diagnostics: Diagnostics,
+  signals: SignalTarget = process,
 ): Promise<void> {
   const profile = repo.getLatestProfile();
   if (!profile) {
@@ -104,35 +106,48 @@ export async function runScanCommand(
       ? (opts.freshnessHours ?? resolveScanFreshnessHours(settings))
       : undefined;
 
-  diagnostics.debug("scan", `scope=${scanScope} tracked=${trackedCompanies.length}`);
-  const result = await runScan(
-    {
-      repo,
-      profile,
-      scorer,
-      ...(feed ? { feed } : {}),
-      scope: scanScope,
-      ...(freshnessHours !== undefined ? { freshnessHours } : {}),
-      // Live status so a scan is never silent: directory read, per-company, scoring.
-      // Dimmed as secondary chatter — the final summary stands out in full color.
-      onProgress: (event) => diagnostics.diag(style.dim(formatProgress(event))),
-      discoverDeps: {
-        fetcher,
-        renderer: new PlaywrightRenderer(),
-        sharedViewReader: new PlaywrightSharedViewReader(),
-        shareUrl: resolveShareUrl(),
-        trackedCompanies,
-        settings,
-        ...(sources ? { sources } : {}),
+  const renderer = new PlaywrightRenderer();
+  // On Ctrl+C, close the shared Chromium so we don't orphan a headless browser, then exit 130
+  // (128 + SIGINT). This is the one place `process.exit` is justified: the in-flight scan `await`
+  // would otherwise hang the process instead of terminating on the signal.
+  const disposeShutdown = onShutdown(async () => {
+    await renderer.dispose();
+    process.exit(130);
+  }, signals);
+
+  try {
+    diagnostics.debug("scan", `scope=${scanScope} tracked=${trackedCompanies.length}`);
+    const result = await runScan(
+      {
+        repo,
+        profile,
+        scorer,
+        ...(feed ? { feed } : {}),
+        scope: scanScope,
+        ...(freshnessHours !== undefined ? { freshnessHours } : {}),
+        // Live status so a scan is never silent: directory read, per-company, scoring.
+        // Dimmed as secondary chatter — the final summary stands out in full color.
+        onProgress: (event) => diagnostics.diag(style.dim(formatProgress(event))),
+        discoverDeps: {
+          fetcher,
+          renderer,
+          sharedViewReader: new PlaywrightSharedViewReader(),
+          shareUrl: resolveShareUrl(),
+          trackedCompanies,
+          settings,
+          ...(sources ? { sources } : {}),
+        },
       },
-    },
-    // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.
-    () => {},
-  );
-  diagnostics.debug("scan", `warnings=${result.warnings.length}`);
-  // Surface discovery warnings after the summary.
-  for (const warning of result.warnings) {
-    diagnostics.diag(style.warn(`  ! [${warning.source}] ${warning.message}`));
+      // The summary line is already emitted via onProgress; keep the logger quiet to avoid dupes.
+      () => {},
+    );
+    diagnostics.debug("scan", `warnings=${result.warnings.length}`);
+    // Surface discovery warnings after the summary.
+    for (const warning of result.warnings) {
+      diagnostics.diag(style.warn(`  ! [${warning.source}] ${warning.message}`));
+    }
+  } finally {
+    disposeShutdown();
   }
 }
 

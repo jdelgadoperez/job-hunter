@@ -26,7 +26,7 @@ Ranked by value for a local-first data CLI. All selected by the user.
 | # | Gap | File(s) touched | Effort | Status |
 |---|-----|-----------------|--------|--------|
 | 3.2 | No `--json` output on `list`/`score` | `parse.ts`, `commands.ts`, `main.ts`, `json-output.ts` | Med | **Done — PR B** |
-| 1.8 | No `SIGINT`/`SIGTERM` handling (`serve`, `scan`) | `serve.ts`, `main.ts` | Med | Not yet done (PR C) |
+| 1.8 | No `SIGINT`/`SIGTERM` handling (`serve`, `scan`) | `signals.ts`, `serve.ts`, `main.ts` | Med | **Done — C1** |
 | 4.3 | No `engines.node` field | `package.json` | Trivial | **Done — PR A** |
 | 6.3 | No debug mode (`--verbose`/`DEBUG=`) | `main.ts`, `diagnostics.ts` | Med | **Done — PR B** |
 | 6.5 | No bug-report URL on crash; no `.github/ISSUE_TEMPLATE/` | `main.ts`, `.github/` | Low | **Done — PR A** |
@@ -45,9 +45,15 @@ array, `score` emits the `ScoreOutcome` run-summary object, both zod-validated i
 `src/cli/json-output.ts`), 6.3 (`--verbose` flag + `DEBUG=job-hunter*` env enable a stderr debug
 logger, seeded at scan/score pipeline boundaries), and 3.6 (the stderr-discipline refactor — a single
 `src/cli/diagnostics.ts` sink routes all progress/warnings/debug to stderr so `--json` stdout is pure
-JSON) landed on `feat/cli-output-observability` (stacked on PR A). Plan:
-`docs/superpowers/plans/2026-07-10-cli-pr-b-output-observability.md`. Remaining rows (1.8, 3.7, 4.4)
-are scoped to PR C (lifecycle) and are not yet implemented.
+JSON) landed on `feat/cli-output-observability` (#142). Plan:
+`docs/superpowers/plans/2026-07-10-cli-pr-b-output-observability.md`.
+
+**C1 shipped (2026-07-11):** 1.8 (`SIGINT`/`SIGTERM` — `serve` closes the listener + refresh
+scheduler and exits 0; `scan` disposes the shared Chromium and exits 130, via the one-shot
+`src/cli/signals.ts` helper) landed on `feat/cli-c1-signals` (#143). Plan:
+`docs/superpowers/plans/2026-07-11-cli-c1-signal-handling.md`. The former "PR C" is split by risk:
+C1 (signals, done), C2 (shell completion, 3.7), C3 (`#!/usr/bin/env node` entry, 4.4). Remaining rows
+(3.7, 4.4) ship as C2/C3.
 
 ## Deliberately skipped (not defects for this tool)
 
