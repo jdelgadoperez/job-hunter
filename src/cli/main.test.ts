@@ -381,8 +381,10 @@ describe("scan command signal handling", () => {
       quietDiagnostics(),
       signals,
     );
-    disposeSpy.mockClear(); // ignore the normal end-of-discovery dispose
-    signals.emit("SIGINT"); // handler should be gone
+    // Reset the spy before the post-completion emit so the assertion is purely about the
+    // deregistered handler. (Discovery is mocked, so no real end-of-scan dispose runs here.)
+    disposeSpy.mockClear();
+    signals.emit("SIGINT"); // handler should be gone after the scan's finally deregistered it
 
     expect(disposeSpy).not.toHaveBeenCalled();
     expect(signals.listenerCount("SIGINT")).toBe(0);
