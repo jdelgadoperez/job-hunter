@@ -105,6 +105,10 @@ progress and warnings go to stderr), so `list --json | jq` works cleanly. Pass `
 `DEBUG=job-hunter*`) on any command for extra diagnostic logging on stderr; it never pollutes stdout,
 so `list --json --verbose 2>/dev/null` still yields clean JSON.
 
+**Stopping cleanly.** Press `Ctrl+C` at any time to stop. `serve` shuts the dashboard down gracefully
+(closes the listener and the background refresh, exits 0); interrupting a `scan` closes the headless
+browser it uses so no stray process is left behind (exits 130, the standard code for a Ctrl+C).
+
 **Two-step scanning.** `scan` is free — it discovers postings and ranks them with the free offline
 scorer. By default a scan is **incremental**: it re-visits only the companies it hasn't checked
 recently — anything scanned within the freshness window (the `scanFreshnessHours` setting, default
