@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.5.0...job-hunter-v0.6.0) (2026-07-12)
+
+
+### Features
+
+* **cli:** graceful SIGINT/SIGTERM handling for serve & scan (C1) ([#143](https://github.com/jdelgadoperez/job-hunter/issues/143)) ([81f0d76](https://github.com/jdelgadoperez/job-hunter/commit/81f0d767a0b6f115f42e50270edc21eba42d51e7))
+* **cli:** output & observability — --json, --verbose/DEBUG, stderr discipline (PR B) ([#142](https://github.com/jdelgadoperez/job-hunter/issues/142)) ([6e42947](https://github.com/jdelgadoperez/job-hunter/commit/6e4294755c0d97f86bf1c90c2af5e8658d593fe7))
+
 ## [0.5.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.4.1...job-hunter-v0.5.0) (2026-07-11)
 
 
