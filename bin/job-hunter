@@ -18,11 +18,12 @@ done
 bin_dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
 repo_dir="$(cd -P "$bin_dir/.." >/dev/null 2>&1 && pwd)"
 
-# Resolve tsx's loader by ABSOLUTE path from the repo's node_modules, not the bare `tsx` specifier:
-# the user runs this from their own working directory, and a bare `--import tsx` would try to resolve
-# tsx relative to that dir (which has no node_modules) and fail. Keeping the user's CWD (rather than
-# cd-ing into the repo) means relative arguments like `job-hunter profile ./resume.pdf` still work.
-tsx_loader="$(cd "$repo_dir" && node -e "process.stdout.write(require.resolve('tsx'))")"
+# Resolve tsx's loader from the repo's node_modules, not the bare `tsx` specifier: the user runs this
+# from their own working directory, and a bare `--import tsx` would try to resolve tsx relative to that
+# dir (which has no node_modules) and fail. Emit it as a file:// URL — the form Node's --import expects
+# on every platform. Keeping the user's CWD (rather than cd-ing into the repo) means relative arguments
+# like `job-hunter profile ./resume.pdf` still work.
+tsx_loader="$(cd "$repo_dir" && node -e "process.stdout.write(require('url').pathToFileURL(require.resolve('tsx')).href)")"
 
 # tsx reads the `@app/*` path aliases from the repo's tsconfig, which it locates relative to the CWD
 # by default — wrong when the user runs from elsewhere. Point it at the repo's tsconfig explicitly.

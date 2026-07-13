@@ -7,10 +7,12 @@ $ErrorActionPreference = "Stop"
 # This script lives at <repo>\bin\job-hunter.ps1; the repo is its parent's parent.
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-# Resolve tsx's loader by absolute path from the repo's node_modules (a bare `tsx` specifier would be
-# resolved against the user's current directory, which has no node_modules). Resolve it from the repo
-# dir, then run the CLI from the user's CWD so relative args like `job-hunter profile .\resume.pdf` work.
-$tsxLoader = & node -e "process.chdir(process.argv[1]); process.stdout.write(require.resolve('tsx'))" $repo 2>$null
+# Resolve tsx's loader from the repo's node_modules (a bare `tsx` specifier would be resolved against
+# the user's current directory, which has no node_modules). Emit it as a file:// URL: Node's --import
+# requires a URL, and on Windows a bare absolute path like C:\...\loader.mjs is rejected because the
+# drive letter reads as an unsupported URL scheme ('c:'). Resolve from the repo dir, then run the CLI
+# from the user's CWD so relative args like `job-hunter profile .\resume.pdf` work.
+$tsxLoader = & node -e "process.chdir(process.argv[1]); process.stdout.write(require('url').pathToFileURL(require.resolve('tsx')).href)" $repo 2>$null
 if (-not $tsxLoader) {
     Write-Error "Couldn't find tsx in $repo. Run ./install.ps1 first."
     exit 1
