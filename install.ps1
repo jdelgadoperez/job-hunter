@@ -45,7 +45,10 @@ if (-not (Test-NodeOk)) {
     if (Install-NodeLts) {
         Write-Host "Using $(node -v)."
     } else {
-        Write-Error "Couldn't set up a compatible Node automatically. Install Node 24 (see .nvmrc) from https://nodejs.org and re-run ./install.ps1"
+        Write-Host "Couldn't set up a compatible Node automatically."
+        Write-Host "Install Node 24 (see .nvmrc) from https://nodejs.org, then re-run ./install.ps1."
+        Write-Host "Tip: you can leave 'Automatically install the necessary tools for Native Module" `
+            "compilation' unchecked — job-hunter uses a prebuilt SQLite binary, so no C++ tools are needed."
         exit 1
     }
 }
@@ -57,6 +60,17 @@ if ($nodeMajor -lt 24) {
 
 Write-Host "Installing dependencies..."
 npm install
+
+# better-sqlite3 is job-hunter's only native dependency and ships a prebuilt binary for Windows x64,
+# so this normally needs no C++ compiler. Verify the native module actually loaded; if its prebuilt
+# binary couldn't be fetched, point the user at the real remedy instead of leaving them to guess (or
+# to install several GB of Visual Studio build tools they almost never need).
+node --input-type=commonjs -e "require('better-sqlite3')" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "The better-sqlite3 native module didn't load — its prebuilt binary likely couldn't be downloaded (e.g. a proxy blocking GitHub Releases)."
+    Write-Warning "Retry on a normal network, or run: npm rebuild better-sqlite3"
+    Write-Warning "Only if that keeps failing do you need C++ build tools (the standalone VS Build Tools with 'Desktop development with C++'), not the full Visual Studio."
+}
 
 Write-Host "Running setup..."
 npm run setup
