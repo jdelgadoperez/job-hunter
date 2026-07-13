@@ -28,8 +28,15 @@ Clone or download this repository, then from its folder run:
 
 **Windows 11+ (PowerShell)**
 ```powershell
-./install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+> By default Windows blocks unsigned local scripts, so a plain `./install.ps1` fails with *"running
+> scripts is disabled on this system."* The `-ExecutionPolicy Bypass` above runs the installer for
+> that one invocation without changing anything system-wide. To allow local scripts permanently (so
+> `update.ps1` and the others just work), run once:
+> `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`. See the
+> [troubleshooting entry](#windows-running-scripts-is-disabled-on-this-system) for details.
 
 If Node.js is missing or older than 22, the installer first offers to install the latest LTS. On
 macOS/Linux it uses whichever version manager you already have — **fnm** or **nvm** — and offers to
@@ -184,3 +191,31 @@ overview.
 - **The CLI crashed with an error** — it prints a link to file a bug report. You can also open one
   directly at [github.com/jdelgadoperez/job-hunter/issues/new](https://github.com/jdelgadoperez/job-hunter/issues/new);
   the bug-report template asks for `job-hunter --version`, your OS, and your Node version.
+
+### Windows: "running scripts is disabled on this system"
+
+Windows PowerShell's default execution policy (`Restricted`) blocks unsigned local scripts, so
+`./install.ps1` fails before it runs a single line:
+
+```
+File ...\install.ps1 cannot be loaded because running scripts is disabled on this system.
+```
+
+Two ways past it:
+
+- **One run, nothing changed system-wide** (recommended):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\install.ps1
+  ```
+- **Allow local scripts permanently** (so `update.ps1`, `command-install.ps1`, and the service
+  scripts run without the prefix), once per user, no admin needed:
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+  ```
+  `RemoteSigned` runs local scripts you cloned while still requiring a signature on scripts
+  downloaded from the internet. If you got the repo as a **ZIP** from GitHub rather than via
+  `git clone`, the extracted `.ps1` files may be marked "downloaded from the internet" and blocked
+  even under `RemoteSigned` — clear that mark once with:
+  ```powershell
+  Get-ChildItem -Recurse -Filter *.ps1 | Unblock-File
+  ```
