@@ -10,7 +10,7 @@ $NodeMinMajor = 22
 # True when a usable Node is present and new enough.
 function Test-NodeOk {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $false }
-    return [int](node -p 'process.versions.node.split(".")[0]') -ge $NodeMinMajor
+    return [int](node -p 'parseInt(process.versions.node,10)') -ge $NodeMinMajor
 }
 
 # Install the latest Node LTS, preferring an already-installed fnm and otherwise winget.
@@ -53,7 +53,7 @@ if (-not (Test-NodeOk)) {
     }
 }
 
-$nodeMajor = [int](node -p 'process.versions.node.split(".")[0]')
+$nodeMajor = [int](node -p 'parseInt(process.versions.node,10)')
 if ($nodeMajor -lt 24) {
     Write-Host "Note: Node 24 is recommended (see .nvmrc) - you're on $(node -v). Continuing..."
 }
