@@ -136,18 +136,30 @@ npm run cli -- list --min-score 70
 ### Add a `job-hunter` command (optional)
 
 So you can run `job-hunter <command>` from anywhere instead of `npm run cli -- <command>`, install a
-per-user command on your PATH (no admin required). The installer offers this during setup; you can
-also do it any time:
+per-user command on your PATH (no admin required). The installer offers this during setup, but if you
+declined (or installed non-interactively), run the standalone script any time — it's re-runnable:
 
+**macOS / Linux**
 ```bash
-./command-install.sh     # macOS/Linux   (or  ./command-install.ps1  on Windows)
+./command-install.sh
+```
+
+**Windows 11+ (PowerShell)**
+```powershell
+powershell -ExecutionPolicy Bypass -File .\command-install.ps1
 ```
 
 It symlinks a small wrapper into `~/.local/bin` (macOS/Linux) or writes a shim to
 `%USERPROFILE%\.local\bin` and adds it to your user PATH (Windows). If that directory isn't on your
-PATH yet, the script prints the one line to add. The wrapper runs the checked-out source, so it
-tracks `git pull` with no rebuild. Remove it with `./command-uninstall.sh` (or `.ps1`);
-`npm run cli -- …` keeps working either way.
+PATH yet, the script adds it — **open a new terminal** afterward so the change takes effect, then run
+`job-hunter <command>`. The wrapper runs the checked-out source, so it tracks `git pull` with no
+rebuild. Remove it with `./command-uninstall.sh` (or `.ps1`); `npm run cli -- …` keeps working either
+way.
+
+> On Windows the shim itself runs with `-ExecutionPolicy Bypass`, so the `job-hunter` command works
+> regardless of your execution policy once installed — you only need the `-ExecutionPolicy Bypass`
+> prefix above to run `command-install.ps1` itself. (See the
+> [execution-policy troubleshooting entry](#windows-running-scripts-is-disabled-on-this-system).)
 
 ### Keep the dashboard always running (optional)
 
