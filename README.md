@@ -44,8 +44,12 @@ The **recommended** way is the one-step installer — run it from the repo folde
 
 **Windows 11+ (PowerShell)**
 ```powershell
-./install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+(Plain `./install.ps1` works too once you've allowed local scripts — see
+[INSTALL.md](INSTALL.md#windows-running-scripts-is-disabled-on-this-system) if PowerShell reports
+*"running scripts is disabled on this system."*)
 
 It runs `npm install` then guided setup, which: installs Chromium and warms it up, builds the web
 dashboard, seeds the skill dictionary, and asks for your **Anthropic API key** (optional) and

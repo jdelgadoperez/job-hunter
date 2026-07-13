@@ -11,6 +11,12 @@ steps are listed at the end if you'd rather do it by hand.
 - *Optional:* an [Anthropic API key](https://console.anthropic.com) for high-quality Claude scoring.
   Without one, job-hunter uses the free offline scorer (keyword matching).
 
+> **Windows — don't install the C++ build tools.** If you install Node from nodejs.org by hand,
+> leave *"Automatically install the necessary tools for Native Module compilation"* **unchecked**.
+> job-hunter's only native dependency (`better-sqlite3`) ships a prebuilt Windows x64 binary, so
+> `npm install` compiles nothing. Checking that box makes Node download Chocolatey, Python, and
+> several GB of Visual Studio C++ Build Tools you won't use.
+
 ## Recommended: the installer
 
 Clone or download this repository, then from its folder run:
@@ -22,8 +28,15 @@ Clone or download this repository, then from its folder run:
 
 **Windows 11+ (PowerShell)**
 ```powershell
-./install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+> By default Windows blocks unsigned local scripts, so a plain `./install.ps1` fails with *"running
+> scripts is disabled on this system."* The `-ExecutionPolicy Bypass` above runs the installer for
+> that one invocation without changing anything system-wide. To allow local scripts permanently (so
+> `update.ps1` and the others just work), run once:
+> `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`. See the
+> [troubleshooting entry](#windows-running-scripts-is-disabled-on-this-system) for details.
 
 If Node.js is missing or older than 22, the installer first offers to install the latest LTS. On
 macOS/Linux it uses whichever version manager you already have — **fnm** or **nvm** — and offers to
@@ -163,6 +176,46 @@ overview.
 - **"No profile yet"** — run `npm run cli -- profile <resume>` (or re-run `npm run setup`).
 - **Where your data lives** — a single SQLite file: `~/.job-hunter/jobhunter.db` (macOS/Linux) or
   `%APPDATA%\job-hunter\jobhunter.db` (Windows). Override with `JOB_HUNTER_HOME`.
+- **The Node installer (or a `choco` window) started installing Python and Visual Studio Build
+  Tools** — that's Node's optional *"tools for Native Module compilation"* step, **not** job-hunter.
+  You don't need it: `better-sqlite3` (our only native dependency) installs a prebuilt binary on
+  Windows x64, so nothing is compiled. Cancel it and re-run `./install.ps1`. The C++ build tools are
+  only a fallback for the rare case where that prebuilt binary can't be downloaded (see the next
+  entry).
+- **`npm install` failed to build `better-sqlite3` / couldn't fetch its prebuilt binary** — the
+  prebuilt download (from GitHub Releases) was likely blocked, e.g. by a corporate proxy. Retry on a
+  normal network or run `npm rebuild better-sqlite3`. Only if that keeps failing do you need C++
+  build tools — and then just the standalone
+  [VS Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+  with the "Desktop development with C++" workload, not the full Visual Studio.
 - **The CLI crashed with an error** — it prints a link to file a bug report. You can also open one
   directly at [github.com/jdelgadoperez/job-hunter/issues/new](https://github.com/jdelgadoperez/job-hunter/issues/new);
   the bug-report template asks for `job-hunter --version`, your OS, and your Node version.
+
+### Windows: "running scripts is disabled on this system"
+
+Windows PowerShell's default execution policy (`Restricted`) blocks unsigned local scripts, so
+`./install.ps1` fails before it runs a single line:
+
+```
+File ...\install.ps1 cannot be loaded because running scripts is disabled on this system.
+```
+
+Two ways past it:
+
+- **One run, nothing changed system-wide** (recommended):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\install.ps1
+  ```
+- **Allow local scripts permanently** (so `update.ps1`, `command-install.ps1`, and the service
+  scripts run without the prefix), once per user, no admin needed:
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+  ```
+  `RemoteSigned` runs local scripts you cloned while still requiring a signature on scripts
+  downloaded from the internet. If you got the repo as a **ZIP** from GitHub rather than via
+  `git clone`, the extracted `.ps1` files may be marked "downloaded from the internet" and blocked
+  even under `RemoteSigned` — clear that mark once with:
+  ```powershell
+  Get-ChildItem -Recurse -Filter *.ps1 | Unblock-File
+  ```

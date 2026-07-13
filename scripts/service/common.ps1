@@ -7,7 +7,7 @@ function Assert-Node {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
         throw "Node.js is required but was not found. Install Node 24 (see .nvmrc) from https://nodejs.org and re-run."
     }
-    $major = [int](node -p 'process.versions.node.split(".")[0]')
+    $major = [int](node -p 'parseInt(process.versions.node,10)')
     if ($major -lt 22) {
         throw "job-hunter needs Node 22 or newer (found $(node -v)). Install Node 24 (see .nvmrc) from https://nodejs.org and re-run."
     }
