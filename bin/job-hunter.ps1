@@ -8,11 +8,14 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 # Resolve tsx's loader from the repo's node_modules (a bare `tsx` specifier would be resolved against
-# the user's current directory, which has no node_modules). Emit it as a file:// URL: Node's --import
-# requires a URL, and on Windows a bare absolute path like C:\...\loader.mjs is rejected because the
-# drive letter reads as an unsupported URL scheme ('c:'). Resolve from the repo dir, then run the CLI
-# from the user's CWD so relative args like `job-hunter profile .\resume.pdf` work.
-$tsxLoader = & node -e "process.chdir(process.argv[1]); process.stdout.write(require('url').pathToFileURL(require.resolve('tsx')).href)" $repo 2>$null
+# the user's current directory, which has no node_modules). Anchor resolution at the repo with
+# createRequire so we don't change cwd — keeping the user's CWD means relative args like
+# `job-hunter profile .\resume.pdf` still work. Emit a file:// URL: Node's --import requires a URL, and
+# on Windows a bare absolute path like C:\...\loader.mjs is rejected because the drive letter reads as
+# an unsupported URL scheme ('c:'). The repo path goes through an env var so we don't have to escape a
+# Windows path (backslashes, spaces) into the JS string.
+$env:JH_REPO = $repo
+$tsxLoader = & node -e "const {createRequire}=require('module'),{pathToFileURL}=require('url'); const req=createRequire(pathToFileURL(process.env.JH_REPO + '/package.json')); process.stdout.write(pathToFileURL(req.resolve('tsx')).href)" 2>$null
 if (-not $tsxLoader) {
     Write-Error "Couldn't find tsx in $repo. Run ./install.ps1 first."
     exit 1
