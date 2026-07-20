@@ -1,6 +1,6 @@
 {
   "name": "job-hunter",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -69,7 +69,7 @@
     "@tanstack/react-query": "^5.101.0",
     "better-sqlite3": "^12.11.1",
     "hono": "^4.12.26",
-    "lucide-react": "^1.23.0",
+    "lucide-react": "^1.25.0",
     "mammoth": "^1.12.0",
     "p-limit": "^7.3.0",
     "pdfjs-dist": "^6.0.227",

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.6.0...job-hunter-v0.6.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **cli:** job-hunter command fails on Windows with ERR_UNSUPPORTED_ESM_URL_SCHEME ([#146](https://github.com/jdelgadoperez/job-hunter/issues/146)) ([247a6df](https://github.com/jdelgadoperez/job-hunter/commit/247a6dfcb10787cbb5ab13fd0b6d649cfd34ab3b))
+
 ## [0.6.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.5.0...job-hunter-v0.6.0) (2026-07-12)
 
 
