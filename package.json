@@ -71,7 +71,7 @@
     "hono": "^4.12.31",
     "lucide-react": "^1.25.0",
     "mammoth": "^1.12.0",
-    "p-limit": "^7.3.0",
+    "p-limit": "^7.3.1",
     "pdfjs-dist": "^6.0.227",
     "postgres": "^3.4.9",
     "react": "^19.2.7",
