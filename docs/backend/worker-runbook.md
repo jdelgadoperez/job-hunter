@@ -111,6 +111,19 @@ Common, benign warnings:
 - **`unexpected status NNN` / `Download is starting`** — a host returned an error or served a download
   instead of a page; skipped for this run.
 
+## Crash modes seen in production (and their guards)
+
+- **Unhandled rejection from the browser render's route interceptor** (2026-07-30 run): a careers
+  page rendered via the browser fallback embedded a third-party ad-tracker iframe whose intercepted
+  navigation died mid-fetch (`route.fetch: socket hang up`). The route handler runs on a promise
+  detached from the render's error handling, so the rejection killed the whole worker process
+  mid-crawl (company 808/1126) instead of degrading. Guarded since: the handler
+  (`routeNavigation` in `src/net/playwright-renderer.ts`) can no longer reject — any failure aborts
+  just that one request and the render continues, so a bad third-party asset costs at most one
+  company's render, surfaced as a normal warning. If the worker ever exits with a raw Node stack
+  trace again (no `[scanner] done:` line, "Worker did not finish" in the run summary), treat it as a
+  new escaped-rejection bug of this class, not a transient network blip.
+
 ## Idea: a private run-history admin view (not built)
 
 Today run visibility is per-run: the GitHub summary page for the latest run, plus whatever's in the
