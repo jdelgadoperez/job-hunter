@@ -5,6 +5,7 @@ import { withTimeout } from "@app/net/with-timeout";
 type Browser = Awaited<ReturnType<typeof import("playwright").chromium.launch>>;
 type Page = Awaited<ReturnType<Browser["newPage"]>>;
 type Route = Parameters<Parameters<Page["route"]>[1]>[0];
+type RouteResponse = Awaited<ReturnType<Route["fetch"]>>;
 
 /** Redirect hops we'll follow per navigation before refusing — matches HttpFetcher's cap. */
 const MAX_REDIRECTS = 5;
@@ -36,6 +37,68 @@ export async function screenNavigation(
   } catch (error) {
     if (error instanceof BlockedUrlError) return "abort";
     throw error;
+  }
+}
+
+/** What `routeNavigation` needs from a fetched response — status + headers to walk redirects. */
+export interface InterceptedResponse {
+  status(): number;
+  headers(): { [key: string]: string };
+}
+
+/**
+ * The structural slice of a Playwright `Route` that `routeNavigation` uses. Playwright's real
+ * `Route` satisfies it directly; unit tests exercise the handler with a fake, no browser required.
+ */
+export interface InterceptedRoute<R extends InterceptedResponse = InterceptedResponse> {
+  request(): { url(): string; isNavigationRequest(): boolean };
+  continue(): Promise<void>;
+  abort(errorCode?: string): Promise<void>;
+  fetch(options: { url: string; maxRedirects: number }): Promise<R>;
+  fulfill(options: { response: R }): Promise<void>;
+}
+
+/**
+ * Intercept one browser request. Sub-resources pass through; navigations follow their redirect
+ * chain under the SSRF guard, aborting if any hop targets an internal address.
+ *
+ * This handler runs on a promise detached from `load()`'s try/catch and from `withTimeout`'s race,
+ * so a rejection here surfaces as an unhandled rejection and kills the whole scan process — which
+ * is how a single `route.fetch()` "socket hang up" on an ad-tracker iframe once took down a
+ * 1100-company crawl at company 808. It must therefore never reject: any failure fails just this
+ * one request (best-effort abort — the page may already be closing) and the render carries on
+ * without it, degrading to a per-company warning at worst.
+ */
+export async function routeNavigation<R extends InterceptedResponse>(
+  route: InterceptedRoute<R>,
+  screen: typeof screenNavigation = screenNavigation,
+): Promise<void> {
+  try {
+    const request = route.request();
+    if (!request.isNavigationRequest()) {
+      await route.continue();
+      return;
+    }
+    let current = request.url();
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+      if ((await screen(current, true)) === "abort") {
+        await route.abort("blockedbyclient");
+        return;
+      }
+      const response = await route.fetch({ url: current, maxRedirects: 0 });
+      const status = response.status();
+      const location = response.headers().location;
+      if (status >= 300 && status < 400 && location) {
+        current = new URL(location, current).href;
+        continue;
+      }
+      await route.fulfill({ response });
+      return;
+    }
+    // Exhausted the redirect budget without reaching a terminal response — refuse rather than loop.
+    await route.abort("blockedbyclient");
+  } catch {
+    await route.abort("failed").catch(() => {});
   }
 }
 
@@ -98,7 +161,7 @@ export class PlaywrightRenderer implements PageRenderer {
       // validated the same way. This closes the gap where render()'s initial guard only saw the
       // first URL and a public careers page could bounce us onto an internal address (127.0.0.1,
       // 169.254.169.254 metadata, LAN).
-      await page.route("**/*", (route: Route) => this.routeNavigation(route));
+      await page.route("**/*", (route: Route) => routeNavigation<RouteResponse>(route));
       // Waiting on `networkidle` for the main goto (500ms of zero in-flight requests) sounds like the
       // right signal for "the SPA finished rendering," but pages with a persistent chat widget,
       // analytics beacon, or ad tracker (in practice, a meaningful share of real careers pages) never
@@ -119,33 +182,5 @@ export class PlaywrightRenderer implements PageRenderer {
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await page.close();
     }
-  }
-
-  /** Intercept one browser request. Sub-resources pass through; navigations follow their redirect
-   *  chain under the SSRF guard, aborting if any hop targets an internal address. */
-  private async routeNavigation(route: Route): Promise<void> {
-    const request = route.request();
-    if (!request.isNavigationRequest()) {
-      await route.continue();
-      return;
-    }
-    let current = request.url();
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-      if ((await screenNavigation(current, true)) === "abort") {
-        await route.abort("blockedbyclient");
-        return;
-      }
-      const response = await route.fetch({ url: current, maxRedirects: 0 });
-      const status = response.status();
-      const location = response.headers().location;
-      if (status >= 300 && status < 400 && location) {
-        current = new URL(location, current).href;
-        continue;
-      }
-      await route.fulfill({ response });
-      return;
-    }
-    // Exhausted the redirect budget without reaching a terminal response — refuse rather than loop.
-    await route.abort("blockedbyclient");
   }
 }
