@@ -145,6 +145,35 @@ hands to the existing resolver. Gate them behind opt-in config and conservative 
 
 ---
 
+## 5. Recovering the skipped (LinkedIn/Indeed) companies
+
+The directory often lists a company's **LinkedIn/Indeed/Glassdoor** page as its careers URL. Those
+hosts are on the `unscrapable` list (login-walled + ToS-hostile), so today the scan skips them and
+they yield nothing — even though most of those employers *also* run a public ATS board (§1) we
+already scrape within terms.
+
+`resolveCareersUrl` (`src/discovery/resolve-careers-url.ts`) recovers that subset **without** touching
+the aggregator: it derives candidate board slugs from the company name (`candidateSlugs`, e.g.
+"Khan Academy" → `khanacademy`, `khan-academy`) and probes the slug-keyed ATS public APIs by calling
+the existing connectors with each candidate token, accepting the first live board (≥1 posting). No
+API key, no search engine, no browser, no login; it never throws and every canonical board URL it
+returns round-trips through `resolve-ats`.
+
+- **Precision caveat.** ATS slugs collide across unrelated companies, so a bare "slug 200s" is not
+  proof of identity. The full-name slug (`candidateRank` 0) is high-confidence; looser first-word
+  slugs are not. Before this is wired into the scan to auto-rewrite a lead's careers URL, harden the
+  guard with an **independent** identity signal (e.g. fingerprint the company homepage via
+  `detect-ats-fingerprint` and confirm it embeds the same board).
+- **Size it first.** `npm run analyze:unscrapable` (`scripts/probe-unscrapable.ts`) live-probes the
+  skipped companies and reports how many are recoverable, via which ATS, split by confidence — the
+  same size-it-before-you-build-it approach `analyze:custom-domains` took for the browser-fallback
+  domains. It does **not** change scan behavior.
+- **Fit when wired in:** resolve early (rewrite `lead.careersUrl` to the board URL before the crawl in
+  `discover.ts`), so scoring/storage/liveness treat it as a normal ATS company and it drops out of
+  `/api/companies/manual-review` on its own. Keep it behind opt-in config.
+
+---
+
 ## Choosing what to add
 
 | If you want… | Add |
