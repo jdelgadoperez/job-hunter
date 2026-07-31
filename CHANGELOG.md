@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.6.1...job-hunter-v0.7.0) (2026-07-31)
+
+
+### Features
+
+* **discovery:** name-derived ATS resolver + unscrapable diagnostic ([#162](https://github.com/jdelgadoperez/job-hunter/issues/162)) ([ebd7286](https://github.com/jdelgadoperez/job-hunter/commit/ebd7286acd18e8079e60a3d9b58529425787685c))
+
+
+### Bug Fixes
+
+* **net:** stop a failed route.fetch from crashing the whole scan ([#160](https://github.com/jdelgadoperez/job-hunter/issues/160)) ([2229f55](https://github.com/jdelgadoperez/job-hunter/commit/2229f556d4777a19c64e272f324362519947f829))
+
 ## [0.6.1](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.6.0...job-hunter-v0.6.1) (2026-07-13)
 
 
