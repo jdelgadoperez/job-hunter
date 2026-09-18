@@ -271,3 +271,12 @@ npm run smoke:postgres    # exercise the hosted Postgres store (needs DATABASE_U
 The hosted scanner worker runs via `npm run scan:worker` (needs `DATABASE_URL`); see
 [`docs/backend/worker-runbook.md`](docs/backend/worker-runbook.md). The architecture and design
 decisions are documented in `docs/superpowers/`.
+
+## Found this useful?
+
+If you feel like kicking something back for the time that went into it, it's
+appreciated.
+
+[![Say thanks on Ko-fi](https://img.shields.io/badge/Ko--fi-Say%20thanks-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/jessdp)
+
+A star works just as well.
