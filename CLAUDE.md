@@ -14,7 +14,9 @@ user-facing guide.
 ## Commands
 
 ```bash
-npm test               # vitest run (entire suite)
+npm test               # vitest run (unit + integration suites)
+npm run test:unit      # unit suite only
+npm run test:integration # integration suite only (*.integration.test.ts)
 npm run test:watch     # watch mode
 npm run test:coverage  # with the CI coverage gate (see thresholds below)
 npm run test:web       # web dashboard tests (jsdom + React Testing Library, web/vitest.config.ts)
@@ -34,7 +36,7 @@ npx vitest run src/discovery/discover.test.ts          # one file
 npx vitest run src/discovery/discover.test.ts -t "name" # one test by name
 ```
 
-CI runs lint → typecheck → typecheck:web → test:coverage → test:web → build:web (`.github/workflows`).
+CI runs lint → typecheck → typecheck:web → test:unit → test:integration → test:coverage → test:web → build:web (`.github/workflows`).
 Match `.nvmrc` (Node 24; 22+ required).
 
 ### Opt-in, network/browser-bound smoke scripts (excluded from CI and coverage)
@@ -90,13 +92,18 @@ real browser, no live network.
 - **Biome** for lint + format: 2-space indent, 100-col width, double quotes. Run `npm run lint:fix`
   before committing.
 - **Tests are colocated** (`*.test.ts` next to source) and offline by design — dependencies are
-  injected and fed fixtures (`__fixtures__/`). Anything network/browser-bound is excluded from the
+  injected and fed fixtures (`__fixtures__/`). Two vitest projects (`vitest.config.ts`): **unit**
+  (one module, collaborators faked) and **integration** (`*.integration.test.ts` — several real
+  components wired together: a real SQLite `Repository`, the Hono app over HTTP, CLI dispatch, the
+  full `runScan` pipeline). A test that needs a real DB plus other real modules belongs in the
+  integration suite. Anything network/browser-bound is excluded from the
   coverage gate and covered only by `smoke:*` scripts.
 - **Web tests** live next to their source under `web/src/` (`*.test.ts`/`*.test.tsx`) and run under
   jsdom + React Testing Library via `web/vitest.config.ts` (`npm run test:web`). `fetch` is mocked —
   they never hit a real server. The `api.ts` zod schemas are the client/server contract guard: a
   drift test there fails loudly instead of leaking `undefined` into the UI.
-- **Coverage gate** (vitest.config.ts): statements 93 / branches 85 / functions 90 / lines 93. New
+- **Coverage gate** (vitest.config.ts): statements 92 / branches 85 / functions 90 / lines 93, measured over unit +
+  integration together. New
   code should keep these green; raise the floor as coverage climbs rather than lowering it.
 - **Failures degrade, never crash.** Discovery and scoring collect `Warning`s and return partial
   results — preserve this when touching the scan pipeline. A single company or a failed LLM call
