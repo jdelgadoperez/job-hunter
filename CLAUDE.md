@@ -102,9 +102,9 @@ real browser, no live network.
   jsdom + React Testing Library via `web/vitest.config.ts` (`npm run test:web`). `fetch` is mocked —
   they never hit a real server. The `api.ts` zod schemas are the client/server contract guard: a
   drift test there fails loudly instead of leaking `undefined` into the UI.
-- **Coverage gate** (vitest.config.ts): statements 92 / branches 85 / functions 90 / lines 93, measured over unit +
-  integration together. New
-  code should keep these green; raise the floor as coverage climbs rather than lowering it.
+- **Coverage gate** (vitest.config.ts): statements 92 / branches 85 / functions 90 / lines 93,
+  measured over unit + integration together. New code should keep these green; raise the floor as
+  coverage climbs rather than lowering it.
 - **Failures degrade, never crash.** Discovery and scoring collect `Warning`s and return partial
   results — preserve this when touching the scan pipeline. A single company or a failed LLM call
   must not abort a scan.
