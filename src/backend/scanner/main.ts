@@ -5,6 +5,7 @@ import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-play
 import { formatProgress } from "@app/domain/scan-progress";
 import type { SettingsReader } from "@app/matching/resolve-settings";
 import { THE_MUSE_KEY_SETTING } from "@app/matching/settings-keys";
+import { errorMessage } from "@app/net/error-message";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import postgres from "postgres";
@@ -18,7 +19,8 @@ import { runScannerOnce } from "./run-once";
  *
  * Env: DATABASE_URL (service-role Postgres connection, required); JOB_HUNTER_THE_MUSE_API_KEY
  * (optional, enables The Muse lead source); JOB_HUNTER_SCAN_BUDGET_MS (optional, overrides the
- * wall-clock crawl budget below). See docs/backend/worker-runbook.md.
+ * wall-clock crawl budget below); JOB_HUNTER_POSTING_RETENTION_DAYS (optional, days to keep expired
+ * postings before deleting them; default 30, 0 disables). See docs/backend/worker-runbook.md.
  */
 
 /**
@@ -29,6 +31,16 @@ import { runScannerOnce } from "./run-once";
  */
 const DEFAULT_BUDGET_MS = 25 * 60 * 1000;
 const crawlBudgetMs = Number(process.env.JOB_HUNTER_SCAN_BUDGET_MS) || DEFAULT_BUDGET_MS;
+
+/**
+ * How long an expired posting is kept before the worker deletes it. Expired rows are never served
+ * (the feed is live-only) and are most of the database's size, so without pruning the hosted DB grows
+ * without bound. `0` disables pruning; an unset or non-numeric value falls back to the default.
+ */
+const DEFAULT_RETENTION_DAYS = 30;
+const retentionEnv = process.env.JOB_HUNTER_POSTING_RETENTION_DAYS?.trim();
+const parsedRetention = retentionEnv ? Number(retentionEnv) : Number.NaN;
+const retentionDays = Number.isFinite(parsedRetention) ? parsedRetention : DEFAULT_RETENTION_DAYS;
 
 /** Lead-source settings come from env in the worker (no per-user DB); only key-gated sources read it. */
 const envSettings: SettingsReader = {
@@ -77,6 +89,18 @@ async function main(): Promise<void> {
     );
     for (const warning of outcome.warnings) {
       console.warn(`[scanner] ! [${warning.source}] ${warning.message}`);
+    }
+    // Prune after the scan has persisted: a failure here must never cost the run its feed, so it
+    // degrades to a warning (the next run retries).
+    try {
+      const pruned = await store.pruneExpiredPostings(retentionDays);
+      console.log(
+        retentionDays > 0
+          ? `[scanner] pruned ${pruned} posting(s) expired more than ${retentionDays} day(s) ago.`
+          : "[scanner] posting pruning disabled (JOB_HUNTER_POSTING_RETENTION_DAYS=0).",
+      );
+    } catch (error) {
+      console.warn(`[scanner] ! [prune] could not prune expired postings: ${errorMessage(error)}`);
     }
   } finally {
     await sql.end();
