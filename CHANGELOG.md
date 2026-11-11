@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.7.0...job-hunter-v0.8.0) (2026-11-11)
+
+
+### Features
+
+* **backend:** prune long-expired postings, lock down rls_auto_enable, fix audit vulns ([#165](https://github.com/jdelgadoperez/job-hunter/issues/165)) ([977f79f](https://github.com/jdelgadoperez/job-hunter/commit/977f79f381adc3c9d7f7a239f389a94f2f992600))
+
 ## [0.7.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.6.1...job-hunter-v0.7.0) (2026-09-18)
 
 
