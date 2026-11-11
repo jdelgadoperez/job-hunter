@@ -250,7 +250,9 @@ as a one-command launcher.
 ## Development
 
 ```bash
-npm test            # run the test suite
+npm test            # run the unit + integration suites
+npm run test:unit   # unit tests only
+npm run test:integration  # integration tests only (real SQLite, HTTP app, scan pipeline)
 npm run typecheck   # type-check the server + CLI
 npm run typecheck:web  # type-check the web dashboard
 npm run lint        # Biome lint + format check
@@ -271,3 +273,11 @@ npm run smoke:postgres    # exercise the hosted Postgres store (needs DATABASE_U
 The hosted scanner worker runs via `npm run scan:worker` (needs `DATABASE_URL`); see
 [`docs/backend/worker-runbook.md`](docs/backend/worker-runbook.md). The architecture and design
 decisions are documented in `docs/superpowers/`.
+
+## Found this useful?
+
+If you'd like to buy me a coffee or send a tip, it's much appreciated.
+
+[![Say thanks on Ko-fi](https://img.shields.io/badge/Ko--fi-Say%20thanks-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/jessdp)
+
+A star works just as well.

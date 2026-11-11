@@ -25,21 +25,28 @@ Run the same checks CI runs, in this order:
 npm run lint          # Biome (lint + format) — use `npm run lint:fix` to auto-fix
 npm run typecheck     # server + CLI
 npm run typecheck:web # web dashboard
-npm test              # full unit suite (offline)
+npm run test:unit        # unit suite (offline)
+npm run test:integration # integration suite (offline; real SQLite, HTTP app, scan pipeline)
 npm run test:web      # web dashboard tests
 npm run build:web     # dashboard build
 ```
 
-CI runs `lint → typecheck → typecheck:web → test:coverage → test:web → build:web`. The
-coverage gate lives in `vitest.config.ts` (statements 93 / branches 85 / functions 90 /
-lines 93) — keep new code green rather than lowering the floor.
+`npm test` runs the unit and integration suites together.
+
+CI runs `lint → typecheck → typecheck:web → test:unit → test:integration → test:coverage →
+test:web → build:web`. The coverage gate lives in `vitest.config.ts` (statements 92 / branches 85 /
+functions 90 / lines 93) and is measured over unit + integration together — keep new code green
+rather than lowering the floor.
 
 ## Conventions
 
 - **TypeScript-strict, ESM.** No `!` non-null assertions; avoid type assertions outside
   tests. Prefer clear names over abbreviations.
 - **Tests are colocated** (`*.test.ts` next to source) and **offline by design** —
-  dependencies are injected and fed fixtures under `__fixtures__/`. Anything
+  dependencies are injected and fed fixtures under `__fixtures__/`. Unit tests cover one
+  module with collaborators faked; tests that wire several real components together (a real
+  SQLite `Repository`, the Hono app over HTTP, CLI dispatch, the full scan pipeline) are
+  named `*.integration.test.ts` and run in the integration suite. Anything
   network- or browser-bound is excluded from the coverage gate and covered only by the
   opt-in `smoke:*` scripts.
 - **Failures degrade, never crash.** Discovery and scoring collect `Warning`s and return

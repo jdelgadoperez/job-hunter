@@ -213,6 +213,23 @@ export class PostgresScanStore implements ScanStore {
     return rows.length;
   }
 
+  /**
+   * Delete postings that have been expired for longer than `retentionDays`. Expiry alone never frees
+   * space, and expired rows (with their full descriptions) are the bulk of the hosted database — they
+   * accumulate every day and would eventually exhaust the project's storage quota. Nothing reads them:
+   * the public feed serves only live rows (`expired_at IS NULL`), and a posting that reappears after
+   * being pruned is simply re-inserted as new by the next upsert. `retentionDays <= 0` disables
+   * pruning. Returns the number of rows deleted. Worker-only, so not part of `ScanStore`.
+   */
+  async pruneExpiredPostings(retentionDays: number): Promise<number> {
+    if (!(retentionDays > 0)) return 0;
+    const result = await this.sql`
+      DELETE FROM postings
+      WHERE expired_at IS NOT NULL
+        AND expired_at < now() - make_interval(days => ${retentionDays})`;
+    return result.count;
+  }
+
   async finishScan(
     scanId: number,
     summary: { postingsSeen: number; companiesSeen: number } & DirectoryDiff,
