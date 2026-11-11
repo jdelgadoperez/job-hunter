@@ -1,0 +1,173 @@
+import { Repository } from "@app/storage/repository";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type AppCommandDeps, runAppCommand } from "./app-commands";
+import { parseAppCommand } from "./parse-app";
+
+let repo: Repository;
+let out: string[];
+let err: string[];
+let importCalls: (string | undefined)[];
+
+function deps(overrides: Partial<AppCommandDeps> = {}): AppCommandDeps {
+  return {
+    repo,
+    log: (m) => out.push(m),
+    diag: (m) => err.push(m),
+    importJt: (path) => {
+      importCalls.push(path);
+      return { imported: 2, skipped: 1, notes: 5, path: path ?? "/default/jt.db" };
+    },
+    ...overrides,
+  };
+}
+
+/** Parse + run, like `job-hunter app …` would. */
+function run(...args: string[]): number {
+  return runAppCommand(parseAppCommand(args), deps());
+}
+
+beforeEach(() => {
+  repo = new Repository(":memory:", { today: () => "2026-11-11" });
+  out = [];
+  err = [];
+  importCalls = [];
+});
+afterEach(() => repo.close());
+
+describe("job-hunter app", () => {
+  it("adds, lists, views, and reports stats", () => {
+    expect(run("add", "Acme", "Staff", "Engineer", "--url", "https://a", "--salary", "200k")).toBe(
+      0,
+    );
+    expect(out.at(-1)).toContain("Added #1: Acme — Staff Engineer");
+    expect(run("add", "Globex", "Designer", "--date", "2026-10-01", "--json")).toBe(0);
+    expect(JSON.parse(out.at(-1) ?? "")).toMatchObject({
+      company: "Globex",
+      dateApplied: "2026-10-01",
+    });
+
+    out = [];
+    run("list");
+    expect(out).toHaveLength(2);
+    expect(out[0]).toContain("Acme — Staff Engineer");
+
+    out = [];
+    run("view", "acme");
+    expect(out.join("\n")).toMatch(/Salary\s+200k/);
+    expect(out.join("\n")).toContain("2026-11-11  Applied");
+
+    out = [];
+    run("list", "--json");
+    expect(JSON.parse(out.join(""))).toHaveLength(2);
+
+    out = [];
+    run("stats");
+    expect(out.join("\n")).toMatch(/applied\s+2/);
+    expect(out.join("\n")).toMatch(/total\s+2/);
+    out = [];
+    run("stats", "--json");
+    expect(JSON.parse(out.join(""))).toEqual({ applied: 2 });
+  });
+
+  it("hints on stderr when there is nothing to list or find", () => {
+    run("list");
+    run("list", "offered");
+    run("search", "nothing");
+    expect(out).toEqual([]);
+    expect(err[0]).toContain("No applications yet");
+    expect(err[1]).toContain("No matching applications");
+    expect(err[2]).toContain('No applications match "nothing"');
+  });
+
+  it("moves status, adds notes, edits, and searches", () => {
+    run("add", "Acme", "Eng");
+    expect(run("status", "acme", "screened", "--date", "2026-11-12")).toBe(0);
+    expect(out.at(-1)).toContain("applied → screened");
+    run("status", "acme", "screened");
+    expect(out.at(-1)).toContain("already screened");
+    run("note", "acme", "Recruiter", "call");
+    expect(out.at(-1)).toContain("Recruiter call");
+    run("edit", "acme", "--role", "Senior Eng", "--recruiter", "Kim");
+    expect(out.at(-1)).toContain("Updated #1: Acme — Senior Eng");
+
+    out = [];
+    run("search", "kim");
+    expect(out[0]).toContain("Acme — Senior Eng");
+    out = [];
+    run("search", "kim", "--json");
+    expect(JSON.parse(out.join(""))[0].notes.map((n: { content: string }) => n.content)).toEqual([
+      "Applied",
+      "Recruiter call", // dated today (11th), so it sorts before the status change on the 12th
+      "Status changed from Applied to Screened",
+    ]);
+  });
+
+  it("archives only closed applications, lists candidates, and restores", () => {
+    run("add", "Acme", "Eng");
+    expect(run("archive")).toBe(0);
+    expect(err.at(-1)).toContain("Nothing to archive");
+    expect(run("archive", "acme")).toBe(1);
+    expect(err.at(-1)).toContain('cannot archive a "applied" application');
+
+    run("status", "acme", "rejected");
+    out = [];
+    run("archive");
+    expect(out[0]).toContain("Acme — Eng");
+    expect(run("archive", "acme")).toBe(0);
+    expect(out.at(-1)).toContain("Archived Acme");
+    out = [];
+    run("list", "--archived");
+    expect(out[0]).toContain("(archived)");
+    expect(run("unarchive", "acme")).toBe(0);
+    expect(out.at(-1)).toContain("Restored Acme");
+  });
+
+  it("reports unknown or ambiguous selectors with exit code 1", () => {
+    run("add", "Acme", "One");
+    run("add", "Acme", "Two");
+    expect(run("view", "globex")).toBe(1);
+    expect(err.at(-1)).toContain('no application matches "globex"');
+    expect(run("status", "acme", "offered")).toBe(1);
+    expect(err.at(-1)).toContain("use the id");
+    expect(run("status", "2", "offered")).toBe(0);
+  });
+
+  it("links a stored match on add, and un-marks it on remove", () => {
+    repo.savePosting({
+      id: "p1",
+      company: "Acme",
+      title: "Eng",
+      url: "https://a/1",
+      source: "lever",
+      description: "",
+      fetchedAt: new Date(),
+    });
+    repo.saveMatchResult("p1", { score: 90, matchedSkills: [], missingSkills: [] });
+
+    run("add", "Acme", "Eng", "--posting", "p1");
+    expect(repo.listScoredPostings(0, { onlyApplied: true })).toHaveLength(1);
+    expect(repo.applications.list()).toHaveLength(1);
+
+    expect(run("remove", "acme")).toBe(0);
+    expect(repo.applications.list()).toHaveLength(0);
+    expect(repo.listScoredPostings(0, { onlyApplied: true })).toHaveLength(0);
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+  });
+
+  it("imports via the injected jt importer", () => {
+    expect(run("import")).toBe(0);
+    expect(run("import", "/x/jt.db")).toBe(0);
+    expect(importCalls).toEqual([undefined, "/x/jt.db"]);
+    expect(out.join("\n")).toContain("Imported 2 application(s) and 5 note(s) from /x/jt.db");
+    expect(out.join("\n")).toContain("Skipped 1 already present");
+  });
+
+  it("rethrows unexpected errors instead of masking them", () => {
+    const boom = deps({
+      importJt: () => {
+        throw new TypeError("bug");
+      },
+    });
+    expect(() => runAppCommand({ sub: "import" }, boom)).toThrow("bug");
+  });
+});

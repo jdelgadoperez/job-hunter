@@ -1,6 +1,7 @@
 import { type ParseArgsConfig, parseArgs } from "node:util";
 import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import { COMMAND_NAMES } from "./help";
+import { type AppCommand, AppParseError, parseAppCommand } from "./parse-app";
 import { isServiceAction, SERVICE_ACTIONS, type ServiceAction } from "./service";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
@@ -35,6 +36,7 @@ export type Command =
       json: boolean;
     }
   | { kind: "config-remote"; on: boolean }
+  | { kind: "app"; app: AppCommand }
   | { kind: "service"; action: ServiceAction }
   | { kind: "version" }
   | { kind: "help"; error?: string; topic?: string };
@@ -90,6 +92,19 @@ export function parseCli(argv: string[]): Command {
   // Help/version win wherever they appear, so `job-hunter scan --help` shows scan's help rather
   // than running a scan — the behavior people expect from any CLI. The topic is the first
   // recognized command word, so both `track --help` and `help track` reach track's page.
+  // `app` takes free text (notes, roles, company names), so a bare "help"/"version" word there is
+  // content, not a request — only the flags, or `help` in the subcommand slot, mean help.
+  if (command === "app") {
+    if (argvForCommand.some((a) => a === "-h" || a === "--help") || rest[0] === "help") {
+      return { kind: "help", topic: "app" };
+    }
+    try {
+      return { kind: "app", app: parseAppCommand(rest) };
+    } catch (err) {
+      if (err instanceof AppParseError) return { kind: "help", error: err.message, topic: "app" };
+      throw err;
+    }
+  }
   if (argv.some((a) => a === "-h" || a === "--help" || a === "help")) {
     const topic = argv.find((a) => COMMAND_NAMES.has(a));
     return topic ? { kind: "help", topic } : { kind: "help" };

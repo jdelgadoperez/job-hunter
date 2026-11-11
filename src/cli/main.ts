@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { defaultJtDbPath, importJtDatabase } from "@app/applications/import-jt";
 import type { DiscoverDeps } from "@app/discovery/discover";
 import { resolvePostingFeed } from "@app/discovery/feed/resolve-feed";
 import type { ScanScope } from "@app/discovery/scan-store";
@@ -31,6 +32,7 @@ import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
 import { getVersion } from "@app/runtime/version";
 import { startServer } from "@app/server/serve";
 import { Repository } from "@app/storage/repository";
+import { runAppCommand } from "./app-commands";
 import {
   formatScorePlan,
   type Logger,
@@ -44,6 +46,7 @@ import {
 import { createDiagnostics, type Diagnostics } from "./diagnostics";
 import { renderHelp } from "./help";
 import { hasVerboseFlag, parseCli } from "./parse";
+import { appWantsJson } from "./parse-app";
 import { runServiceCommand } from "./service";
 import { onShutdown, type SignalTarget } from "./signals";
 import { style } from "./style";
@@ -257,7 +260,12 @@ export async function main(): Promise<void> {
   const command = parseCli(process.argv.slice(2));
   const log: Logger = (message) => console.log(message);
   const verbose = hasVerboseFlag(process.argv.slice(2));
-  const jsonMode = command.kind === "list" || command.kind === "score" ? command.json : false;
+  const jsonMode =
+    command.kind === "list" || command.kind === "score"
+      ? command.json
+      : command.kind === "app"
+        ? appWantsJson(command.app)
+        : false;
   const diagnostics = createDiagnostics({ verbose, json: jsonMode });
 
   if (command.kind === "help") {
@@ -344,6 +352,17 @@ export async function main(): Promise<void> {
           log,
           diagnostics,
         );
+        break;
+      case "app":
+        process.exitCode = runAppCommand(command.app, {
+          repo,
+          log,
+          diag: diagnostics.diag,
+          importJt: (path) => {
+            const source = path ?? defaultJtDbPath();
+            return { ...importJtDatabase(repo.connection, source), path: source };
+          },
+        });
         break;
       case "config-remote":
         repo.setSetting(REMOTE_ONLY_SETTING, command.on ? "true" : "false");

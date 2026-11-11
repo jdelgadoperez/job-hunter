@@ -85,6 +85,33 @@ CREATE TABLE IF NOT EXISTS companies (
   last_seen_scan INTEGER NOT NULL,
   last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Applications you have submitted (the former jt tracker). Company/role/url are copied rather than
+-- joined from postings: postings expire, and many applications never had a posting here at all.
+-- posting_id optionally links back to the match the application came from.
+CREATE TABLE IF NOT EXISTS applications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  company TEXT NOT NULL,
+  role TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'applied',
+  date_applied TEXT NOT NULL,
+  url TEXT,
+  source TEXT,
+  salary_range TEXT,
+  recruiter TEXT,
+  posting_id TEXT,
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS application_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL REFERENCES applications(id),
+  date TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 // Indexes for the hot read/scan paths. Created in `migrate()` *after* the column ALTERs, because
@@ -102,4 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_match_results_score ON match_results(score);
 CREATE INDEX IF NOT EXISTS idx_companies_id ON companies(id);
 CREATE INDEX IF NOT EXISTS idx_postings_company_id ON postings(company_id);
 CREATE INDEX IF NOT EXISTS idx_companies_last_seen_at ON companies(last_seen_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_applications_posting_id ON applications(posting_id)
+  WHERE posting_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_application_notes_app ON application_notes(application_id);
 `;
