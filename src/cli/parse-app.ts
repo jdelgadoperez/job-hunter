@@ -39,6 +39,7 @@ export type AppCommand =
   | { sub: "unarchive"; selector: string }
   | { sub: "remove"; selector: string }
   | { sub: "import"; path?: string }
+  | { sub: "export"; archived: boolean; file?: string }
   | { sub: "docs"; selector: string; json: boolean }
   | { sub: "doc"; selector: string; name: string }
   | { sub: "import-docs"; path: string; into?: string; overwrite: boolean };
@@ -56,6 +57,7 @@ export const APP_SUBCOMMANDS = [
   "unarchive",
   "remove",
   "import",
+  "export",
   "docs",
   "doc",
   "import-docs",
@@ -86,13 +88,7 @@ function checkDate(value: string | undefined): string | undefined {
   return value;
 }
 
-function checkStatus(value: string | undefined, required: boolean): ApplicationStatus | undefined {
-  if (value === undefined) {
-    if (required) {
-      throw new AppParseError(`a status is required: ${APPLICATION_STATUSES.join(" | ")}`);
-    }
-    return undefined;
-  }
+function parseStatus(value: string): ApplicationStatus {
   const lower = value.toLowerCase();
   const match = APPLICATION_STATUSES.find((s) => s === lower);
   if (!match) {
@@ -152,7 +148,7 @@ export function parseAppCommand(rest: string[]): AppCommand {
         archived: { type: "boolean" },
         json: { type: "boolean" },
       });
-      const status = checkStatus(positionals[0], false);
+      const status = positionals[0] === undefined ? undefined : parseStatus(positionals[0]);
       return {
         sub: "list",
         ...(status ? { status } : {}),
@@ -175,7 +171,9 @@ export function parseAppCommand(rest: string[]): AppCommand {
     case "status": {
       const { values, positionals } = parse(args, { date: { type: "string" } });
       const selector = need(str(positionals[0]), "app status requires <company|id> <status>");
-      const status = checkStatus(positionals[1], true) as ApplicationStatus;
+      const status = parseStatus(
+        need(positionals[1], `a status is required: ${APPLICATION_STATUSES.join(" | ")}`),
+      );
       const date = checkDate(str(values.date));
       return { sub: "status", selector, status, ...(date ? { date } : {}) };
     }
@@ -251,6 +249,11 @@ export function parseAppCommand(rest: string[]): AppCommand {
       const { positionals } = parse(args, {});
       const path = str(positionals[0]);
       return { sub: "import", ...(path ? { path } : {}) };
+    }
+    case "export": {
+      const { values } = parse(args, { archived: { type: "boolean" }, file: { type: "string" } });
+      const file = str(values.file);
+      return { sub: "export", archived: Boolean(values.archived), ...(file ? { file } : {}) };
     }
     case "docs": {
       const { values, positionals } = parse(args, { json: { type: "boolean" } });

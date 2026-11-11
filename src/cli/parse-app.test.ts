@@ -118,6 +118,15 @@ describe("parseAppCommand", () => {
     expect(parseAppCommand(["import", "/x/jt.db"])).toEqual({ sub: "import", path: "/x/jt.db" });
   });
 
+  it("parses export", () => {
+    expect(parseAppCommand(["export"])).toEqual({ sub: "export", archived: false });
+    expect(parseAppCommand(["export", "--archived", "--file", "out.md"])).toEqual({
+      sub: "export",
+      archived: true,
+      file: "out.md",
+    });
+  });
+
   it("parses docs, doc, and import-docs", () => {
     expect(parseAppCommand(["docs", "acme", "--json"])).toEqual({
       sub: "docs",

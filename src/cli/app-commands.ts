@@ -1,6 +1,8 @@
+import { writeFileSync } from "node:fs";
+import { applicationsToMarkdown } from "@app/applications/export-markdown";
 import { importJobHuntDocs, importWorkspace } from "@app/applications/import-docs";
 import { APPLICATION_STATUSES, type Application } from "@app/applications/model";
-import { ApplicationError } from "@app/applications/store";
+import { ApplicationError, ApplicationNotFoundError } from "@app/applications/store";
 import type { Repository } from "@app/storage/repository";
 import type { Logger } from "./commands";
 import type { AppCommand } from "./parse-app";
@@ -53,16 +55,12 @@ function resolveAny(store: Repository["applications"], selector: string): Applic
     return store.resolve(selector);
   } catch (activeError) {
     // Only a miss falls through; an ambiguous active match must stay an error, not pick an archived one.
-    if (
-      !(activeError instanceof ApplicationError) ||
-      !/^no application/.test(activeError.message)
-    ) {
-      throw activeError;
-    }
+    if (!(activeError instanceof ApplicationNotFoundError)) throw activeError;
     try {
       return store.resolve(selector, { archived: true });
-    } catch {
-      throw activeError;
+    } catch (archivedError) {
+      // Missing from both: report the active miss. Ambiguous among archived: say so.
+      throw archivedError instanceof ApplicationNotFoundError ? activeError : archivedError;
     }
   }
 }
@@ -206,6 +204,21 @@ export function runAppCommand(cmd: AppCommand, deps: AppCommandDeps): number {
           if (app.postingId) repo.clearUserAction(app.postingId);
         });
         log(style.success(`Removed ${app.company} — ${app.role}`));
+        return 0;
+      }
+      case "export": {
+        const apps = store.list({ archived: cmd.archived });
+        if (apps.length === 0) {
+          diag(style.dim("No applications to export."));
+          return 0;
+        }
+        const markdown = applicationsToMarkdown(apps, { archived: cmd.archived });
+        if (cmd.file) {
+          writeFileSync(cmd.file, markdown);
+          log(style.success(`Exported ${apps.length} application(s) to ${cmd.file}`));
+        } else {
+          log(markdown.trimEnd());
+        }
         return 0;
       }
       case "docs": {

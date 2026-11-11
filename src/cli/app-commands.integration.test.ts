@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Repository } from "@app/storage/repository";
@@ -175,6 +175,65 @@ describe("job-hunter app", () => {
   });
 });
 
+describe("job-hunter app export", () => {
+  it("prints jt-format markdown, writes a file, and handles empty sets", () => {
+    run("export");
+    expect(err.at(-1)).toContain("No applications to export");
+
+    run(
+      "add",
+      "Acme",
+      "Staff",
+      "Eng",
+      "--url",
+      "https://a",
+      "--source",
+      "Referral",
+      "--salary",
+      "200k",
+      "--recruiter",
+      "Kim",
+    );
+    run("add", "Globex", "Designer");
+    run("status", "globex", "rejected", "--date", "2026-11-12");
+    run("archive", "globex");
+
+    out = [];
+    run("export");
+    expect(out.join("\n")).toBe(
+      [
+        "# Job Applications",
+        "",
+        "> Exported from job-hunter.",
+        "",
+        "---",
+        "",
+        "## Acme | Staff Eng",
+        "",
+        "- **Status:** Applied",
+        "- **Date Applied:** 2026-11-11",
+        "- **URL:** https://a",
+        "- **Source:** Referral",
+        "- **Salary Range:** 200k",
+        "- **Recruiter:** Kim",
+        "- **Notes:**",
+        "  - [2026-11-11] Applied",
+      ].join("\n"),
+    );
+
+    const dir = mkdtempSync(join(tmpdir(), "jh-export-"));
+    const file = join(dir, "archive.md");
+    out = [];
+    run("export", "--archived", "--file", file);
+    expect(out[0]).toContain(`Exported 1 application(s) to ${file}`);
+    const written = readFileSync(file, "utf8");
+    expect(written).toContain("# Archived Applications");
+    expect(written).toContain("- **Archived:** Yes");
+    expect(written).toContain("  - [2026-11-12] Status changed from Applied to Rejected");
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("job-hunter app docs", () => {
   let dir: string;
 
@@ -255,6 +314,18 @@ describe("job-hunter app docs", () => {
     rmSync(join(dir, "docs"), { recursive: true });
     expect(run("doc", "acme", "a.pdf")).toBe(1);
     expect(err.at(-1)).toContain("missing from disk");
+  });
+
+  it("reports an ambiguous match among archived applications", () => {
+    for (const role of ["One", "Two"]) {
+      run("add", "Initech", role);
+    }
+    for (const id of ["1", "2"]) {
+      run("status", id, "ghosted");
+      run("archive", id);
+    }
+    expect(run("docs", "initech")).toBe(1);
+    expect(err.at(-1)).toContain("use the id");
   });
 
   it("keeps an ambiguous active match an error instead of falling back to archived", () => {

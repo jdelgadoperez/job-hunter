@@ -118,6 +118,10 @@ export const COMMANDS: CommandHelp[] = [
       ["archive [company|id]", "Archive a closed application; with no argument, list candidates."],
       ["unarchive <company|id>", "Restore an archived application."],
       ["remove <company|id>", "Delete an application and its notes."],
+      [
+        "export [--archived] [--file out.md]",
+        "Export applications (with notes) as markdown, in the old jt export format.",
+      ],
       ["docs <company|id> [--json]", "List an application's documents (notes and files)."],
       ["doc <company|id> <name>", "Print a note's markdown (e.g. to pipe into another tool)."],
       [

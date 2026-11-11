@@ -100,6 +100,7 @@ npm run cli -- app status acme interviewed # move it along (logged as a dated no
 npm run cli -- app note acme "Onsite loop Nov 18"
 npm run cli -- app list                   # active applications (app list interviewed, --archived, --json)
 npm run cli -- app import                 # one-time import from the old jt tracker (~/.jobtrack/jobtrack.db)
+npm run cli -- app export --file apps.md  # markdown export, same format as the old `jt export` (--archived for archived)
 npm run cli -- app import-docs ~/code/job-hunt   # attach each company prep folder to its application
 npm run cli -- app docs solace            # list an application's documents
 npm run cli -- app doc solace prep.md     # print a note (pipe it anywhere)
