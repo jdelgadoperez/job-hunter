@@ -376,7 +376,7 @@ describe("companies", () => {
 describe("GET /api/companies/needs-attention", () => {
   it("returns the needs-attention list", async () => {
     // listNeedsAttention's default threshold is 5 consecutive failures, so record 5 scans' worth
-    // (mirrors the loop pattern used in src/cli/main.test.ts for the same threshold).
+    // (mirrors the loop pattern used in src/cli/main.integration.test.ts for the same threshold).
     for (let scanId = 1; scanId <= 5; scanId += 1) {
       repo.recordScanFailures(
         scanId,
