@@ -236,7 +236,7 @@ export function useApplicationStats() {
 }
 
 /** Every application write refreshes applications (+ stats) and matches, since the two are linked. */
-function useApplicationMutation<V>(fn: (vars: V) => Promise<unknown>) {
+function useApplicationMutation<V, R>(fn: (vars: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
@@ -290,15 +290,14 @@ export function useDocuments(
   });
 }
 
-export function useNote(applicationId: number, documentId: number | null) {
+export function useNote(applicationId: number, documentId: number) {
   return useQuery({
     queryKey: ["documents", applicationId, documentId],
-    queryFn: () => api.getNote(applicationId, documentId as number),
-    enabled: documentId !== null,
+    queryFn: () => api.getNote(applicationId, documentId),
   });
 }
 
-function useDocumentMutation<V>(applicationId: number, fn: (vars: V) => Promise<unknown>) {
+function useDocumentMutation<V, R>(applicationId: number, fn: (vars: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,

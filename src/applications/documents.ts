@@ -84,6 +84,13 @@ export function cleanDocumentName(raw: string): string {
   return parts.join("/");
 }
 
+/** Read-back of a row this store just wrote; a miss means the write silently failed. */
+function justWritten<T>(value: T | undefined, name: string): T {
+  /* v8 ignore next -- unreachable unless SQLite drops a committed write */
+  if (value === undefined) throw new ApplicationError(`failed to save ${name}`);
+  return value;
+}
+
 export class DocumentStore {
   /** @param docsDir Where non-note files are copied; undefined disables file documents. */
   constructor(
@@ -138,9 +145,7 @@ export class DocumentStore {
       )
       .run(applicationId, clean, content, mimeFor(clean), Buffer.byteLength(content));
     const saved = this.getByName(applicationId, clean);
-    /* v8 ignore next -- just inserted */
-    if (!saved) throw new ApplicationError(`failed to save ${clean}`);
-    return this.getNote(applicationId, saved.id) as Note;
+    return justWritten(saved && this.getNote(applicationId, saved.id), clean);
   }
 
   /** Update an existing note's content by id. */
@@ -172,7 +177,7 @@ export class DocumentStore {
            size = excluded.size, updated_at = datetime('now')`,
       )
       .run(applicationId, clean, target, mimeFor(clean), size);
-    return this.getByName(applicationId, clean) as DocumentMeta;
+    return justWritten(this.getByName(applicationId, clean), clean);
   }
 
   /**

@@ -433,16 +433,17 @@ function registerApplicationRoutes(app: Hono, repo: ServerDeps["repo"]): void {
   };
 
   app.get("/api/applications", (c) => {
-    const status = c.req.query("status");
-    if (status !== undefined && !isApplicationStatus(status)) {
-      return c.json({ error: `unknown status: ${status}` }, 400);
+    const rawStatus = c.req.query("status");
+    if (rawStatus !== undefined && !isApplicationStatus(rawStatus)) {
+      return c.json({ error: `unknown status: ${rawStatus}` }, 400);
     }
+    const status: ApplicationStatus | undefined = rawStatus;
     const search = c.req.query("search")?.trim();
     if (search) return c.json(store.search(search));
     return c.json(
       store.list({
         archived: c.req.query("archived") === "true",
-        ...(status ? { status: status as ApplicationStatus } : {}),
+        ...(status ? { status } : {}),
       }),
     );
   });

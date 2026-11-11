@@ -122,10 +122,7 @@ function NewNoteForm({
     if (!trimmed) return;
     const fileName = /\.(md|markdown|txt)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
     const title = fileName.replace(/\.(md|markdown|txt)$/i, "");
-    save.mutate(
-      { name: fileName, content: `# ${title}\n` },
-      { onSuccess: (doc) => onCreated(doc as DocumentMeta) },
-    );
+    save.mutate({ name: fileName, content: `# ${title}\n` }, { onSuccess: onCreated });
   }
 
   return (
