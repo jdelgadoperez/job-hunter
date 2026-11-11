@@ -1,13 +1,14 @@
 import { useSyncExternalStore } from "react";
 import { useVersion } from "./hooks";
 import { useTheme } from "./theme";
+import { Applications } from "./views/Applications";
 import { Companies } from "./views/Companies";
 import { Home } from "./views/Home";
 import { Matches } from "./views/Matches";
 import { Settings } from "./views/Settings";
 import { Skills } from "./views/Skills";
 
-const TABS = ["Home", "Matches", "Skills", "Companies", "Settings"] as const;
+const TABS = ["Home", "Matches", "Applications", "Skills", "Companies", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Map the URL hash (e.g. `#companies`) to a tab, falling back to Home. Case-insensitive. */
@@ -96,6 +97,9 @@ export function App() {
         </div>
         <div hidden={tab !== "Matches"}>
           <Matches />
+        </div>
+        <div hidden={tab !== "Applications"}>
+          <Applications />
         </div>
         <div hidden={tab !== "Skills"}>
           <Skills />

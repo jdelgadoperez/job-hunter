@@ -95,6 +95,11 @@ npm run cli -- profile ./resume.pdf       # (re)build your skill profile
 npm run cli -- track add https://boards.greenhouse.io/acme --name "Acme"
 npm run cli -- track list
 npm run cli -- track remove https://boards.greenhouse.io/acme
+npm run cli -- app add Acme "Staff Engineer" --url https://acme.example/jobs/1   # record an application
+npm run cli -- app status acme interviewed # move it along (logged as a dated note)
+npm run cli -- app note acme "Onsite loop Nov 18"
+npm run cli -- app list                   # active applications (app list interviewed, --archived, --json)
+npm run cli -- app import                 # one-time import from the old jt tracker (~/.jobtrack/jobtrack.db)
 npm run cli -- config remote on           # prefer remote: rank non-remote roles lower (persisted; --remote/--no-remote overrides per run)
 npm run cli -- --help                      # full command reference (also `<command> --help`)
 npm run cli -- --version
@@ -108,6 +113,20 @@ prints a JSON array of matches, `score` a JSON summary object — written to std
 progress and warnings go to stderr), so `list --json | jq` works cleanly. Pass `--verbose` (or set
 `DEBUG=job-hunter*`) on any command for extra diagnostic logging on stderr; it never pollutes stdout,
 so `list --json --verbose 2>/dev/null` still yields clean JSON.
+
+**Application tracking.** `app` tracks the jobs you've actually applied to (it replaces the old
+standalone `jt` tracker). Each application has a status (`applied`, `screened`, `interviewed`,
+`offered`, `rejected`, `ghosted`, `withdrawn`) and a dated note history. Every status change is
+logged as a note. Marking a match **applied** (in the dashboard or with `app add --posting <id>`)
+opens an application for it automatically. Un-marking deletes that application only if you haven't
+touched it yet; otherwise it's kept and just unlinked. Applications copy company, role and URL
+rather than depending on the posting, so they outlive expired postings and work for roles you found
+elsewhere. Wherever a command takes `<company|id>`, it matches a company name (case-insensitive,
+partial) or an id; if the name is ambiguous, it lists the ids to use. Only closed applications
+(rejected / ghosted / withdrawn) can be archived. Coming from `jt`? Run `app import` once to copy
+your history; it reads `~/.jobtrack/jobtrack.db` (or `$JOBTRACK_DB`, or a path you pass), never
+modifies that database, and is safe to re-run. Applications are local-only and are never sent to the
+hosted feed.
 
 **Stopping cleanly.** Press `Ctrl+C` at any time to stop. `serve` shuts the dashboard down gracefully
 (closes the listener and the background refresh, exits 0); interrupting a `scan` closes the headless
@@ -145,7 +164,7 @@ how many of the shown results fall into that bucket.
 
 `job-hunter serve` (or `npm run serve`) starts a local [Hono](https://hono.dev) server — by
 default on <http://localhost:48373>, bound to loopback so it isn't reachable from other machines —
-and opens a React dashboard in your browser. It has five tabs:
+and opens a React dashboard in your browser. It has six tabs:
 
 - **Home** — upload your resume, run a scan (incremental by default; **Rescan all** to re-visit
   everything), and deep-score the best matches with Claude — both with live progress.
@@ -156,6 +175,9 @@ and opens a React dashboard in your browser. It has five tabs:
   filters on a large database stays responsive instead of rendering everything at once.
   Saved and applied are mutually exclusive (one action per role), so marking a **saved**
   role **applied** asks you to confirm first rather than silently dropping the save.
+- **Applications** — the roles you've applied to: change status from a dropdown, filter by status,
+  search (notes included), expand a row for its note history and add notes, archive closed ones,
+  or add an application you found elsewhere. Marking a match applied puts it here automatically.
 - **Skills** — edit the skills on your profile and the skill dictionary the resume parser recognizes.
 - **Companies** — add or remove the companies you track by careers-page URL.
 - **Settings** — your Anthropic API key, scorer model, home country, scan-freshness window, and
@@ -222,7 +244,7 @@ Override the location with the `JOB_HUNTER_HOME` environment variable.
 **Shipped:** the web dashboard (resume upload, one-click background scans and in-dashboard
 deep-scoring — both with live progress — ranked match browsing with save/dismiss, in-app
 skill/dictionary and company editing, and light/dark themes) and a full CLI covering the same
-pipeline (`scan`, `score`, `config`, `list`, `profile`, `track`, with colored output and per-command
+pipeline (`scan`, `score`, `config`, `list`, `profile`, `track`, `app`, with colored output and per-command
 help) — plus incremental scans with directory diffing and posting expiry, per-posting liveness
 re-checks, and smooth in-place updates. Scanning is split into a free `scan` and a budget-aware
 `score` (offline-score gate → batch Claude triage → concurrent deep score). Discovery fans out over

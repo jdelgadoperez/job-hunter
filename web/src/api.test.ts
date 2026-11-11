@@ -241,3 +241,43 @@ describe("api response validation", () => {
     await expect(api.retryFailedScan()).resolves.toEqual(status);
   });
 });
+
+describe("applications API contract", () => {
+  const application = {
+    id: 1,
+    company: "Acme",
+    role: "Engineer",
+    status: "screened",
+    dateApplied: "2026-11-01",
+    url: null,
+    source: null,
+    salaryRange: null,
+    recruiter: null,
+    postingId: "p1",
+    archived: false,
+    createdAt: "2026-11-01 00:00:00",
+    updatedAt: "2026-11-02 00:00:00",
+    notes: [{ id: 1, applicationId: 1, date: "2026-11-01", content: "Applied" }],
+  };
+
+  it("parses applications and stats", async () => {
+    mockFetchOnce([application]);
+    await expect(api.getApplications({ status: "screened" })).resolves.toEqual([application]);
+    mockFetchOnce({ active: { screened: 1 }, archived: {} });
+    await expect(api.getApplicationStats()).resolves.toEqual({
+      active: { screened: 1 },
+      archived: {},
+    });
+  });
+
+  it("rejects an unknown status (server/client drift)", async () => {
+    mockFetchOnce([{ ...application, status: "hired" }]);
+    await expect(api.getApplications()).rejects.toThrow();
+  });
+
+  it("rejects an application missing its notes", async () => {
+    const { notes: _notes, ...withoutNotes } = application;
+    mockFetchOnce(withoutNotes);
+    await expect(api.updateApplication(1, { role: "Lead" })).rejects.toThrow();
+  });
+});
