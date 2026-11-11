@@ -83,7 +83,7 @@ describe("loadMigrations", () => {
   test("reads the committed migrations, version-sorted, matching the ledger the DB expects", () => {
     const migrations = loadMigrations();
     const versions = migrations.map((m) => m.version);
-    expect(versions).toEqual(["20260627222515", "20260706023908"]);
+    expect(versions).toEqual(["20260627222515", "20260706023908", "20261107150000"]);
     // Each carries real SQL (the applier runs `sql` verbatim).
     expect(migrations.every((m) => m.sql.length > 0)).toBe(true);
   });
