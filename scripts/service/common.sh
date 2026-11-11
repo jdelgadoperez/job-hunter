@@ -23,7 +23,9 @@ require_node() {
 
 repo_dir() {
   # This file lives at <repo>/scripts/service/common.sh
-  cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd
+  # An exported CDPATH makes `cd` echo the resolved directory, which would leak into the captured
+  # path — clear it and silence `cd` so only `pwd` reaches stdout.
+  CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null && pwd
 }
 
 data_dir() {
