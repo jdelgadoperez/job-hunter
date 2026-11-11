@@ -146,6 +146,9 @@ export async function runScanCommand(
     for (const warning of result.warnings) {
       diagnostics.diag(style.warn(`  ! [${warning.source}] ${warning.message}`));
     }
+    // Last line on screen, and only after a scan that ran to completion. Unstyled so the bare
+    // URL stays clean for terminal link detection.
+    diagnostics.diag("If this helped: https://ko-fi.com/jessdp");
   } finally {
     disposeShutdown();
   }

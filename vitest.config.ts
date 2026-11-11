@@ -4,7 +4,30 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // Two suites over the same offline, fixture-fed setup (`npm run test:unit` /
+    // `npm run test:integration`; plain `npm test` and the coverage gate run both):
+    // - unit: one module in isolation, collaborators faked.
+    // - integration (`*.integration.test.ts`): several real components wired together — a real
+    //   SQLite database behind the Repository, the Hono app driven over HTTP, the CLI dispatch, or
+    //   the full discover → score → store scan pipeline. Still no live network or browser; those
+    //   are the opt-in `smoke:*` scripts.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["src/**/*.test.ts"],
+          exclude: ["src/**/*.integration.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "integration",
+          include: ["src/**/*.integration.test.ts"],
+        },
+      },
+    ],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

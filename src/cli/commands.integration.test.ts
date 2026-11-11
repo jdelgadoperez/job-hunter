@@ -1,0 +1,841 @@
+import { makeCompanyId } from "@app/discovery/company-id";
+import type { PageRenderer } from "@app/discovery/connectors/browser";
+import type { DiscoverDeps } from "@app/discovery/discover";
+import { FakePostingFeed } from "@app/discovery/feed/posting-feed";
+import { makePostingId } from "@app/discovery/posting-id";
+import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
+import { AirtableSource } from "@app/discovery/sources/airtable-source";
+import type { JobPosting, MatchResult, Scorer, SkillProfile } from "@app/domain/types";
+import { HeuristicScorer } from "@app/matching/heuristic-scorer";
+import type { Fetcher, FetchResponse } from "@app/net/fetcher";
+import { Repository } from "@app/storage/repository";
+import { describe, expect, it } from "vitest";
+import {
+  listMatches,
+  runProfile,
+  runScan,
+  runSourcing,
+  trackAdd,
+  trackList,
+  trackRemove,
+} from "./commands";
+
+function newRepo(): Repository {
+  return new Repository(":memory:");
+}
+
+function capture(): { log: (m: string) => void; lines: string[] } {
+  const lines: string[] = [];
+  return { log: (m) => lines.push(m), lines };
+}
+
+const profile: SkillProfile = {
+  skills: ["typescript", "react"],
+  roleKeywords: ["engineer"],
+  categories: [],
+};
+
+class NullRenderer implements PageRenderer {
+  async render(): Promise<string> {
+    return "";
+  }
+}
+
+class RouteFetcher implements Fetcher {
+  constructor(private readonly routes: Record<string, string>) {}
+  async fetch(url: string): Promise<FetchResponse> {
+    const body = this.routes[url];
+    return body === undefined
+      ? { statusCode: 404, finalUrl: url, bodyText: "" }
+      : { statusCode: 200, finalUrl: url, bodyText: body };
+  }
+}
+
+function airtableData(companies: { name: string; url: string }[]): unknown {
+  return {
+    data: {
+      table: {
+        columns: [
+          { id: "c1", name: "™" },
+          { id: "c2", name: "Jobs Page" },
+        ],
+        rows: companies.map((c, i) => ({
+          id: `rec${i}`,
+          cellValuesByColumnId: { c1: c.name, c2: c.url },
+        })),
+      },
+    },
+  };
+}
+
+function makePosting(overrides: Partial<JobPosting> & { id: string }): JobPosting {
+  return {
+    company: "FeedCo",
+    title: "Remote Engineer",
+    url: `https://example.test/${overrides.id}`,
+    source: "feed",
+    description: "from the shared feed",
+    fetchedAt: new Date("2026-06-26T00:00:00Z"),
+    ...overrides,
+  };
+}
+
+/** A `DiscoverDeps` that crawls no directory and no tracked companies — used when a test only cares
+ * about the feed side of `sourceFromFeedAndTracked`. */
+function fakeDiscoverDeps(_opts: { postings: JobPosting[] } = { postings: [] }): DiscoverDeps {
+  return {
+    fetcher: new RouteFetcher({}),
+    renderer: new NullRenderer(),
+    sharedViewReader: new FakeSharedViewReader(airtableData([])),
+    shareUrl: "https://airtable.com/appX/shrX/tblX",
+    delayMs: 0,
+    settings: { getSetting: () => undefined },
+    sources: [],
+  };
+}
+
+/** Seed `careersUrl` past the needs-attention threshold (5x `recordScanFailures`). */
+function seedNeedsAttention(repo: Repository, careersUrl: string, company = "Boom"): void {
+  for (let scanId = 1; scanId <= 5; scanId++) {
+    repo.recordScanFailures(
+      scanId,
+      [{ careersUrl, company, message: "prior failure" }],
+      [careersUrl],
+    );
+  }
+}
+
+describe("track commands", () => {
+  it("adds, lists, and removes", () => {
+    const repo = newRepo();
+    const out = capture();
+    trackAdd(repo, "https://acme.com/careers", "Acme", out.log);
+    trackList(repo, out.log);
+    trackRemove(repo, "https://acme.com/careers", out.log);
+    trackList(repo, out.log);
+    expect(out.lines[0]).toContain("Tracking Acme");
+    expect(out.lines[1]).toContain("https://acme.com/careers");
+    expect(out.lines[2]).toContain("Removed");
+    expect(out.lines[3]).toContain("No tracked companies");
+    repo.close();
+  });
+});
+
+describe("runProfile", () => {
+  it("builds and saves a profile from resume text", async () => {
+    const repo = newRepo();
+    const out = capture();
+    const built = await runProfile(
+      { repo, readResume: async () => "Experienced with TypeScript and React." },
+      "/tmp/cv.txt",
+      out.log,
+    );
+    expect(Array.isArray(built.skills)).toBe(true);
+    expect(repo.getLatestProfile()).toEqual(built);
+    expect(out.lines[0]).toContain("Saved profile");
+    repo.close();
+  });
+});
+
+describe("runScan + listMatches", () => {
+  it("discovers, scores, stores, and lists matches", async () => {
+    const repo = newRepo();
+    const out = capture();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "We need TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    const result = await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      out.log,
+    );
+
+    expect(result.count).toBe(1);
+    expect(out.lines[0]).toContain("Scanned and scored 1");
+
+    const listOut = capture();
+    listMatches(repo, 0, listOut.log);
+    expect(listOut.lines[0]).toContain("Senior TypeScript Engineer");
+    expect(listOut.lines[0]).toContain("boards.greenhouse.io/acme");
+    repo.close();
+  });
+
+  it("scores every posting concurrently, within a bounded cap", async () => {
+    const repo = newRepo();
+    // A scorer that records how many calls are in flight at once.
+    class ProbeScorer implements Scorer {
+      inFlight = 0;
+      maxInFlight = 0;
+      scored: string[] = [];
+      async score(_profile: SkillProfile, posting: JobPosting): Promise<MatchResult> {
+        this.inFlight += 1;
+        this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
+        await new Promise((r) => setTimeout(r, 2));
+        this.inFlight -= 1;
+        this.scored.push(posting.id);
+        return { score: 60, matchedSkills: [], missingSkills: [] };
+      }
+    }
+    const scorer = new ProbeScorer();
+    const jobs = Array.from({ length: 8 }, (_, i) => ({
+      title: `Engineer ${i}`,
+      absolute_url: `https://boards.greenhouse.io/acme/jobs/${i}`,
+      content: "TypeScript and React.",
+    }));
+
+    const result = await runScan(
+      {
+        repo,
+        profile,
+        scorer,
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": JSON.stringify({
+              jobs,
+            }),
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    expect(result.count).toBe(8);
+    expect(scorer.scored).toHaveLength(8); // every posting scored
+    expect(repo.listScoredPostings(0)).toHaveLength(8); // and stored
+    expect(scorer.maxInFlight).toBeGreaterThan(1); // actually concurrent
+    expect(scorer.maxInFlight).toBeLessThanOrEqual(4); // but capped
+    repo.close();
+  });
+
+  it("degrades a scorer failure to a warning instead of aborting the scan", async () => {
+    const repo = newRepo();
+    const out = capture();
+    class ThrowingScorer implements Scorer {
+      async score(): Promise<MatchResult> {
+        throw new Error("LLM exploded");
+      }
+    }
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "We need TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    const result = await runScan(
+      {
+        repo,
+        profile,
+        scorer: new ThrowingScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      out.log,
+    );
+
+    // Sourcing still committed even though every posting failed to score.
+    expect(result.count).toBe(1);
+    expect(out.lines.some((line) => line.includes("Failed to score posting"))).toBe(true);
+    expect(out.lines.some((line) => line.includes("LLM exploded"))).toBe(true);
+    // Nothing got persisted for the failed posting, since saveMatchResult never ran.
+    expect(repo.listScoredPostings(0)).toHaveLength(0);
+    repo.close();
+  });
+
+  it("reports an empty list before any scan", () => {
+    const repo = newRepo();
+    const out = capture();
+    listMatches(repo, 0, out.log);
+    expect(out.lines[0]).toContain("No matches yet");
+    repo.close();
+  });
+
+  it("enriches a posting with country when the location is parseable", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Software Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/2",
+          content: "TypeScript and React.",
+          location: { name: "San Francisco, CA" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const [match] = repo.listScoredPostings(0);
+    expect(match?.posting.country).toBe("US");
+    repo.close();
+  });
+
+  it("omits country when the location is unparseable", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Software Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/3",
+          content: "TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const [match] = repo.listScoredPostings(0);
+    expect(match?.posting.country).toBeUndefined();
+    repo.close();
+  });
+
+  it("does not overwrite a country a feed posting already carries", async () => {
+    const repo = newRepo();
+    // A feed posting that arrives with an authoritative country AND a location string that would
+    // parse to a different country. The scan must keep the feed's value, not re-derive from location.
+    const feedPosting: JobPosting = {
+      id: "feed-1",
+      company: "Acme",
+      title: "Software Engineer",
+      url: "https://acme.example/jobs/1",
+      source: "feed",
+      description: "TypeScript and React.",
+      location: "Berlin, Germany",
+      country: "US",
+      fetchedAt: new Date(),
+    };
+    const feed = { fetch: async () => ({ postings: [feedPosting], warnings: [] }) };
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        feed,
+        discoverDeps: {
+          fetcher: new RouteFetcher({}),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(airtableData([])),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const match = repo.listScoredPostings(0).find((s) => s.posting.id === "feed-1");
+    // Feed's authoritative "US" is preserved, NOT overwritten by parseCountry("Berlin, Germany").
+    expect(match?.posting.country).toBe("US");
+    repo.close();
+  });
+
+  it("expires a posting via liveness re-check once it's gone from its board", async () => {
+    const repo = newRepo();
+    const ghUrl = "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true";
+    const withJob = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "TypeScript and React.",
+        },
+      ],
+    });
+    const empty = JSON.stringify({ jobs: [] });
+
+    const deps = (companies: { name: string; url: string }[], routes: Record<string, string>) => ({
+      repo,
+      profile,
+      scorer: new HeuristicScorer(),
+      discoverDeps: {
+        fetcher: new RouteFetcher(routes),
+        renderer: new NullRenderer(),
+        sharedViewReader: new FakeSharedViewReader(airtableData(companies)),
+        shareUrl: "https://airtable.com/appX/shrX/tblX",
+        delayMs: 0,
+        settings: { getSetting: () => undefined },
+        sources: [new AirtableSource()],
+      },
+    });
+
+    // Scan 1: Acme is listed and its board has the job.
+    await runScan(
+      deps([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }], { [ghUrl]: withJob }),
+      capture().log,
+    );
+    expect(repo.listScoredPostings(0)).toHaveLength(1);
+
+    // Scan 2: Acme drops from the directory (so it isn't scanned) and its board now lists nothing.
+    // The unseen posting is re-checked against its board, found gone, and expired immediately —
+    // before the two-consecutive-miss heuristic would have caught it.
+    const result = await runScan(deps([], { [ghUrl]: empty }), capture().log);
+    expect(result.expired).toBe(1);
+    expect(repo.listScoredPostings(0)).toHaveLength(0);
+    expect(repo.listScoredPostings(0, { includeExpired: true })).toHaveLength(1);
+    repo.close();
+  });
+
+  it("records per-company failures for later retry, and excludes known-bad companies from the retry pass", async () => {
+    const repo = newRepo();
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") {
+          renderCalls += 1;
+          throw new Error("render crashed");
+        }
+        return "";
+      },
+    };
+
+    // Seed a company already at the retry-skip threshold from a prior run.
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "prior failure" }],
+        ["https://boom.com/careers"],
+      );
+    }
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({}),
+          renderer,
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    // Already known-bad (>=5 consecutive failures): attempted once (main pass), retry pass skipped.
+    expect(renderCalls).toBe(1);
+    // Still in the needs-attention list (this scan's failure is recorded, count keeps climbing).
+    const attention = repo.listNeedsAttention(5);
+    expect(attention).toHaveLength(1);
+    expect(attention[0]?.consecutiveFailures).toBe(6);
+    repo.close();
+  });
+
+  it("does not skip-list companies on a retry-scope scan, so a known-bad company still gets its retry pass", async () => {
+    const repo = newRepo();
+    let renderCalls = 0;
+    const renderer: PageRenderer = {
+      async render(url) {
+        if (url === "https://boom.com/careers") {
+          renderCalls += 1;
+          throw new Error("render crashed");
+        }
+        return "";
+      },
+    };
+
+    // Seed a company already at the retry-skip threshold from a prior run — a full scan WOULD skip
+    // it in the in-run retry pass (see the sibling test above).
+    for (let scanId = 1; scanId <= 5; scanId++) {
+      repo.recordScanFailures(
+        scanId,
+        [{ careersUrl: "https://boom.com/careers", company: "Boom", message: "prior failure" }],
+        ["https://boom.com/careers"],
+      );
+    }
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({}),
+          renderer,
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Boom", url: "https://boom.com/careers" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+        scope: "retry",
+      },
+      capture().log,
+    );
+
+    // A retry-scope scan is exactly what should retry known-bad companies, so the skip-list handed
+    // to discovery must be empty: main pass + retry pass = 2 attempts.
+    expect(renderCalls).toBe(2);
+    repo.close();
+  });
+
+  it("clears a company's failure history once it succeeds again", async () => {
+    const repo = newRepo();
+    repo.recordScanFailures(
+      1,
+      [{ careersUrl: "https://boards.greenhouse.io/acme", company: "Acme", message: "timeout" }],
+      ["https://boards.greenhouse.io/acme"],
+    );
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": JSON.stringify({
+              jobs: [],
+            }),
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    expect(repo.listNeedsAttention(1)).toEqual([]);
+    repo.close();
+  });
+
+  it("scopes the feed to needs-attention companyIds on a retry scan", async () => {
+    const repo = newRepo();
+    const wantUrl = "https://boards.lever.co/boom";
+    const otherUrl = "https://boards.greenhouse.io/acme";
+    const feed = new FakePostingFeed({
+      postings: [
+        { ...makePosting({ id: "boom1" }), companyId: makeCompanyId(wantUrl) },
+        { ...makePosting({ id: "acme1" }), companyId: makeCompanyId(otherUrl) },
+      ],
+      warnings: [],
+    });
+    seedNeedsAttention(repo, wantUrl);
+
+    const outcome = await runSourcing({
+      repo,
+      feed,
+      discoverDeps: fakeDiscoverDeps({ postings: [] }),
+      scope: "retry",
+      companyIdFilter: new Set([makeCompanyId(wantUrl)]),
+    });
+
+    const ids = outcome.postings.map((p) => p.id);
+    expect(ids).toContain("boom1");
+    expect(ids).not.toContain("acme1");
+    repo.close();
+  });
+
+  it("does not filter feed postings on a full scan", async () => {
+    const repo = newRepo();
+    const feed = new FakePostingFeed({
+      postings: [{ ...makePosting({ id: "acme1" }), companyId: makeCompanyId("https://x/y") }],
+      warnings: [],
+    });
+
+    const outcome = await runSourcing({
+      repo,
+      feed,
+      discoverDeps: fakeDiscoverDeps({ postings: [] }),
+    });
+
+    expect(outcome.postings.map((p) => p.id)).toContain("acme1");
+    repo.close();
+  });
+
+  it("does not drop a feed posting with no companyId on a full scan", async () => {
+    const repo = newRepo();
+    const feed = new FakePostingFeed({
+      postings: [makePosting({ id: "no-company-id" })],
+      warnings: [],
+    });
+
+    const outcome = await runSourcing({
+      repo,
+      feed,
+      discoverDeps: fakeDiscoverDeps({ postings: [] }),
+    });
+
+    expect(outcome.postings.map((p) => p.id)).toContain("no-company-id");
+    repo.close();
+  });
+
+  it("incremental scope skips fresh companies, records kind=incremental, and does not expire", async () => {
+    const repo = newRepo();
+    const freshUrl = "https://boards.greenhouse.io/fresh";
+    const staleUrl = "https://boards.greenhouse.io/stale";
+    const ghJobs = (slug: string) =>
+      JSON.stringify({
+        jobs: [
+          {
+            title: "Engineer",
+            absolute_url: `https://boards.greenhouse.io/${slug}/jobs/1`,
+            content: "TypeScript and React.",
+          },
+        ],
+      });
+    const routes = {
+      "https://boards-api.greenhouse.io/v1/boards/fresh/jobs?content=true": ghJobs("fresh"),
+      "https://boards-api.greenhouse.io/v1/boards/stale/jobs?content=true": ghJobs("stale"),
+    };
+    const discoverDepsFor = (directory: { name: string; url: string }[]): DiscoverDeps => ({
+      fetcher: new RouteFetcher(routes),
+      renderer: new NullRenderer(),
+      sharedViewReader: new FakeSharedViewReader(airtableData(directory)),
+      shareUrl: "https://airtable.com/appX/shrX/tblX",
+      delayMs: 0,
+      settings: { getSetting: () => undefined },
+      sources: [new AirtableSource()],
+    });
+
+    // Prior full scan crawls ONLY "Fresh Co", stamping its `last_seen_at` — this is what makes it
+    // fresh for the incremental pass below. "Stale Co" was never crawled, so it isn't fresh.
+    await runSourcing({
+      repo,
+      discoverDeps: discoverDepsFor([{ name: "Fresh Co", url: freshUrl }]),
+      onProgress: () => {},
+    });
+
+    // Spy on the two ScanStore calls the incremental gate governs: which scope opens the scan, and
+    // whether stale-posting expiry runs (it must not under incremental).
+    const startScanKinds: (string | undefined)[] = [];
+    const expireCalls: number[] = [];
+    const spyRepo = new Proxy(repo, {
+      get(target, prop, receiver) {
+        if (prop === "startScan") {
+          return (kind?: string) => {
+            startScanKinds.push(kind);
+            return target.startScan(kind as never);
+          };
+        }
+        if (prop === "expireStalePostings") {
+          return (scanId: number, staleAfter?: number) => {
+            expireCalls.push(scanId);
+            return target.expireStalePostings(scanId, staleAfter);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const result = await runSourcing({
+      repo: spyRepo,
+      discoverDeps: discoverDepsFor([
+        { name: "Fresh Co", url: freshUrl },
+        { name: "Stale Co", url: staleUrl },
+      ]),
+      scope: "incremental",
+      freshnessHours: 24,
+      onProgress: () => {},
+    });
+
+    // (a) the scan opened as incremental
+    expect(startScanKinds).toEqual(["incremental"]);
+    // (b) the fresh company was skipped — only the stale one was crawled
+    const crawledUrls = result.companies.map((c) => c.careersUrl);
+    expect(crawledUrls).not.toContain(freshUrl);
+    expect(crawledUrls).toContain(staleUrl);
+    // (c) no expiry under incremental — skipped companies keep their postings
+    expect(expireCalls).toEqual([]);
+    expect(result.expired).toBe(0);
+    // (d) DB-outcome check: the mechanism assertions above prove expiry wasn't *called*; this proves
+    // Fresh Co's posting (saved by the earlier full scan, never re-crawled here) is actually still
+    // present and unexpired in the DB — `listLivePostingsNotSeen` excludes expired rows and this scan
+    // never marked Fresh Co "seen", so the posting only survives here if the invariant truly held.
+    const freshPostingId = makePostingId({
+      company: "fresh",
+      title: "Engineer",
+      url: "https://boards.greenhouse.io/fresh/jobs/1",
+    });
+    const stillLive = repo
+      .listLivePostingsNotSeen(result.scanId)
+      .some((p) => p.id === freshPostingId);
+    expect(stillLive).toBe(true);
+    repo.close();
+  });
+
+  it("clears a feed-recovered company from failed_leads", async () => {
+    const repo = newRepo();
+    const url = "https://boards.lever.co/boom";
+    seedNeedsAttention(repo, url);
+    const feed = new FakePostingFeed({
+      postings: [{ ...makePosting({ id: "boom1" }), companyId: makeCompanyId(url) }],
+      warnings: [],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        feed,
+        discoverDeps: fakeDiscoverDeps({ postings: [] }),
+        scope: "retry",
+      },
+      capture().log,
+    );
+
+    expect(repo.listNeedsAttention().map((c) => c.careersUrl)).not.toContain(url);
+    repo.close();
+  });
+});
+
+describe("listMatches --json", () => {
+  it("prints a JSON array of match records to the log (stdout) and nothing human", async () => {
+    const repo = newRepo();
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Senior TypeScript Engineer",
+          absolute_url: "https://boards.greenhouse.io/acme/jobs/1",
+          content: "We need TypeScript and React.",
+          location: { name: "Remote" },
+        },
+      ],
+    });
+
+    await runScan(
+      {
+        repo,
+        profile,
+        scorer: new HeuristicScorer(),
+        discoverDeps: {
+          fetcher: new RouteFetcher({
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
+          }),
+          renderer: new NullRenderer(),
+          sharedViewReader: new FakeSharedViewReader(
+            airtableData([{ name: "Acme", url: "https://boards.greenhouse.io/acme" }]),
+          ),
+          shareUrl: "https://airtable.com/appX/shrX/tblX",
+          delayMs: 0,
+          settings: { getSetting: () => undefined },
+          sources: [new AirtableSource()],
+        },
+      },
+      capture().log,
+    );
+
+    const out = capture();
+    const diagLines: string[] = [];
+    listMatches(repo, 0, out.log, { json: true, diag: (m) => diagLines.push(m) });
+
+    const parsed = JSON.parse(out.lines.join("\n"));
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0]).toHaveProperty("score");
+    expect(out.lines.join("\n")).not.toMatch(/\[\d+m/); // no ANSI escape codes on stdout
+    repo.close();
+  });
+
+  it("prints [] to stdout (not a human hint) when there are no matches in json mode", () => {
+    const repo = newRepo();
+    const out = capture();
+    listMatches(repo, 0, out.log, { json: true, diag: () => {} });
+    expect(JSON.parse(out.lines.join("\n"))).toEqual([]);
+    repo.close();
+  });
+});
