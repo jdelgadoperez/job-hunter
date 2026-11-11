@@ -21,6 +21,7 @@ Run it where a real browser is available — a container or a CI runner with the
 | `DATABASE_URL` | yes | Service-role Postgres connection (writes bypass RLS). From Supabase → Project Settings → Database. **Secret.** |
 | `JOB_HUNTER_THE_MUSE_API_KEY` | no | Enables The Muse lead source; omit to skip it. |
 | `JOB_HUNTER_SCAN_BUDGET_MS` | no | Wall-clock budget for the crawl (default 25 min). When reached, the crawl stops and the worker persists a partial feed instead of overrunning the job timeout. Keep it below the scheduler's timeout. |
+| `JOB_HUNTER_POSTING_RETENTION_DAYS` | no | Days to keep an expired posting before the worker deletes it (default 30; `0` disables). Expired rows are never served by the feed but hold most of the database's size, so pruning keeps the hosted DB under its storage quota. A pruned posting that reappears is simply re-inserted. |
 | `PLAYWRIGHT_BROWSERS_PATH` | env-specific | Where Chromium is installed (set by the base image). |
 
 The worker never needs the anon key or any per-user data.
