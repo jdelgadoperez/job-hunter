@@ -73,3 +73,25 @@ describe("PostgresScanStore.expireStalePostings", () => {
     expect(query).toContain("finished_at IS NOT NULL");
   });
 });
+
+describe("PostgresScanStore.pruneExpiredPostings", () => {
+  test("deletes only postings expired longer than the retention window", async () => {
+    const sql = fakeSql(Object.assign([], { count: 7 }));
+    const store = new PostgresScanStore(sql as never);
+    const pruned = await store.pruneExpiredPostings(30);
+    expect(pruned).toBe(7);
+    const del = sql.calls.find((c) => c.strings.join("").includes("DELETE FROM postings"));
+    const query = del?.strings.join("") ?? "";
+    // Live postings (expired_at IS NULL) must never be touched — they are the feed.
+    expect(query).toContain("expired_at IS NOT NULL");
+    expect(query).toContain("make_interval(days =>");
+    expect(del?.values).toEqual([30]);
+  });
+
+  test.each([0, -1, Number.NaN])("is a no-op when retention is %s", async (days) => {
+    const sql = fakeSql([]);
+    const store = new PostgresScanStore(sql as never);
+    expect(await store.pruneExpiredPostings(days)).toBe(0);
+    expect(sql.calls).toHaveLength(0);
+  });
+});
