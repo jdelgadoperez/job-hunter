@@ -100,6 +100,9 @@ npm run cli -- app status acme interviewed # move it along (logged as a dated no
 npm run cli -- app note acme "Onsite loop Nov 18"
 npm run cli -- app list                   # active applications (app list interviewed, --archived, --json)
 npm run cli -- app import                 # one-time import from the old jt tracker (~/.jobtrack/jobtrack.db)
+npm run cli -- app import-docs ~/code/job-hunt   # attach each company prep folder to its application
+npm run cli -- app docs solace            # list an application's documents
+npm run cli -- app doc solace prep.md     # print a note (pipe it anywhere)
 npm run cli -- config remote on           # prefer remote: rank non-remote roles lower (persisted; --remote/--no-remote overrides per run)
 npm run cli -- --help                      # full command reference (also `<command> --help`)
 npm run cli -- --version
@@ -127,6 +130,17 @@ partial) or an id; if the name is ambiguous, it lists the ids to use. Only close
 your history; it reads `~/.jobtrack/jobtrack.db` (or `$JOBTRACK_DB`, or a path you pass), never
 modifies that database, and is safe to re-run. Applications are local-only and are never sent to the
 hosted feed.
+
+**Documents.** Each application can carry documents: interview prep, job descriptions, resumes,
+diagrams. Markdown and text files are stored in the database as **notes**, which you can read
+(rendered, tables included) and edit in the dashboard. Every other file (PDF, image, slides,
+diagram) is copied under `docs/` in the data directory, and you open it from the dashboard. To move
+your job-hunt prep folders over, run `app import-docs <job-hunt folder>`. Each company folder
+(including those under `archive/`) is attached to the application with the same company name,
+archived ones included. Folders with no matching application are listed with the command to import
+them `--into` a specific one. Hidden files such as `.claude/` and `.DS_Store` are skipped. Re-running
+skips documents that are already attached; `--overwrite` replaces them. Deleting an application
+deletes its documents too.
 
 **Stopping cleanly.** Press `Ctrl+C` at any time to stop. `serve` shuts the dashboard down gracefully
 (closes the listener and the background refresh, exits 0); interrupting a `scan` closes the headless
@@ -177,7 +191,9 @@ and opens a React dashboard in your browser. It has six tabs:
   role **applied** asks you to confirm first rather than silently dropping the save.
 - **Applications** — the roles you've applied to: change status from a dropdown, filter by status,
   search (notes included), expand a row for its note history and add notes, archive closed ones,
-  or add an application you found elsewhere. Marking a match applied puts it here automatically.
+  or add an application you found elsewhere. An expanded row also lists the application's
+  documents: open a markdown note to read it rendered, edit it, or create a new one, and open
+  other files (PDFs, images) in a new tab. Marking a match applied puts it here automatically.
 - **Skills** — edit the skills on your profile and the skill dictionary the resume parser recognizes.
 - **Companies** — add or remove the companies you track by careers-page URL.
 - **Settings** — your Anthropic API key, scorer model, home country, scan-freshness window, and
@@ -236,6 +252,9 @@ A single SQLite database under your home directory:
 
 - macOS / Linux: `~/.job-hunter/jobhunter.db`
 - Windows: `%APPDATA%\job-hunter\jobhunter.db`
+
+Application documents that aren't notes (PDFs, images, diagrams) live next to it in a `docs/`
+folder. Back up both together.
 
 Override the location with the `JOB_HUNTER_HOME` environment variable.
 

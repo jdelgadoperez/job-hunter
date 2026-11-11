@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Repository } from "@app/storage/repository";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type AppCommandDeps, runAppCommand } from "./app-commands";
@@ -169,5 +172,95 @@ describe("job-hunter app", () => {
       },
     });
     expect(() => runAppCommand({ sub: "import" }, boom)).toThrow("bug");
+  });
+});
+
+describe("job-hunter app docs", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "jh-cli-docs-"));
+    repo.close();
+    repo = new Repository(":memory:", { today: () => "2026-11-11", docsDir: join(dir, "docs") });
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function write(path: string, content = "x"): void {
+    const full = join(dir, path);
+    mkdirSync(join(full, ".."), { recursive: true });
+    writeFileSync(full, content);
+  }
+
+  it("imports a job-hunt checkout, lists, and prints notes", () => {
+    run("add", "Solace", "Eng");
+    run("add", "Socket", "Eng");
+    run("status", "socket", "rejected");
+    run("archive", "socket");
+    write("hunt/solace/prep.md", "# Solace prep");
+    write("hunt/solace/shot.png", "png-bytes");
+    write("hunt/archive/socket/CLAUDE.md", "# Socket");
+    write("hunt/archive/loancrate/prep.md", "# Loancrate");
+
+    out = [];
+    expect(run("import-docs", join(dir, "hunt"))).toBe(0);
+    expect(out.join("\n")).toContain("Solace: 2 document(s)");
+    expect(out.join("\n")).toContain("Socket: 1 document(s)");
+    expect(err.join("\n")).toContain("No application matches");
+    expect(err.join("\n")).toContain("--into");
+
+    out = [];
+    run("import-docs", join(dir, "hunt"));
+    expect(out.join("\n")).toContain("(2 already there)");
+
+    out = [];
+    run("docs", "solace");
+    expect(out.join("\n")).toMatch(/note\s+prep\.md/);
+    expect(out.join("\n")).toMatch(/file\s+shot\.png 9 B/);
+    out = [];
+    run("docs", "socket", "--json"); // archived applications resolve too
+    expect(JSON.parse(out.join(""))).toMatchObject([{ name: "CLAUDE.md", kind: "note" }]);
+
+    out = [];
+    run("doc", "solace", "prep.md");
+    expect(out).toEqual(["# Solace prep"]);
+    run("doc", "solace", "shot.png");
+    expect(out.at(-1)).toContain("isn't a text note");
+    expect(run("doc", "solace", "nope.md")).toBe(1);
+    expect(err.at(-1)).toContain('Solace has no document "nope.md"');
+  });
+
+  it("imports one folder --into a chosen application", () => {
+    run("add", "LoanCrate Inc", "Eng");
+    write("hunt/archive/loancrate/prep.md", "# Loancrate");
+    out = [];
+    expect(run("import-docs", join(dir, "hunt/archive/loancrate"), "--into", "loancrate")).toBe(0);
+    expect(out[0]).toContain("LoanCrate Inc: 1 document(s)");
+    expect(run("import-docs", join(dir, "hunt"), "--into", "nobody")).toBe(1);
+  });
+
+  it("reports empty states", () => {
+    run("add", "Acme", "Eng");
+    run("docs", "acme");
+    expect(err.at(-1)).toContain("No documents for Acme");
+    mkdirSync(join(dir, "empty"));
+    run("import-docs", join(dir, "empty"));
+    expect(err.at(-1)).toContain("No company folders found");
+  });
+
+  it("reports a stored file that went missing from disk", () => {
+    run("add", "Acme", "Eng");
+    write("ws/a.pdf", "%PDF");
+    const app = repo.applications.resolve("acme");
+    repo.documents.attachFile(app.id, join(dir, "ws/a.pdf"), "a.pdf");
+    rmSync(join(dir, "docs"), { recursive: true });
+    expect(run("doc", "acme", "a.pdf")).toBe(1);
+    expect(err.at(-1)).toContain("missing from disk");
+  });
+
+  it("keeps an ambiguous active match an error instead of falling back to archived", () => {
+    run("add", "Acme", "One");
+    run("add", "Acme", "Two");
+    expect(run("docs", "acme")).toBe(1);
+    expect(err.at(-1)).toContain("use the id");
   });
 });

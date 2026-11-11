@@ -15,6 +15,7 @@ import {
   useRemoveApplication,
   useUpdateApplication,
 } from "../hooks";
+import { Documents } from "./Documents";
 
 const STATUS_TONE: Record<ApplicationStatus, string> = {
   applied: "text-muted",
@@ -157,6 +158,8 @@ function ApplicationDetail({ app }: { app: Application }) {
           Add note
         </Button>
       </form>
+
+      <Documents applicationId={app.id} />
 
       <div className="flex flex-wrap items-center gap-2">
         {app.archived ? (

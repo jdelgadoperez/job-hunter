@@ -81,6 +81,8 @@ export class ApplicationStore {
   constructor(
     private readonly db: Database.Database,
     private readonly today: () => string = localToday,
+    /** Removes an application's documents (rows + stored files) when the application is deleted. */
+    private readonly removeDocuments: (applicationId: number) => void = () => {},
   ) {}
 
   /** Create an application plus its opening "Applied" note. Returns the stored application. */
@@ -286,9 +288,10 @@ export class ApplicationStore {
     return this.list().filter((a) => CLOSED_STATUSES.includes(a.status));
   }
 
-  /** Delete an application and its notes; returns whether it existed. */
+  /** Delete an application with its notes and documents; returns whether it existed. */
   remove(id: number): boolean {
     return this.db.transaction(() => {
+      this.removeDocuments(id);
       this.db.prepare("DELETE FROM application_notes WHERE application_id = ?").run(id);
       return this.db.prepare("DELETE FROM applications WHERE id = ?").run(id).changes > 0;
     })();

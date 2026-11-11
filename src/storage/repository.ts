@@ -1,3 +1,4 @@
+import { DocumentStore } from "@app/applications/documents";
 import { ApplicationStore } from "@app/applications/store";
 import { makeCompanyId } from "@app/discovery/company-id";
 import type { ScanScope } from "@app/discovery/scan-store";
@@ -88,13 +89,22 @@ export class Repository {
   private readonly db: Database.Database;
   /** Application tracking (the jobs you've applied to), over this same database. */
   readonly applications: ApplicationStore;
+  /** Documents attached to applications (notes in the DB, other files under `docsDir`). */
+  readonly documents: DocumentStore;
 
-  constructor(dbPath: string, opts: { today?: () => string } = {}) {
+  /**
+   * @param opts.docsDir Where non-note application documents are copied (normally
+   *   `<data dir>/docs`). Omitted (e.g. an in-memory test DB), only notes can be stored.
+   */
+  constructor(dbPath: string, opts: { today?: () => string; docsDir?: string } = {}) {
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.exec(SCHEMA);
     this.migrate();
-    this.applications = new ApplicationStore(this.db, opts.today);
+    this.documents = new DocumentStore(this.db, opts.docsDir);
+    this.applications = new ApplicationStore(this.db, opts.today, (id) =>
+      this.documents.removeAll(id),
+    );
     // Matches marked applied before application tracking existed become applications.
     this.applications.backfillFromAppliedMatches();
   }

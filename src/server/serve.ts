@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildProfile } from "@app/profile/build-profile";
-import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
+import { ensureDataDir, resolveDbPath, resolveDocsDir } from "@app/runtime/paths";
 import { getUpdateStatus } from "@app/runtime/update-check";
 import type { UpdateStatus } from "@app/runtime/version";
 import { Repository } from "@app/storage/repository";
@@ -109,7 +109,7 @@ export function registerServerShutdown(deps: {
  */
 export function startServer(opts: ServeOptions = {}, signals: SignalTarget = process): void {
   ensureDataDir();
-  const repo = new Repository(resolveDbPath());
+  const repo = new Repository(resolveDbPath(), { docsDir: resolveDocsDir() });
   const jobs = new ScanJobManager();
   const runScanForScope = createScanRunner(repo);
   const retryFailedScan = createRetryFailedScanRunner(repo);

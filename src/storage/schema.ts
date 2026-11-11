@@ -105,6 +105,23 @@ CREATE TABLE IF NOT EXISTS applications (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Documents attached to an application (prep notes, job descriptions, resumes, diagrams).
+-- kind 'note': markdown/text kept in content (editable in the dashboard). kind 'file': copied under
+-- the data directory's docs/ folder; only its path is stored here, keeping the database small.
+CREATE TABLE IF NOT EXISTS application_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL REFERENCES applications(id),
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  content TEXT,
+  file_path TEXT,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (application_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS application_notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   application_id INTEGER NOT NULL REFERENCES applications(id),

@@ -239,6 +239,25 @@ const ApplicationStatsSchema = z.object({
 });
 export type ApplicationStats = z.infer<typeof ApplicationStatsSchema>;
 
+const DocumentMetaSchema = z.object({
+  id: z.number(),
+  applicationId: z.number(),
+  name: z.string(),
+  kind: z.enum(["note", "file"]),
+  mime: z.string(),
+  size: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
+const NoteSchema = DocumentMetaSchema.extend({ kind: z.literal("note"), content: z.string() });
+export type Note = z.infer<typeof NoteSchema>;
+
+/** URL of a document's raw bytes (opens inline for PDFs/images, downloads otherwise). */
+export function documentRawUrl(applicationId: number, documentId: number): string {
+  return `/api/applications/${applicationId}/documents/${documentId}/raw`;
+}
+
 /** Fields for creating/editing an application. `null` clears an optional field on edit. */
 export type ApplicationInput = {
   company?: string;
@@ -423,6 +442,26 @@ export const api = {
     request(`/api/applications/${id}/archive`, ApplicationSchema, { method: "POST" }),
   unarchiveApplication: (id: number) =>
     request(`/api/applications/${id}/unarchive`, ApplicationSchema, { method: "POST" }),
+  getDocuments: (applicationId: number) =>
+    request(`/api/applications/${applicationId}/documents`, z.array(DocumentMetaSchema)),
+  getNote: (applicationId: number, documentId: number) =>
+    request(`/api/applications/${applicationId}/documents/${documentId}`, NoteSchema),
+  createNote: (applicationId: number, name: string, content: string) =>
+    request(`/api/applications/${applicationId}/documents`, NoteSchema, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, content }),
+    }),
+  updateNote: (applicationId: number, documentId: number, content: string) =>
+    request(`/api/applications/${applicationId}/documents/${documentId}`, NoteSchema, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content }),
+    }),
+  removeDocument: (applicationId: number, documentId: number) =>
+    request(`/api/applications/${applicationId}/documents/${documentId}`, RemovedSchema, {
+      method: "DELETE",
+    }),
   removeApplication: (id: number) =>
     request(`/api/applications/${id}`, RemovedSchema, { method: "DELETE" }),
 };

@@ -545,6 +545,73 @@ function registerApplicationRoutes(app: Hono, repo: ServerDeps["repo"]): void {
     return c.json(store.unarchive(id));
   });
 
+  // --- Documents (notes in the DB, other files under the data dir's docs/ folder) ---
+
+  app.get("/api/applications/:id/documents", (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    return c.json(repo.documents.list(id));
+  });
+
+  // Create (or replace, by name) a markdown note.
+  app.post("/api/applications/:id/documents", async (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    const body = await readBody(c);
+    if (!body || typeof body.name !== "string" || typeof body.content !== "string") {
+      return c.json({ error: 'expected { "name": string, "content": string }' }, 400);
+    }
+    const { name, content } = body;
+    const result = guard(() => repo.documents.saveNote(id, name, content));
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(result.value, 201);
+  });
+
+  // A note with its content; a file's metadata (its bytes come from /raw).
+  app.get("/api/applications/:id/documents/:docId", (c) => {
+    const id = parseId(c.req.param("id"));
+    const docId = Number(c.req.param("docId"));
+    const meta = id === undefined ? undefined : repo.documents.get(id, docId);
+    if (id === undefined || !meta) return c.json({ error: "document not found" }, 404);
+    return c.json(meta.kind === "note" ? repo.documents.getNote(id, docId) : meta);
+  });
+
+  app.put("/api/applications/:id/documents/:docId", async (c) => {
+    const id = parseId(c.req.param("id"));
+    const docId = Number(c.req.param("docId"));
+    if (id === undefined || !repo.documents.get(id, docId)) {
+      return c.json({ error: "document not found" }, 404);
+    }
+    const body = await readBody(c);
+    if (!body || typeof body.content !== "string") {
+      return c.json({ error: 'expected { "content": string }' }, 400);
+    }
+    const content = body.content;
+    const result = guard(() => repo.documents.updateNote(id, docId, content));
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(result.value);
+  });
+
+  app.delete("/api/applications/:id/documents/:docId", (c) => {
+    const id = parseId(c.req.param("id"));
+    const docId = Number(c.req.param("docId"));
+    if (id === undefined || !repo.documents.remove(id, docId)) {
+      return c.json({ error: "document not found" }, 404);
+    }
+    return c.json({ removed: true });
+  });
+
+  // The document's bytes, for opening in a new tab or downloading.
+  app.get("/api/applications/:id/documents/:docId/raw", (c) => {
+    const id = parseId(c.req.param("id"));
+    const doc =
+      id === undefined ? undefined : repo.documents.read(id, Number(c.req.param("docId")));
+    if (!doc) return c.json({ error: "document not found" }, 404);
+    return new Response(new Uint8Array(doc.body), {
+      headers: rawDocumentHeaders(doc.meta.name, doc.meta.mime),
+    });
+  });
+
   // Delete an application; a linked match is un-marked applied so it doesn't dangle.
   app.delete("/api/applications/:id", (c) => {
     const id = parseId(c.req.param("id"));
@@ -556,4 +623,26 @@ function registerApplicationRoutes(app: Hono, repo: ServerDeps["repo"]): void {
     });
     return c.json({ removed: true });
   });
+}
+
+/** Types a browser renders natively and safely without script: PDFs, raster images, text, JSON. */
+const INLINE_SAFE =
+  /^(application\/pdf|image\/(png|jpeg|gif|webp)|text\/(plain|markdown)|application\/json)\b/;
+
+/**
+ * Headers for serving a stored document. This server is same-origin with the dashboard's API, so
+ * a document must never run script: `nosniff` stops content sniffing, and anything not known to be
+ * inert (SVG, HTML, unknown binaries) is sandboxed by CSP and sent as a download.
+ */
+export function rawDocumentHeaders(name: string, mime: string): Record<string, string> {
+  const filename = name.split("/").pop() ?? "document";
+  const inline = INLINE_SAFE.test(mime);
+  const headers: Record<string, string> = {
+    "content-type": mime,
+    "x-content-type-options": "nosniff",
+    "cache-control": "no-store",
+    "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(filename)}`,
+  };
+  if (!inline) headers["content-security-policy"] = "sandbox; default-src 'none'";
+  return headers;
 }

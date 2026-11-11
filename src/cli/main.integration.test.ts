@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
 vi.mock("@app/runtime/paths", () => ({
   ensureDataDir: () => {},
   resolveDbPath: () => h.dbPath,
+  resolveDocsDir: () => `${h.dbPath}.docs`,
 }));
 
 // Stub discovery so `scan` runs fully offline (no browser, no network).

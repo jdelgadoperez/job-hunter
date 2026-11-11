@@ -1,3 +1,4 @@
+import { importJobHuntDocs, importWorkspace } from "@app/applications/import-docs";
 import { APPLICATION_STATUSES, type Application } from "@app/applications/model";
 import { ApplicationError } from "@app/applications/store";
 import type { Repository } from "@app/storage/repository";
@@ -44,6 +45,32 @@ function detail(app: Application): string[] {
     for (const note of app.notes) out.push(`  ${style.dim(note.date)}  ${note.content}`);
   }
   return out;
+}
+
+/** Resolve among active applications first, then archived ones (documents outlive archiving). */
+function resolveAny(store: Repository["applications"], selector: string): Application {
+  try {
+    return store.resolve(selector);
+  } catch (activeError) {
+    // Only a miss falls through; an ambiguous active match must stay an error, not pick an archived one.
+    if (
+      !(activeError instanceof ApplicationError) ||
+      !/^no application/.test(activeError.message)
+    ) {
+      throw activeError;
+    }
+    try {
+      return store.resolve(selector, { archived: true });
+    } catch {
+      throw activeError;
+    }
+  }
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function printList(apps: Application[], log: Logger): void {
@@ -179,6 +206,59 @@ export function runAppCommand(cmd: AppCommand, deps: AppCommandDeps): number {
           if (app.postingId) repo.clearUserAction(app.postingId);
         });
         log(style.success(`Removed ${app.company} — ${app.role}`));
+        return 0;
+      }
+      case "docs": {
+        const app = resolveAny(store, cmd.selector);
+        const docs = repo.documents.list(app.id);
+        if (cmd.json) log(JSON.stringify(docs, null, 2));
+        else if (docs.length === 0) diag(style.dim(`No documents for ${app.company}.`));
+        else {
+          for (const doc of docs) {
+            const kind = doc.kind === "note" ? "note" : "file";
+            log(`  ${style.dim(kind.padEnd(5))} ${doc.name} ${style.dim(formatBytes(doc.size))}`);
+          }
+        }
+        return 0;
+      }
+      case "doc": {
+        const app = resolveAny(store, cmd.selector);
+        const meta = repo.documents.getByName(app.id, cmd.name);
+        if (!meta) throw new ApplicationError(`${app.company} has no document "${cmd.name}"`);
+        const doc = repo.documents.read(app.id, meta.id);
+        if (!doc) throw new ApplicationError(`"${cmd.name}" is missing from disk`);
+        if (meta.kind === "note") log(doc.body.toString("utf8"));
+        else {
+          log(
+            style.dim(
+              `${meta.name} (${meta.mime}, ${formatBytes(meta.size)}) isn't a text note; open it from the dashboard.`,
+            ),
+          );
+        }
+        return 0;
+      }
+      case "import-docs": {
+        const opts = { overwrite: cmd.overwrite };
+        const result = cmd.into
+          ? {
+              workspaces: [importWorkspace(repo, cmd.path, resolveAny(store, cmd.into), opts)],
+              unmatched: [],
+            }
+          : importJobHuntDocs(repo, cmd.path, opts);
+        for (const w of result.workspaces) {
+          const skipped = w.skipped ? style.dim(` (${w.skipped} already there)`) : "";
+          log(`${style.success("✓")} ${w.company}: ${w.imported} document(s)${skipped}`);
+        }
+        for (const folder of result.unmatched) {
+          diag(
+            style.warn(
+              `  ! No application matches ${folder}. Add one (app add) or run: job-hunter app import-docs "${folder}" --into <company|id>`,
+            ),
+          );
+        }
+        if (result.workspaces.length === 0 && result.unmatched.length === 0) {
+          diag(style.dim("No company folders found."));
+        }
         return 0;
       }
       case "import": {

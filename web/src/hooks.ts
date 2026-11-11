@@ -278,3 +278,46 @@ export function useArchiveApplication() {
 export function useRemoveApplication() {
   return useApplicationMutation((id: number) => api.removeApplication(id));
 }
+
+export function useDocuments(
+  applicationId: number,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: ["documents", applicationId],
+    queryFn: () => api.getDocuments(applicationId),
+    enabled,
+  });
+}
+
+export function useNote(applicationId: number, documentId: number | null) {
+  return useQuery({
+    queryKey: ["documents", applicationId, documentId],
+    queryFn: () => api.getNote(applicationId, documentId as number),
+    enabled: documentId !== null,
+  });
+}
+
+function useDocumentMutation<V>(applicationId: number, fn: (vars: V) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", applicationId] }),
+  });
+}
+
+export function useSaveNote(applicationId: number) {
+  return useDocumentMutation(
+    applicationId,
+    (vars: { documentId: number; content: string } | { name: string; content: string }) =>
+      "documentId" in vars
+        ? api.updateNote(applicationId, vars.documentId, vars.content)
+        : api.createNote(applicationId, vars.name, vars.content),
+  );
+}
+
+export function useRemoveDocument(applicationId: number) {
+  return useDocumentMutation(applicationId, (documentId: number) =>
+    api.removeDocument(applicationId, documentId),
+  );
+}

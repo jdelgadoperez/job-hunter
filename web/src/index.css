@@ -90,4 +90,61 @@
   .select {
     @apply rounded-md border border-border bg-surface px-2 py-0.5 text-sm text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40;
   }
+
+  /* Rendered markdown (application notes). Tailwind's preflight strips element styles, so restore
+     a compact, readable set using the theme tokens (works in light and dark). */
+  .markdown {
+    @apply text-sm leading-relaxed text-fg;
+  }
+  .markdown > * + * {
+    @apply mt-3;
+  }
+  .markdown h1 {
+    @apply text-lg font-bold;
+  }
+  .markdown h2 {
+    @apply mt-5 border-b border-border pb-1 text-base font-semibold;
+  }
+  .markdown h3,
+  .markdown h4 {
+    @apply mt-4 font-semibold;
+  }
+  .markdown ul {
+    @apply list-disc space-y-1 pl-5;
+  }
+  .markdown ol {
+    @apply list-decimal space-y-1 pl-5;
+  }
+  .markdown li > ul,
+  .markdown li > ol {
+    @apply mt-1;
+  }
+  .markdown a {
+    @apply text-primary underline;
+  }
+  .markdown code {
+    @apply rounded bg-subtle px-1 py-0.5 font-mono text-xs;
+  }
+  .markdown pre {
+    @apply overflow-x-auto rounded-md bg-subtle p-3;
+  }
+  .markdown pre code {
+    @apply bg-transparent p-0;
+  }
+  .markdown blockquote {
+    @apply border-l-2 border-border pl-3 text-muted;
+  }
+  .markdown table {
+    @apply block w-full overflow-x-auto border-collapse text-xs;
+  }
+  .markdown th,
+  .markdown td {
+    @apply border border-border px-2 py-1 text-left align-top;
+  }
+  .markdown th {
+    @apply bg-subtle font-semibold;
+  }
+  .markdown hr {
+    @apply border-border;
+  }
 }

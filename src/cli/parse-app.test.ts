@@ -118,6 +118,30 @@ describe("parseAppCommand", () => {
     expect(parseAppCommand(["import", "/x/jt.db"])).toEqual({ sub: "import", path: "/x/jt.db" });
   });
 
+  it("parses docs, doc, and import-docs", () => {
+    expect(parseAppCommand(["docs", "acme", "--json"])).toEqual({
+      sub: "docs",
+      selector: "acme",
+      json: true,
+    });
+    expect(parseAppCommand(["doc", "acme", "sys-design/notes.md"])).toEqual({
+      sub: "doc",
+      selector: "acme",
+      name: "sys-design/notes.md",
+    });
+    expect(parseAppCommand(["import-docs", "~/job-hunt"])).toEqual({
+      sub: "import-docs",
+      path: "~/job-hunt",
+      overwrite: false,
+    });
+    expect(
+      parseAppCommand(["import-docs", "/x/socket", "--into", "socket", "--overwrite"]),
+    ).toEqual({ sub: "import-docs", path: "/x/socket", into: "socket", overwrite: true });
+    expect(() => parseAppCommand(["docs"])).toThrow("app docs requires");
+    expect(() => parseAppCommand(["doc", "acme"])).toThrow("app doc requires");
+    expect(() => parseAppCommand(["import-docs"])).toThrow("requires <folder>");
+  });
+
   it("rejects unknown subcommands and flags with an AppParseError", () => {
     expect(() => parseAppCommand([])).toThrow("app requires a subcommand");
     expect(() => parseAppCommand(["frob"])).toThrow("unknown app subcommand: frob");

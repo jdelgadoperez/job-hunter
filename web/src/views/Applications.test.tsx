@@ -61,6 +61,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Applications view", () => {
   it("lists applications with status filters from the stats", async () => {
     const calls = mockFetch((url) => {
+      if (url.includes("/documents")) return [];
       if (url.includes("/stats")) return STATS;
       if (url.includes("status=interviewed")) {
         return [app({ id: 2, company: "Globex", status: "interviewed" })];
@@ -99,6 +100,7 @@ describe("Applications view", () => {
 
   it("changes status through the select", async () => {
     const calls = mockFetch((url, method) => {
+      if (url.includes("/documents")) return [];
       if (url.includes("/stats")) return STATS;
       if (method === "PATCH") return app({ status: "screened" });
       return [app()];
@@ -116,6 +118,7 @@ describe("Applications view", () => {
 
   it("expands to show details and notes, adds a note, and deletes with confirmation", async () => {
     const calls = mockFetch((url, method) => {
+      if (url.includes("/documents")) return [];
       if (url.includes("/stats")) return STATS;
       if (method === "POST" && url.endsWith("/notes")) return app();
       if (method === "DELETE") return { removed: true };
@@ -146,6 +149,7 @@ describe("Applications view", () => {
 
   it("archives closed applications and unarchives archived ones", async () => {
     const calls = mockFetch((url, method) => {
+      if (url.includes("/documents")) return [];
       if (url.includes("/stats")) return STATS;
       if (method === "POST") return app({ status: "rejected" });
       if (url.includes("archived=true")) {
@@ -171,6 +175,7 @@ describe("Applications view", () => {
   it("adds an application from the form and surfaces server errors", async () => {
     let fail = true;
     const calls = mockFetch((url, method) => {
+      if (url.includes("/documents")) return [];
       if (url.includes("/stats")) return STATS;
       if (method === "POST") {
         if (fail) {

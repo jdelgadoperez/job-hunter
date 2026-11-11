@@ -38,7 +38,10 @@ export type AppCommand =
   | { sub: "archive"; selector?: string }
   | { sub: "unarchive"; selector: string }
   | { sub: "remove"; selector: string }
-  | { sub: "import"; path?: string };
+  | { sub: "import"; path?: string }
+  | { sub: "docs"; selector: string; json: boolean }
+  | { sub: "doc"; selector: string; name: string }
+  | { sub: "import-docs"; path: string; into?: string; overwrite: boolean };
 
 export const APP_SUBCOMMANDS = [
   "add",
@@ -53,6 +56,9 @@ export const APP_SUBCOMMANDS = [
   "unarchive",
   "remove",
   "import",
+  "docs",
+  "doc",
+  "import-docs",
 ] as const;
 
 type Parsed = { values: Record<string, string | boolean | undefined>; positionals: string[] };
@@ -245,6 +251,37 @@ export function parseAppCommand(rest: string[]): AppCommand {
       const { positionals } = parse(args, {});
       const path = str(positionals[0]);
       return { sub: "import", ...(path ? { path } : {}) };
+    }
+    case "docs": {
+      const { values, positionals } = parse(args, { json: { type: "boolean" } });
+      return {
+        sub: "docs",
+        selector: need(str(positionals.join(" ")), "app docs requires <company|id>"),
+        json: Boolean(values.json),
+      };
+    }
+    case "doc": {
+      const { positionals } = parse(args, {});
+      const selector = need(str(positionals[0]), "app doc requires <company|id> <name>");
+      const name = need(
+        str(positionals.slice(1).join(" ")),
+        "app doc requires <company|id> <name>",
+      );
+      return { sub: "doc", selector, name };
+    }
+    case "import-docs": {
+      const { values, positionals } = parse(args, {
+        into: { type: "string" },
+        overwrite: { type: "boolean" },
+      });
+      const path = need(str(positionals[0]), "app import-docs requires <folder>");
+      const into = str(values.into);
+      return {
+        sub: "import-docs",
+        path,
+        ...(into ? { into } : {}),
+        overwrite: Boolean(values.overwrite),
+      };
     }
     default:
       throw new AppParseError(

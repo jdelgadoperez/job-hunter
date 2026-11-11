@@ -281,3 +281,28 @@ describe("applications API contract", () => {
     await expect(api.updateApplication(1, { role: "Lead" })).rejects.toThrow();
   });
 });
+
+describe("documents API contract", () => {
+  const meta = {
+    id: 1,
+    applicationId: 7,
+    name: "prep.md",
+    kind: "note",
+    mime: "text/markdown; charset=utf-8",
+    size: 3,
+    createdAt: "2026-11-11 00:00:00",
+    updatedAt: "2026-11-11 00:00:00",
+  };
+
+  it("parses document lists and notes", async () => {
+    mockFetchOnce([meta, { ...meta, id: 2, name: "a.pdf", kind: "file", mime: "application/pdf" }]);
+    await expect(api.getDocuments(7)).resolves.toHaveLength(2);
+    mockFetchOnce({ ...meta, content: "# x" });
+    await expect(api.getNote(7, 1)).resolves.toMatchObject({ content: "# x" });
+  });
+
+  it("rejects a note response without content", async () => {
+    mockFetchOnce(meta);
+    await expect(api.updateNote(7, 1, "x")).rejects.toThrow();
+  });
+});

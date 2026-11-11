@@ -1,7 +1,7 @@
 import { buildProfile } from "@app/profile/build-profile";
 import { Repository } from "@app/storage/repository";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
+import { createApp, rawDocumentHeaders } from "./app";
 import { ScanJobManager } from "./scan-job";
 import { ScoreJobManager } from "./score-job";
 
@@ -205,5 +205,87 @@ describe("applications API", () => {
     ] as const) {
       expect((await call(method, path, method === "GET" ? undefined : {})).status).toBe(404);
     }
+  });
+});
+
+describe("documents API", () => {
+  it("creates, reads, updates, lists, serves, and deletes notes", async () => {
+    const { id } = repo.applications.add({ company: "Acme", role: "Eng" });
+    const base = `/api/applications/${id}/documents`;
+    const created = await call("POST", base, { name: "prep.md", content: "# Prep" });
+    expect(created.status).toBe(201);
+    const docId = (created.data as { id: number }).id;
+
+    expect((await call("GET", base)).data).toMatchObject([{ name: "prep.md", kind: "note" }]);
+    expect((await call("GET", `${base}/${docId}`)).data).toMatchObject({ content: "# Prep" });
+    const put = await call("PUT", `${base}/${docId}`, { content: "# Prep v2" });
+    expect(put.data).toMatchObject({ content: "# Prep v2" });
+
+    const raw = await makeApp().request(`${base}/${docId}/raw`);
+    expect(raw.headers.get("content-type")).toContain("text/markdown");
+    expect(raw.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await raw.text()).toBe("# Prep v2");
+
+    expect(await call("DELETE", `${base}/${docId}`)).toEqual({
+      status: 200,
+      data: { removed: true },
+    });
+    expect((await call("DELETE", `${base}/${docId}`)).status).toBe(404);
+  });
+
+  it("returns metadata for files and validates input", async () => {
+    const { id } = repo.applications.add({ company: "Acme", role: "Eng" });
+    const base = `/api/applications/${id}/documents`;
+    // A file-kind row (no docsDir here, so insert directly; /raw then 404s as missing).
+    repo.connection
+      .prepare(
+        "INSERT INTO application_documents (application_id, name, kind, file_path, mime, size) VALUES (?, 'a.pdf', 'file', '/nowhere/a.pdf', 'application/pdf', 3)",
+      )
+      .run(id);
+    const fileId = repo.documents.list(id)[0]?.id;
+    expect((await call("GET", `${base}/${fileId}`)).data).toMatchObject({
+      kind: "file",
+      mime: "application/pdf",
+    });
+    expect((await makeApp().request(`${base}/${fileId}/raw`)).status).toBe(404);
+    expect((await call("PUT", `${base}/${fileId}`, { content: "x" })).status).toBe(400);
+
+    expect((await call("POST", base, { name: "x.md" })).status).toBe(400);
+    expect((await call("POST", base, { name: "../x.md", content: "x" })).status).toBe(400);
+    expect((await call("PUT", `${base}/${fileId}`, {})).status).toBe(400);
+    for (const [method, path] of [
+      ["GET", "/api/applications/99/documents"],
+      ["POST", "/api/applications/99/documents"],
+      ["GET", `${base}/999`],
+      ["PUT", `${base}/999`],
+      ["DELETE", `${base}/999`],
+      ["GET", `${base}/999/raw`],
+      ["GET", "/api/applications/99/documents/1/raw"],
+    ] as const) {
+      const res =
+        method === "GET" && path.endsWith("/raw")
+          ? { status: (await makeApp().request(path)).status }
+          : await call(method, path, method === "GET" ? undefined : { content: "x", name: "a.md" });
+      expect(res.status, `${method} ${path}`).toBe(404);
+    }
+  });
+});
+
+describe("rawDocumentHeaders", () => {
+  it("serves inert types inline and sandboxes everything else as a download", () => {
+    expect(rawDocumentHeaders("resume/r.pdf", "application/pdf")).toEqual({
+      "content-type": "application/pdf",
+      "x-content-type-options": "nosniff",
+      "cache-control": "no-store",
+      "content-disposition": "inline; filename*=UTF-8''r.pdf",
+    });
+    const svg = rawDocumentHeaders("Arch — v2.svg", "image/svg+xml");
+    expect(svg["content-disposition"]).toBe(
+      "attachment; filename*=UTF-8''Arch%20%E2%80%94%20v2.svg",
+    );
+    expect(svg["content-security-policy"]).toBe("sandbox; default-src 'none'");
+    expect(rawDocumentHeaders("x.bin", "application/octet-stream")["content-security-policy"]).toBe(
+      "sandbox; default-src 'none'",
+    );
   });
 });

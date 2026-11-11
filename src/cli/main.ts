@@ -28,7 +28,7 @@ import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
 import { readResumeText } from "@app/profile/read-resume";
 import { checkNodeVersion } from "@app/runtime/node-version";
-import { ensureDataDir, resolveDbPath } from "@app/runtime/paths";
+import { ensureDataDir, resolveDbPath, resolveDocsDir } from "@app/runtime/paths";
 import { getVersion } from "@app/runtime/version";
 import { startServer } from "@app/server/serve";
 import { Repository } from "@app/storage/repository";
@@ -253,7 +253,19 @@ export async function runScoreCommand(
   }
 }
 
+/**
+ * When a downstream reader closes early (`job-hunter app doc acme prep.md | head`), stop quietly
+ * instead of crashing on EPIPE — the standard behavior for a well-behaved CLI.
+ */
+export function exitQuietlyOnEpipe(stream: NodeJS.WriteStream, exit: (code: number) => void): void {
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EPIPE") exit(0);
+    else throw error;
+  });
+}
+
 export async function main(): Promise<void> {
+  exitQuietlyOnEpipe(process.stdout, (code) => process.exit(code));
   const versionWarning = checkNodeVersion(process.versions.node);
   if (versionWarning) console.error(style.warn(versionWarning));
 
@@ -299,7 +311,7 @@ export async function main(): Promise<void> {
   }
 
   ensureDataDir();
-  const repo = new Repository(resolveDbPath());
+  const repo = new Repository(resolveDbPath(), { docsDir: resolveDocsDir() });
   try {
     switch (command.kind) {
       case "track-add":

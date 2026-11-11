@@ -118,6 +118,12 @@ export const COMMANDS: CommandHelp[] = [
       ["archive [company|id]", "Archive a closed application; with no argument, list candidates."],
       ["unarchive <company|id>", "Restore an archived application."],
       ["remove <company|id>", "Delete an application and its notes."],
+      ["docs <company|id> [--json]", "List an application's documents (notes and files)."],
+      ["doc <company|id> <name>", "Print a note's markdown (e.g. to pipe into another tool)."],
+      [
+        "import-docs <folder> [--into <company|id>] [--overwrite]",
+        "Attach prep docs: each company folder of a job-hunt checkout (incl. archive/) goes to the application with that company name; --into imports one folder into a chosen application. .md/.txt become editable notes; other files are copied under the data dir's docs/. Safe to re-run.",
+      ],
       [
         "import [path]",
         "Import from the old jt tracker's database (default ~/.jobtrack/jobtrack.db or $JOBTRACK_DB). Safe to re-run.",
@@ -129,6 +135,8 @@ export const COMMANDS: CommandHelp[] = [
       'job-hunter app note acme "Recruiter call Tuesday"',
       "job-hunter app list interviewed",
       "job-hunter app import",
+      "job-hunter app import-docs ~/code/job-hunt",
+      "job-hunter app doc solace prep.md",
     ],
   },
   {
