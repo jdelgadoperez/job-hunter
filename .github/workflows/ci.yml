@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -33,7 +33,14 @@ jobs:
       - name: Typecheck (web)
         run: npm run typecheck:web
 
-      - name: Test (with coverage gate)
+      - name: Test (unit)
+        run: npm run test:unit
+
+      - name: Test (integration)
+        run: npm run test:integration
+
+      # Re-runs both suites together: the coverage floor is measured over unit + integration.
+      - name: Coverage gate (unit + integration)
         run: npm run test:coverage
 
       - name: Test (web dashboard)

@@ -250,7 +250,9 @@ as a one-command launcher.
 ## Development
 
 ```bash
-npm test            # run the test suite
+npm test            # run the unit + integration suites
+npm run test:unit   # unit tests only
+npm run test:integration  # integration tests only (real SQLite, HTTP app, scan pipeline)
 npm run typecheck   # type-check the server + CLI
 npm run typecheck:web  # type-check the web dashboard
 npm run lint        # Biome lint + format check

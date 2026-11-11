@@ -50,7 +50,7 @@ jobs:
 
       - name: Install the Supabase CLI
         if: steps.secret.outputs.present == 'true'
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: latest
 
