@@ -27,6 +27,9 @@ export function isIsoDate(value: string): boolean {
 
 export class ApplicationError extends Error {}
 
+/** No application matched a selector or id (as opposed to bad input or an ambiguous match). */
+export class ApplicationNotFoundError extends ApplicationError {}
+
 /** The auto note every new application starts with; also how an untouched auto-created one is recognized. */
 const APPLIED_NOTE = "Applied";
 
@@ -191,7 +194,7 @@ export class ApplicationStore {
     const [only] = candidates;
     if (candidates.length === 1 && only) return this.toApplication(only);
     if (candidates.length === 0) {
-      throw new ApplicationError(
+      throw new ApplicationNotFoundError(
         `no ${opts.archived ? "archived " : ""}application matches "${trimmed}"`,
       );
     }
@@ -351,15 +354,20 @@ export class ApplicationStore {
 
   /**
    * Undo `ensureForPosting` when a match is un-marked applied — but only while the application is
-   * untouched (still "applied", not archived, no notes beyond the opening one). Anything the user
-   * has invested in is kept and merely unlinked from the posting. Returns whether it was deleted.
+   * untouched (still "applied", not archived, no notes beyond the opening one, no documents).
+   * Anything the user has invested in is kept and merely unlinked from the posting. Returns whether
+   * it was deleted.
    */
   releasePosting(postingId: string): boolean {
     const app = this.getByPostingId(postingId);
     if (!app) return false;
+    const hasDocuments = this.db
+      .prepare("SELECT 1 FROM application_documents WHERE application_id = ? LIMIT 1")
+      .get(app.id);
     const untouched =
       app.status === "applied" &&
       !app.archived &&
+      !hasDocuments &&
       app.notes.length <= 1 &&
       app.notes.every((n) => n.content === APPLIED_NOTE);
     if (untouched) return this.remove(app.id);
@@ -386,7 +394,7 @@ export class ApplicationStore {
 
   private require(id: number): Application {
     const app = this.get(id);
-    if (!app) throw new ApplicationError(`no application with id ${id}`);
+    if (!app) throw new ApplicationNotFoundError(`no application with id ${id}`);
     return app;
   }
 

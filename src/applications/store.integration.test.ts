@@ -247,6 +247,16 @@ describe("match ↔ application linkage", () => {
     ]);
   });
 
+  it("un-marking keeps an application that has documents (and the documents)", () => {
+    repo.setUserAction(posting.id, "applied");
+    const app = repo.applications.getByPostingId(posting.id);
+    if (!app) throw new Error("expected an application");
+    repo.documents.saveNote(app.id, "prep.md", "# Prep");
+    repo.clearUserAction(posting.id);
+    expect(repo.applications.get(app.id)?.postingId).toBeNull();
+    expect(repo.documents.list(app.id).map((d) => d.name)).toEqual(["prep.md"]);
+  });
+
   it("survives the posting expiring", () => {
     repo.setUserAction(posting.id, "applied");
     repo.markPostingExpired(posting.id);
