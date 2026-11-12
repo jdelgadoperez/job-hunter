@@ -2,6 +2,7 @@ import { type ParseArgsConfig, parseArgs } from "node:util";
 import { DEFAULT_MIN_HEURISTIC, DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import { COMMAND_NAMES } from "./help";
 import { type AppCommand, AppParseError, parseAppCommand } from "./parse-app";
+import { describeParseError } from "./parse-error";
 import { isServiceAction, SERVICE_ACTIONS, type ServiceAction } from "./service";
 
 /** Default minimum match score for `list` when `--min-score` is omitted. */
@@ -62,19 +63,6 @@ function safeParse<T extends ParseArgsConfig>(config: T): SafeParseResult<T> {
 }
 
 /**
- * Node's `parseArgs` error message is two sentences: the first names the offending flag (e.g.
- * `Unknown option '--bogus-flag'.`), the second is a "place it at the end after --" escape-hatch
- * hint that's irrelevant to (and confusing for) the common case of a simple typo'd flag. Keep only
- * the first sentence so the error stays a single short clause, consistent with this file's other
- * hand-written errors (`invalid --port: ${value}`, `unknown command: ${command}`).
- */
-function describeParseError(err: unknown): string {
-  if (!(err instanceof Error)) return String(err);
-  const [firstSentence] = err.message.split(". ");
-  return firstSentence ?? err.message;
-}
-
-/**
  * Pure argv → `Command` parser (no I/O), so dispatch logic is unit-tested without spawning a
  * process. `argv` is the arguments after `node script` (i.e. `process.argv.slice(2)`).
  */
@@ -89,28 +77,20 @@ export function parseCli(argv: string[]): Command {
   const argvForCommand = argv.filter((a) => a !== "--verbose");
   const [command, ...rest] = argvForCommand;
 
-  // Help/version win wherever they appear, so `job-hunter scan --help` shows scan's help rather
-  // than running a scan — the behavior people expect from any CLI. The topic is the first
-  // recognized command word, so both `track --help` and `help track` reach track's page.
-  // `app` takes free text (notes, roles, company names), so a bare "help"/"version" word there is
-  // content, not a request — only the flags, or `help` in the subcommand slot, mean help.
-  if (command === "app") {
-    if (argvForCommand.some((a) => a === "-h" || a === "--help") || rest[0] === "help") {
-      return { kind: "help", topic: "app" };
-    }
-    try {
-      return { kind: "app", app: parseAppCommand(rest) };
-    } catch (err) {
-      if (err instanceof AppParseError) return { kind: "help", error: err.message, topic: "app" };
-      throw err;
-    }
+  // Help/version flags win wherever they appear, so `job-hunter scan --help` shows scan's help
+  // rather than running a scan. The bare words count only in a command slot (`help`,
+  // `help track`, `track help`): deeper positions are free text (notes, roles, company names).
+  const wantsHelp =
+    argvForCommand.some((a) => a === "-h" || a === "--help") ||
+    command === "help" ||
+    rest[0] === "help";
+  if (wantsHelp) {
+    const topic = command === "help" ? rest[0] : command;
+    return topic && COMMAND_NAMES.has(topic) ? { kind: "help", topic } : { kind: "help" };
   }
-  if (argv.some((a) => a === "-h" || a === "--help" || a === "help")) {
-    const topic = argv.find((a) => COMMAND_NAMES.has(a));
-    return topic ? { kind: "help", topic } : { kind: "help" };
-  }
-  if (argv.some((a) => a === "-v" || a === "--version" || a === "version"))
+  if (argvForCommand.some((a) => a === "-v" || a === "--version") || command === "version") {
     return { kind: "version" };
+  }
 
   switch (command) {
     case "scan": {
@@ -288,6 +268,15 @@ export function parseCli(argv: string[]): Command {
         return { kind: "help", error: `config remote expects on|off, got: ${value ?? "(none)"}` };
       }
       return { kind: "help", error: `unknown config subcommand: ${sub ?? "(none)"}` };
+    }
+
+    case "app": {
+      try {
+        return { kind: "app", app: parseAppCommand(rest) };
+      } catch (err) {
+        if (err instanceof AppParseError) return { kind: "help", error: err.message, topic: "app" };
+        throw err;
+      }
     }
 
     case "service": {

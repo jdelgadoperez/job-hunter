@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { type ButtonHTMLAttributes, type ReactNode, useState } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
@@ -119,4 +119,41 @@ export function ErrorNote({ error }: { error: unknown }) {
 
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="py-8 text-center text-sm text-faint">{children}</p>;
+}
+
+/**
+ * A destructive action that needs a second click: the first click arms it, the confirm button
+ * performs it, and the cancel button backs out without side effects.
+ */
+export function ConfirmButton({
+  label,
+  confirmLabel,
+  cancelLabel = "Cancel",
+  onConfirm,
+  pending = false,
+}: {
+  label: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  pending?: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <Button variant="ghost" onClick={() => setConfirming(true)}>
+        {label}
+      </Button>
+    );
+  }
+  return (
+    <>
+      <Button variant="ghost" className="text-danger" disabled={pending} onClick={onConfirm}>
+        {confirmLabel}
+      </Button>
+      <Button variant="ghost" onClick={() => setConfirming(false)}>
+        {cancelLabel}
+      </Button>
+    </>
+  );
 }

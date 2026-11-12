@@ -110,10 +110,15 @@ export function importJobHuntDocs(
   if (!existsSync(root) || !statSync(root).isDirectory()) {
     throw new ApplicationError(`not a folder: ${root}`);
   }
-  const apps = [
+  // First application per company key wins: active before archived, newest first within each.
+  const byKey = new Map<string, Application>();
+  for (const app of [
     ...target.applications.list({ archived: false }),
     ...target.applications.list({ archived: true }),
-  ];
+  ]) {
+    const key = companyKey(app.company);
+    if (key && !byKey.has(key)) byKey.set(key, app);
+  }
   const folders = [
     ...subdirs(root).filter((d) => !NON_WORKSPACE_DIRS.has(basename(d))),
     ...subdirs(join(root, "archive")),
@@ -121,7 +126,7 @@ export function importJobHuntDocs(
   const result: DocsImportResult = { workspaces: [], unmatched: [] };
   for (const folder of folders) {
     const key = companyKey(basename(folder));
-    const app = key ? apps.find((a) => companyKey(a.company) === key) : undefined;
+    const app = byKey.get(key);
     if (!app) {
       result.unmatched.push(folder);
       continue;
