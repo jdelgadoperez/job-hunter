@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.8.0...job-hunter-v0.9.0) (2026-11-12)
+
+
+### Features
+
+* **applications:** track job applications and their documents (fold in jt + job-hunt) ([#169](https://github.com/jdelgadoperez/job-hunter/issues/169)) ([4509795](https://github.com/jdelgadoperez/job-hunter/commit/4509795bb0a1ef90263f81ad2fb9611454e5f9bf))
+
+
+### Bug Fixes
+
+* **service:** ignore exported CDPATH when resolving the repo dir ([#167](https://github.com/jdelgadoperez/job-hunter/issues/167)) ([7e58d94](https://github.com/jdelgadoperez/job-hunter/commit/7e58d945ceea1f79506449c3c8b91827701f2b05))
+
 ## [0.8.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.7.0...job-hunter-v0.8.0) (2026-11-11)
 
 
