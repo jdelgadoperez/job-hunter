@@ -5,7 +5,8 @@ import {
   type ApplicationStatus,
   CLOSED_STATUSES,
 } from "../api";
-import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
+import { Button, Card, ConfirmButton, Empty, ErrorNote, Loading } from "../components/ui";
+import { statusLabel } from "../format";
 import {
   useAddApplicationNote,
   useApplicationStats,
@@ -26,8 +27,6 @@ const STATUS_TONE: Record<ApplicationStatus, string> = {
   ghosted: "text-faint",
   withdrawn: "text-faint",
 };
-
-const label = (status: string) => status.charAt(0).toUpperCase() + status.slice(1);
 
 function AddApplicationForm({ onDone }: { onDone: () => void }) {
   const create = useCreateApplication();
@@ -106,7 +105,6 @@ function ApplicationDetail({ app }: { app: Application }) {
   const archive = useArchiveApplication();
   const remove = useRemoveApplication();
   const [note, setNote] = useState("");
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const canArchive = CLOSED_STATUSES.includes(app.status);
 
   function submitNote(e: FormEvent) {
@@ -176,25 +174,12 @@ function ApplicationDetail({ app }: { app: Application }) {
             Archive
           </Button>
         )}
-        {confirmingRemove ? (
-          <>
-            <Button
-              variant="ghost"
-              className="text-danger"
-              disabled={remove.isPending}
-              onClick={() => remove.mutate(app.id)}
-            >
-              Confirm delete
-            </Button>
-            <Button variant="ghost" onClick={() => setConfirmingRemove(false)}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <Button variant="ghost" onClick={() => setConfirmingRemove(true)}>
-            Delete
-          </Button>
-        )}
+        <ConfirmButton
+          label="Delete"
+          confirmLabel="Confirm delete"
+          pending={remove.isPending}
+          onConfirm={() => remove.mutate(app.id)}
+        />
       </div>
       {addNote.error || archive.error || remove.error ? (
         <ErrorNote error={addNote.error ?? archive.error ?? remove.error} />
@@ -244,7 +229,7 @@ function ApplicationRow({ app }: { app: Application }) {
           >
             {APPLICATION_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {label(s)}
+                {statusLabel(s)}
               </option>
             ))}
           </select>
@@ -305,7 +290,7 @@ export function Applications() {
               pressed={status === s}
               onClick={() => setStatus(status === s ? undefined : s)}
             >
-              {label(s)} · {counts[s]}
+              {statusLabel(s)} · {counts[s]}
             </Button>
           ))}
         </fieldset>

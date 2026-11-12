@@ -1,6 +1,4 @@
-import type { Application } from "./model";
-
-const title = (status: string) => status.charAt(0).toUpperCase() + status.slice(1);
+import { type Application, statusLabel } from "./model";
 
 /**
  * Render applications as markdown, in the same layout the old `jt export` produced (one
@@ -20,7 +18,7 @@ export function applicationsToMarkdown(
   ];
   for (const app of apps) {
     lines.push("", `## ${app.company} | ${app.role}`, "");
-    lines.push(`- **Status:** ${title(app.status)}`);
+    lines.push(`- **Status:** ${statusLabel(app.status)}`);
     lines.push(`- **Date Applied:** ${app.dateApplied}`);
     if (app.url) lines.push(`- **URL:** ${app.url}`);
     if (app.source) lines.push(`- **Source:** ${app.source}`);

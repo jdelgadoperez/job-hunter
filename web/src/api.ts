@@ -212,7 +212,6 @@ const ApplicationNoteSchema = z.object({
   date: z.string(),
   content: z.string(),
 });
-export type ApplicationNote = z.infer<typeof ApplicationNoteSchema>;
 
 const ApplicationSchema = z.object({
   id: z.number(),
@@ -252,6 +251,9 @@ const DocumentMetaSchema = z.object({
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 const NoteSchema = DocumentMetaSchema.extend({ kind: z.literal("note"), content: z.string() });
 export type Note = z.infer<typeof NoteSchema>;
+
+/** Note file extensions — mirrors the server's `isNoteName` (src/applications/documents.ts). */
+export const NOTE_EXTENSION = /\.(md|markdown|txt)$/i;
 
 /** URL of a document's raw bytes (opens inline for PDFs/images, downloads otherwise). */
 export function documentRawUrl(applicationId: number, documentId: number): string {
@@ -432,11 +434,11 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
     }),
-  addApplicationNote: (id: number, content: string, date?: string) =>
+  addApplicationNote: (id: number, content: string) =>
     request(`/api/applications/${id}/notes`, ApplicationSchema, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content, ...(date ? { date } : {}) }),
+      body: JSON.stringify({ content }),
     }),
   archiveApplication: (id: number) =>
     request(`/api/applications/${id}/archive`, ApplicationSchema, { method: "POST" }),

@@ -1,6 +1,6 @@
 import { buildProfile } from "@app/profile/build-profile";
 import { Repository } from "@app/storage/repository";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, rawDocumentHeaders } from "./app";
 import { ScanJobManager } from "./scan-job";
 import { ScoreJobManager } from "./score-job";
@@ -191,6 +191,17 @@ describe("applications API", () => {
     expect((await call("POST", `/api/applications/${id}/unarchive`)).data).toMatchObject({
       archived: false,
     });
+  });
+
+  it("turns unexpected errors into a 500 instead of a 400", async () => {
+    const spy = vi.spyOn(repo.applications, "list").mockImplementation(() => {
+      throw new TypeError("boom");
+    });
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await makeApp().request("/api/applications");
+    expect(res.status).toBe(500);
+    spy.mockRestore();
+    quiet.mockRestore();
   });
 
   it("404s on unknown ids", async () => {

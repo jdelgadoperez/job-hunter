@@ -2,8 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { isApplicationStatus } from "./model";
-import { ApplicationError } from "./store";
+import { ApplicationError, type ApplicationStore } from "./store";
 
 /** Where the standalone `jt` tracker kept its database (honoring its `JOBTRACK_DB` override). */
 export function defaultJtDbPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -32,9 +31,11 @@ type JtNoteRow = { date: string; content: string };
 /**
  * Copy every application (and its notes) from a `jt` database into job-hunter's. The jt database
  * is opened read-only and never modified. Idempotent: an application whose company + role + date
- * applied already exists is skipped, so re-running the import doesn't duplicate anything.
+ * applied already exists is skipped, so re-running the import doesn't duplicate anything. Each
+ * import is its own transaction (via `importRecord`), so a failure keeps what was already copied
+ * and a re-run picks up the rest.
  */
-export function importJtDatabase(target: Database.Database, jtDbPath: string): JtImportResult {
+export function importJtDatabase(target: ApplicationStore, jtDbPath: string): JtImportResult {
   if (!existsSync(jtDbPath)) throw new ApplicationError(`jt database not found: ${jtDbPath}`);
   const source = new Database(jtDbPath, { readonly: true, fileMustExist: true });
   try {
@@ -55,47 +56,32 @@ export function importJtDatabase(target: Database.Database, jtDbPath: string): J
     const notesFor = source.prepare(
       "SELECT date, content FROM notes WHERE application_id = ? ORDER BY date, id",
     );
-    const exists = target.prepare(
-      "SELECT 1 FROM applications WHERE lower(company) = lower(?) AND lower(role) = lower(?) AND date_applied = ?",
-    );
-    const insertApp = target.prepare(
-      `INSERT INTO applications
-         (company, role, status, date_applied, url, source, salary_range, recruiter, archived,
-          created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(?, datetime('now')), coalesce(?, datetime('now')))`,
-    );
-    const insertNote = target.prepare(
-      "INSERT INTO application_notes (application_id, date, content) VALUES (?, ?, ?)",
-    );
-
     const result: JtImportResult = { imported: 0, skipped: 0, notes: 0 };
-    target.transaction(() => {
-      for (const app of apps) {
-        if (exists.get(app.company, app.role, app.date_applied)) {
-          result.skipped++;
-          continue;
-        }
-        const info = insertApp.run(
-          app.company,
-          app.role,
-          isApplicationStatus(app.status) ? app.status : "applied",
-          app.date_applied,
-          app.url,
-          app.source,
-          app.salary_range,
-          app.recruiter,
-          app.archived ? 1 : 0,
-          app.created_at,
-          app.updated_at,
-        );
-        const newId = Number(info.lastInsertRowid);
-        for (const note of notesFor.all(app.id) as JtNoteRow[]) {
-          insertNote.run(newId, note.date, note.content);
-          result.notes++;
-        }
-        result.imported++;
+    for (const app of apps) {
+      if (target.hasMatching(app.company, app.role, app.date_applied)) {
+        result.skipped++;
+        continue;
       }
-    })();
+      const notes = notesFor.all(app.id) as JtNoteRow[];
+      target.importRecord(
+        {
+          company: app.company,
+          role: app.role,
+          status: app.status,
+          dateApplied: app.date_applied,
+          url: app.url,
+          source: app.source,
+          salaryRange: app.salary_range,
+          recruiter: app.recruiter,
+          archived: Boolean(app.archived),
+          createdAt: app.created_at,
+          updatedAt: app.updated_at,
+        },
+        notes,
+      );
+      result.imported++;
+      result.notes += notes.length;
+    }
     return result;
   } finally {
     source.close();

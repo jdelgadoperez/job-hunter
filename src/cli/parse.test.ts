@@ -237,6 +237,15 @@ describe("parseCli", () => {
     expect(parseCli(["help", "bogus"])).toEqual({ kind: "help" });
   });
 
+  it("treats bare help/version as requests only in a command slot", () => {
+    expect(parseCli(["track", "help"])).toEqual({ kind: "help", topic: "track" });
+    expect(parseCli(["track", "add", "https://acme.example/help", "--name", "version"])).toEqual({
+      kind: "track-add",
+      url: "https://acme.example/help",
+      name: "version",
+    });
+  });
+
   it("returns a help error instead of throwing on an unknown flag", () => {
     expect(() => parseCli(["scan", "--bogus-flag"])).not.toThrow();
     expect(parseCli(["scan", "--bogus-flag"])).toMatchObject({

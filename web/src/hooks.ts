@@ -236,20 +236,28 @@ export function useApplicationStats() {
 }
 
 /** Every application write refreshes applications (+ stats) and matches, since the two are linked. */
-function useApplicationMutation<V, R>(fn: (vars: V) => Promise<R>) {
+/**
+ * Every application write refreshes applications (+ stats). Only writes that can link or unlink a
+ * match (create with a posting, delete) also refresh the matches list, the largest payload.
+ */
+function useApplicationMutation<V, R>(
+  fn: (vars: V) => Promise<R>,
+  { affectsMatches = false }: { affectsMatches?: boolean } = {},
+) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["applications"] });
-      qc.invalidateQueries({ queryKey: ["matches"] });
+      if (affectsMatches) qc.invalidateQueries({ queryKey: ["matches"] });
     },
   });
 }
 
 export function useCreateApplication() {
-  return useApplicationMutation((input: ApplicationInput & { company: string; role: string }) =>
-    api.createApplication(input),
+  return useApplicationMutation(
+    (input: ApplicationInput & { company: string; role: string }) => api.createApplication(input),
+    { affectsMatches: true },
   );
 }
 
@@ -276,17 +284,15 @@ export function useArchiveApplication() {
 }
 
 export function useRemoveApplication() {
-  return useApplicationMutation((id: number) => api.removeApplication(id));
+  return useApplicationMutation((id: number) => api.removeApplication(id), {
+    affectsMatches: true,
+  });
 }
 
-export function useDocuments(
-  applicationId: number,
-  { enabled = true }: { enabled?: boolean } = {},
-) {
+export function useDocuments(applicationId: number) {
   return useQuery({
     queryKey: ["documents", applicationId],
     queryFn: () => api.getDocuments(applicationId),
-    enabled,
   });
 }
 
@@ -301,18 +307,25 @@ function useDocumentMutation<V, R>(applicationId: number, fn: (vars: V) => Promi
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", applicationId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", applicationId], exact: true }),
   });
 }
 
+/** Save a note. The response is the saved note, so it seeds that note's cache instead of refetching. */
 export function useSaveNote(applicationId: number) {
-  return useDocumentMutation(
-    applicationId,
-    (vars: { documentId: number; content: string } | { name: string; content: string }) =>
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      vars: { documentId: number; content: string } | { name: string; content: string },
+    ) =>
       "documentId" in vars
         ? api.updateNote(applicationId, vars.documentId, vars.content)
         : api.createNote(applicationId, vars.name, vars.content),
-  );
+    onSuccess: (note) => {
+      qc.setQueryData(["documents", applicationId, note.id], note);
+      qc.invalidateQueries({ queryKey: ["documents", applicationId], exact: true });
+    },
+  });
 }
 
 export function useRemoveDocument(applicationId: number) {

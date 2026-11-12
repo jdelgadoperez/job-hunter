@@ -182,11 +182,42 @@ describe("ApplicationStore", () => {
     expect(store.remove(app.id)).toBe(false);
   });
 
-  it("refuses to link the same posting twice", () => {
+  it("links only stored postings, once, and keeps the match action in step", () => {
     const store = repo.applications;
-    store.add({ company: "Acme", role: "r", postingId: "p1" });
+    expect(() => store.add({ company: "Acme", role: "r", postingId: "nope" })).toThrow(
+      "no stored posting with id nope",
+    );
+    repo.savePosting(posting);
+    repo.saveMatchResult(posting.id, { score: 80, matchedSkills: [], missingSkills: [] });
+    const app = store.add({ company: "Acme", role: "r", postingId: "p1" });
+    expect(repo.listScoredPostings(0, { onlyApplied: true })).toHaveLength(1);
     expect(() => store.add({ company: "Acme", role: "r", postingId: "p1" })).toThrow(
       "already has an application",
+    );
+    expect(store.remove(app.id)).toBe(true);
+    expect(repo.listScoredPostings(0, { onlyApplied: true })).toHaveLength(0);
+  });
+
+  it("removing an application leaves a non-applied match action alone", () => {
+    repo.savePosting(posting);
+    const app = repo.applications.add({ company: "Acme", role: "r", postingId: "p1" });
+    repo.connection.prepare("UPDATE user_actions SET action = 'saved'").run();
+    repo.applications.remove(app.id);
+    expect(repo.connection.prepare("SELECT action FROM user_actions").get()).toEqual({
+      action: "saved",
+    });
+  });
+
+  it("resolves active first, then archived", () => {
+    const store = repo.applications;
+    const old = store.add({ company: "Initech", role: "r" });
+    store.setStatus(old.id, "ghosted");
+    store.archive(old.id);
+    expect(store.resolveIncludingArchived("initech").id).toBe(old.id);
+    const current = store.add({ company: "Initech", role: "r2" });
+    expect(store.resolveIncludingArchived("initech").id).toBe(current.id);
+    expect(() => store.resolveIncludingArchived("nobody")).toThrow(
+      'no application matches "nobody"',
     );
   });
 });
