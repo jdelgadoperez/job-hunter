@@ -74,9 +74,13 @@ real browser, no live network.
 - **`src/applications/`** — application tracking (the former standalone `jt` tracker).
   `ApplicationStore` (exposed as `repo.applications`) owns the `applications` + `application_notes`
   tables: status lifecycle, dated notes, archive rules, and selector resolution (`id` or company
-  name). `Repository.setUserAction(…, "applied")` opens an application for the posting, and moving
-  it off "applied" releases it (deleted only if untouched). `import-jt.ts` copies a jt SQLite DB
-  read-only and idempotently. `documents.ts` (`repo.documents`) attaches documents to applications:
+  name; `resolveIncludingArchived` falls back from active to archived). The match ↔ application link
+  is kept in both directions in one layer: `Repository.setUserAction(…, "applied")` opens an
+  application for the posting and moving it off "applied" releases it (deleted only if untouched,
+  i.e. no extra notes, no documents), while `ApplicationStore.add`/`remove` with a `postingId` mark
+  and un-mark the match themselves — callers never sync `user_actions` by hand. Domain validation
+  throws `ApplicationError` (the API maps it to 400 in `app.onError`). `import-jt.ts` copies a jt
+  SQLite DB read-only and idempotently through `ApplicationStore.importRecord`. `documents.ts` (`repo.documents`) attaches documents to applications:
   `.md`/`.txt` notes live in `application_documents.content` (editable via the API/dashboard); other
   files are copied under `<data dir>/docs/<application id>/` and only their path is stored. Names are
   sanitized relative paths, and stored paths are re-checked to sit inside the docs dir before any
