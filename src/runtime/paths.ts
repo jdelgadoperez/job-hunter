@@ -38,6 +38,11 @@ export function resolveDbPath(opts: PathOptions = {}): string {
   return join(resolveDataDir(opts), DB_FILENAME);
 }
 
+/** Where application documents that aren't notes (PDFs, images, diagrams) are stored. */
+export function resolveDocsDir(opts: PathOptions = {}): string {
+  return join(resolveDataDir(opts), "docs");
+}
+
 /** Create the data directory (recursively) if needed and return it. */
 export function ensureDataDir(opts: PathOptions = {}): string {
   const dir = resolveDataDir(opts);

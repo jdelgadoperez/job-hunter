@@ -241,3 +241,68 @@ describe("api response validation", () => {
     await expect(api.retryFailedScan()).resolves.toEqual(status);
   });
 });
+
+describe("applications API contract", () => {
+  const application = {
+    id: 1,
+    company: "Acme",
+    role: "Engineer",
+    status: "screened",
+    dateApplied: "2026-11-01",
+    url: null,
+    source: null,
+    salaryRange: null,
+    recruiter: null,
+    postingId: "p1",
+    archived: false,
+    createdAt: "2026-11-01 00:00:00",
+    updatedAt: "2026-11-02 00:00:00",
+    notes: [{ id: 1, applicationId: 1, date: "2026-11-01", content: "Applied" }],
+  };
+
+  it("parses applications and stats", async () => {
+    mockFetchOnce([application]);
+    await expect(api.getApplications({ status: "screened" })).resolves.toEqual([application]);
+    mockFetchOnce({ active: { screened: 1 }, archived: {} });
+    await expect(api.getApplicationStats()).resolves.toEqual({
+      active: { screened: 1 },
+      archived: {},
+    });
+  });
+
+  it("rejects an unknown status (server/client drift)", async () => {
+    mockFetchOnce([{ ...application, status: "hired" }]);
+    await expect(api.getApplications()).rejects.toThrow();
+  });
+
+  it("rejects an application missing its notes", async () => {
+    const { notes: _notes, ...withoutNotes } = application;
+    mockFetchOnce(withoutNotes);
+    await expect(api.updateApplication(1, { role: "Lead" })).rejects.toThrow();
+  });
+});
+
+describe("documents API contract", () => {
+  const meta = {
+    id: 1,
+    applicationId: 7,
+    name: "prep.md",
+    kind: "note",
+    mime: "text/markdown; charset=utf-8",
+    size: 3,
+    createdAt: "2026-11-11 00:00:00",
+    updatedAt: "2026-11-11 00:00:00",
+  };
+
+  it("parses document lists and notes", async () => {
+    mockFetchOnce([meta, { ...meta, id: 2, name: "a.pdf", kind: "file", mime: "application/pdf" }]);
+    await expect(api.getDocuments(7)).resolves.toHaveLength(2);
+    mockFetchOnce({ ...meta, content: "# x" });
+    await expect(api.getNote(7, 1)).resolves.toMatchObject({ content: "# x" });
+  });
+
+  it("rejects a note response without content", async () => {
+    mockFetchOnce(meta);
+    await expect(api.updateNote(7, 1, "x")).rejects.toThrow();
+  });
+});

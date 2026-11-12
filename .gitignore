@@ -6,3 +6,8 @@ coverage/
 *.local.md
 .codegraph/
 .playwright-mcp/
+
+# SQLite databases (e.g. JOB_HUNTER_HOME pointed inside the repo) — they hold personal data
+*.db
+*.db-wal
+*.db-shm

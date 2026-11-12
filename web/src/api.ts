@@ -192,6 +192,88 @@ const VersionSchema = z.object({
 });
 export type VersionInfo = z.infer<typeof VersionSchema>;
 
+export const APPLICATION_STATUSES = [
+  "applied",
+  "screened",
+  "interviewed",
+  "offered",
+  "rejected",
+  "ghosted",
+  "withdrawn",
+] as const;
+const ApplicationStatusSchema = z.enum(APPLICATION_STATUSES);
+export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
+/** Statuses that end an application; only these can be archived (mirrors the server). */
+export const CLOSED_STATUSES: readonly ApplicationStatus[] = ["rejected", "ghosted", "withdrawn"];
+
+const ApplicationNoteSchema = z.object({
+  id: z.number(),
+  applicationId: z.number(),
+  date: z.string(),
+  content: z.string(),
+});
+export type ApplicationNote = z.infer<typeof ApplicationNoteSchema>;
+
+const ApplicationSchema = z.object({
+  id: z.number(),
+  company: z.string(),
+  role: z.string(),
+  status: ApplicationStatusSchema,
+  dateApplied: z.string(),
+  url: z.string().nullable(),
+  source: z.string().nullable(),
+  salaryRange: z.string().nullable(),
+  recruiter: z.string().nullable(),
+  postingId: z.string().nullable(),
+  archived: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  notes: z.array(ApplicationNoteSchema),
+});
+export type Application = z.infer<typeof ApplicationSchema>;
+
+const ApplicationCountsSchema = z.partialRecord(ApplicationStatusSchema, z.number());
+const ApplicationStatsSchema = z.object({
+  active: ApplicationCountsSchema,
+  archived: ApplicationCountsSchema,
+});
+export type ApplicationStats = z.infer<typeof ApplicationStatsSchema>;
+
+const DocumentMetaSchema = z.object({
+  id: z.number(),
+  applicationId: z.number(),
+  name: z.string(),
+  kind: z.enum(["note", "file"]),
+  mime: z.string(),
+  size: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
+const NoteSchema = DocumentMetaSchema.extend({ kind: z.literal("note"), content: z.string() });
+export type Note = z.infer<typeof NoteSchema>;
+
+/** URL of a document's raw bytes (opens inline for PDFs/images, downloads otherwise). */
+export function documentRawUrl(applicationId: number, documentId: number): string {
+  return `/api/applications/${applicationId}/documents/${documentId}/raw`;
+}
+
+/** Fields for creating/editing an application. `null` clears an optional field on edit. */
+export type ApplicationInput = {
+  company?: string;
+  role?: string;
+  dateApplied?: string;
+  url?: string | null;
+  source?: string | null;
+  salaryRange?: string | null;
+  recruiter?: string | null;
+};
+export type ApplicationFilters = {
+  archived?: boolean;
+  status?: ApplicationStatus;
+  search?: string;
+};
+
 /**
  * Fetch `path` and validate the JSON body against `schema`. A non-2xx response throws with the
  * server's `error` message when present; a 2xx body that fails the schema throws a zod error,
@@ -326,4 +408,60 @@ export const api = {
     throw new Error(message);
   },
   getScoreStatus: () => request("/api/score/status", ScoreJobStatusSchema),
+  getApplications: (filters: ApplicationFilters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.archived) params.set("archived", "true");
+    if (filters.status) params.set("status", filters.status);
+    if (filters.search) params.set("search", filters.search);
+    const query = params.toString();
+    return request(`/api/applications${query ? `?${query}` : ""}`, z.array(ApplicationSchema));
+  },
+  getApplicationStats: () => request("/api/applications/stats", ApplicationStatsSchema),
+  createApplication: (input: ApplicationInput & { company: string; role: string }) =>
+    request("/api/applications", ApplicationSchema, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+  updateApplication: (
+    id: number,
+    patch: ApplicationInput & { status?: ApplicationStatus; statusDate?: string },
+  ) =>
+    request(`/api/applications/${id}`, ApplicationSchema, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    }),
+  addApplicationNote: (id: number, content: string, date?: string) =>
+    request(`/api/applications/${id}/notes`, ApplicationSchema, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content, ...(date ? { date } : {}) }),
+    }),
+  archiveApplication: (id: number) =>
+    request(`/api/applications/${id}/archive`, ApplicationSchema, { method: "POST" }),
+  unarchiveApplication: (id: number) =>
+    request(`/api/applications/${id}/unarchive`, ApplicationSchema, { method: "POST" }),
+  getDocuments: (applicationId: number) =>
+    request(`/api/applications/${applicationId}/documents`, z.array(DocumentMetaSchema)),
+  getNote: (applicationId: number, documentId: number) =>
+    request(`/api/applications/${applicationId}/documents/${documentId}`, NoteSchema),
+  createNote: (applicationId: number, name: string, content: string) =>
+    request(`/api/applications/${applicationId}/documents`, NoteSchema, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, content }),
+    }),
+  updateNote: (applicationId: number, documentId: number, content: string) =>
+    request(`/api/applications/${applicationId}/documents/${documentId}`, NoteSchema, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content }),
+    }),
+  removeDocument: (applicationId: number, documentId: number) =>
+    request(`/api/applications/${applicationId}/documents/${documentId}`, RemovedSchema, {
+      method: "DELETE",
+    }),
+  removeApplication: (id: number) =>
+    request(`/api/applications/${id}`, RemovedSchema, { method: "DELETE" }),
 };

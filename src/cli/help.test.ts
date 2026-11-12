@@ -50,7 +50,7 @@ describe("renderHelp", () => {
 
   it("exposes every command name as a help topic", () => {
     expect(COMMAND_NAMES).toEqual(
-      new Set(["scan", "score", "config", "list", "serve", "service", "profile", "track"]),
+      new Set(["scan", "score", "config", "list", "app", "serve", "service", "profile", "track"]),
     );
   });
 

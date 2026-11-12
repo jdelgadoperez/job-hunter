@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  type ApplicationFilters,
+  type ApplicationInput,
+  type ApplicationStatus,
   api,
   type MatchFilters,
   type ScoredPosting,
@@ -57,7 +60,11 @@ export function useMatchAction() {
     },
     // Re-sync with the server regardless of outcome (a successful write can change expiry/ordering
     // that the optimistic patch doesn't model).
-    onSettled: () => qc.invalidateQueries({ queryKey: ["matches"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["matches"] });
+      // Marking a match applied (or undoing it) opens/releases an application server-side.
+      qc.invalidateQueries({ queryKey: ["applications"] });
+    },
   });
 }
 
@@ -208,4 +215,108 @@ export function useStartDeepScore() {
     // detected by the useScoreStatus poll (handled in the Home view's finishedAt effect).
     onSuccess: (status) => qc.setQueryData(["score-status"], status),
   });
+}
+
+export function useApplications(filters: ApplicationFilters = {}) {
+  return useQuery({
+    queryKey: [
+      "applications",
+      {
+        archived: filters.archived ?? false,
+        status: filters.status ?? "",
+        search: filters.search ?? "",
+      },
+    ],
+    queryFn: () => api.getApplications(filters),
+  });
+}
+
+export function useApplicationStats() {
+  return useQuery({ queryKey: ["applications", "stats"], queryFn: api.getApplicationStats });
+}
+
+/** Every application write refreshes applications (+ stats) and matches, since the two are linked. */
+function useApplicationMutation<V, R>(fn: (vars: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["applications"] });
+      qc.invalidateQueries({ queryKey: ["matches"] });
+    },
+  });
+}
+
+export function useCreateApplication() {
+  return useApplicationMutation((input: ApplicationInput & { company: string; role: string }) =>
+    api.createApplication(input),
+  );
+}
+
+export function useUpdateApplication() {
+  return useApplicationMutation(
+    ({
+      id,
+      ...patch
+    }: ApplicationInput & { id: number; status?: ApplicationStatus; statusDate?: string }) =>
+      api.updateApplication(id, patch),
+  );
+}
+
+export function useAddApplicationNote() {
+  return useApplicationMutation(({ id, content }: { id: number; content: string }) =>
+    api.addApplicationNote(id, content),
+  );
+}
+
+export function useArchiveApplication() {
+  return useApplicationMutation(({ id, archived }: { id: number; archived: boolean }) =>
+    archived ? api.archiveApplication(id) : api.unarchiveApplication(id),
+  );
+}
+
+export function useRemoveApplication() {
+  return useApplicationMutation((id: number) => api.removeApplication(id));
+}
+
+export function useDocuments(
+  applicationId: number,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: ["documents", applicationId],
+    queryFn: () => api.getDocuments(applicationId),
+    enabled,
+  });
+}
+
+export function useNote(applicationId: number, documentId: number) {
+  return useQuery({
+    queryKey: ["documents", applicationId, documentId],
+    queryFn: () => api.getNote(applicationId, documentId),
+  });
+}
+
+function useDocumentMutation<V, R>(applicationId: number, fn: (vars: V) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", applicationId] }),
+  });
+}
+
+export function useSaveNote(applicationId: number) {
+  return useDocumentMutation(
+    applicationId,
+    (vars: { documentId: number; content: string } | { name: string; content: string }) =>
+      "documentId" in vars
+        ? api.updateNote(applicationId, vars.documentId, vars.content)
+        : api.createNote(applicationId, vars.name, vars.content),
+  );
+}
+
+export function useRemoveDocument(applicationId: number) {
+  return useDocumentMutation(applicationId, (documentId: number) =>
+    api.removeDocument(applicationId, documentId),
+  );
 }

@@ -1,3 +1,5 @@
+import { DocumentStore } from "@app/applications/documents";
+import { ApplicationStore } from "@app/applications/store";
 import { makeCompanyId } from "@app/discovery/company-id";
 import type { ScanScope } from "@app/discovery/scan-store";
 import { normalizeCareersUrl, normalizeSkill } from "@app/domain/normalize";
@@ -85,12 +87,36 @@ function normalizeScorerTag(scorer: string | null): ScorerTag {
 
 export class Repository {
   private readonly db: Database.Database;
+  /** Application tracking (the jobs you've applied to), over this same database. */
+  readonly applications: ApplicationStore;
+  /** Documents attached to applications (notes in the DB, other files under `docsDir`). */
+  readonly documents: DocumentStore;
 
-  constructor(dbPath: string) {
+  /**
+   * @param opts.docsDir Where non-note application documents are copied (normally
+   *   `<data dir>/docs`). Omitted (e.g. an in-memory test DB), only notes can be stored.
+   */
+  constructor(dbPath: string, opts: { today?: () => string; docsDir?: string } = {}) {
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.exec(SCHEMA);
     this.migrate();
+    this.documents = new DocumentStore(this.db, opts.docsDir);
+    this.applications = new ApplicationStore(this.db, opts.today, (id) =>
+      this.documents.removeAll(id),
+    );
+    // Matches marked applied before application tracking existed become applications.
+    this.applications.backfillFromAppliedMatches();
+  }
+
+  /** Run `fn` inside one SQLite transaction (all-or-nothing). */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
+  /** The raw connection, for bulk operations that own their SQL (e.g. the jt importer). */
+  get connection(): Database.Database {
+    return this.db;
   }
 
   /**
@@ -409,22 +435,33 @@ export class Repository {
     }));
   }
 
-  /** Record a saved/dismissed action for a posting (one per posting; re-setting replaces it). */
+  /**
+   * Record a saved/dismissed/applied action for a posting (one per posting; re-setting replaces
+   * it). Marking a posting applied also opens an application for it; moving it off "applied"
+   * releases that application (deleted only if untouched — see `ApplicationStore.releasePosting`).
+   */
   setUserAction(postingId: string, action: UserAction): void {
-    this.db
-      .prepare(
-        `INSERT INTO user_actions (posting_id, action)
-         VALUES (?, ?)
-         ON CONFLICT(posting_id) DO UPDATE SET action = excluded.action, updated_at = datetime('now')`,
-      )
-      .run(postingId, action);
+    this.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO user_actions (posting_id, action)
+           VALUES (?, ?)
+           ON CONFLICT(posting_id) DO UPDATE SET action = excluded.action, updated_at = datetime('now')`,
+        )
+        .run(postingId, action);
+      if (action === "applied") this.applications.ensureForPosting(postingId);
+      else this.applications.releasePosting(postingId);
+    });
   }
 
-  /** Clear any saved/dismissed action for a posting; returns whether one was removed. */
+  /** Clear any action for a posting (releasing its application, if any); returns whether one was removed. */
   clearUserAction(postingId: string): boolean {
-    return (
-      this.db.prepare("DELETE FROM user_actions WHERE posting_id = ?").run(postingId).changes > 0
-    );
+    return this.transaction(() => {
+      const removed =
+        this.db.prepare("DELETE FROM user_actions WHERE posting_id = ?").run(postingId).changes > 0;
+      this.applications.releasePosting(postingId);
+      return removed;
+    });
   }
 
   /**

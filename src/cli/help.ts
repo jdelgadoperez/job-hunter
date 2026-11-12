@@ -94,6 +94,56 @@ export const COMMANDS: CommandHelp[] = [
     examples: ["job-hunter list", "job-hunter list --min-score 70 --remote-only"],
   },
   {
+    name: "app",
+    invocation: "app <add|list|view|status|note|…> …",
+    summary: "Track the jobs you've applied to",
+    details:
+      "Tracks applications through their lifecycle (applied → screened → interviewed → offered, or rejected / ghosted / withdrawn) with dated notes. Marking a match applied in the dashboard creates one automatically. <company|id> matches a company name (case-insensitive, partial) or an application id; ambiguous names list the ids to use. Statuses: applied, screened, interviewed, offered, rejected, ghosted, withdrawn.",
+    optionsLabel: "SUBCOMMANDS",
+    options: [
+      [
+        "add <company> <role> [--url U] [--source S] [--salary S] [--recruiter R] [--date D] [--posting ID] [--json]",
+        "Record an application (--date defaults to today; --posting links a stored match).",
+      ],
+      ["list [status] [--archived] [--json]", "List active (or archived) applications."],
+      ["view <company|id> [--archived] [--json]", "Show one application with its notes."],
+      ["status <company|id> <status> [--date D]", "Move to a new status (logged as a note)."],
+      ["note <company|id> <text…> [--date D]", "Add a dated note."],
+      [
+        "edit <company|id> [--company --role --url --source --salary --recruiter --date]",
+        "Change fields (an empty value clears an optional field).",
+      ],
+      ["search <term> [--json]", "Search every field and note, archived included."],
+      ["stats [--archived] [--json]", "Counts by status."],
+      ["archive [company|id]", "Archive a closed application; with no argument, list candidates."],
+      ["unarchive <company|id>", "Restore an archived application."],
+      ["remove <company|id>", "Delete an application and its notes."],
+      [
+        "export [--archived] [--file out.md]",
+        "Export applications (with notes) as markdown, in the old jt export format.",
+      ],
+      ["docs <company|id> [--json]", "List an application's documents (notes and files)."],
+      ["doc <company|id> <name>", "Print a note's markdown (e.g. to pipe into another tool)."],
+      [
+        "import-docs <folder> [--into <company|id>] [--overwrite]",
+        "Attach prep docs: each company folder of a job-hunt checkout (incl. archive/) goes to the application with that company name; --into imports one folder into a chosen application. .md/.txt become editable notes; other files are copied under the data dir's docs/. Safe to re-run.",
+      ],
+      [
+        "import [path]",
+        "Import from the old jt tracker's database (default ~/.jobtrack/jobtrack.db or $JOBTRACK_DB). Safe to re-run.",
+      ],
+    ],
+    examples: [
+      'job-hunter app add Acme "Senior Engineer" --url https://acme.com/jobs/1',
+      "job-hunter app status acme screened",
+      'job-hunter app note acme "Recruiter call Tuesday"',
+      "job-hunter app list interviewed",
+      "job-hunter app import",
+      "job-hunter app import-docs ~/code/job-hunt",
+      "job-hunter app doc solace prep.md",
+    ],
+  },
+  {
     name: "serve",
     invocation: "serve [-p|--port N] [--no-open] [--refresh-hours N]",
     summary: "Start the local web dashboard (recommended)",

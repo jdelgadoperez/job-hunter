@@ -71,6 +71,20 @@ real browser, no live network.
   consecutive-miss heuristic (`repo.expireStalePostings`).
 - **`src/profile/`** — resume → skill profile. `read-resume.ts` parses `.pdf`/`.docx`/`.md`/`.txt`;
   `build-profile.ts` extracts skills against the skill dictionary (`src/domain/`).
+- **`src/applications/`** — application tracking (the former standalone `jt` tracker).
+  `ApplicationStore` (exposed as `repo.applications`) owns the `applications` + `application_notes`
+  tables: status lifecycle, dated notes, archive rules, and selector resolution (`id` or company
+  name). `Repository.setUserAction(…, "applied")` opens an application for the posting, and moving
+  it off "applied" releases it (deleted only if untouched). `import-jt.ts` copies a jt SQLite DB
+  read-only and idempotently. `documents.ts` (`repo.documents`) attaches documents to applications:
+  `.md`/`.txt` notes live in `application_documents.content` (editable via the API/dashboard); other
+  files are copied under `<data dir>/docs/<application id>/` and only their path is stored. Names are
+  sanitized relative paths, and stored paths are re-checked to sit inside the docs dir before any
+  read or delete. `import-docs.ts` maps job-hunt company folders to applications by company name.
+  `/raw` serves only inert types inline; everything else is sent as a download under a sandbox CSP.
+  Surfaces: `job-hunter app …` (`src/cli/parse-app.ts`,
+  `src/cli/app-commands.ts`), `/api/applications*` (`src/server/app.ts`), and the dashboard's
+  Applications tab. Local-only: never part of the hosted feed.
 - **`src/storage/repository.ts`** — the single `Repository` over `better-sqlite3`. Owns the schema
   (`schema.ts`), an idempotent `migrate()` for additive columns, scans as incremental units (directory
   snapshot + diff, posting upsert/expire), settings, and the skill dictionary.

@@ -1,3 +1,10 @@
+import {
+  type ApplicationPatch,
+  type ApplicationStatus,
+  isApplicationStatus,
+  type NewApplication,
+} from "@app/applications/model";
+import { ApplicationError } from "@app/applications/store";
 import { isUnscrapableHost } from "@app/discovery/unscrapable";
 import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
@@ -135,6 +142,8 @@ export function createApp(deps: ServerDeps): Hono {
   app.delete("/api/matches/:id/action", (c) => {
     return c.json({ removed: repo.clearUserAction(c.req.param("id")) });
   });
+
+  registerApplicationRoutes(app, repo);
 
   app.get("/api/companies", (c) => c.json(repo.listTrackedCompanies()));
 
@@ -366,4 +375,275 @@ async function parseScanScope(c: {
   const body = await c.req.json().catch(() => null);
   const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
   return record.scope === "full" ? "full" : "incremental";
+}
+
+const APPLICATION_TEXT_FIELDS = [
+  "company",
+  "role",
+  "dateApplied",
+  "url",
+  "source",
+  "salaryRange",
+  "recruiter",
+] as const;
+
+/**
+ * Pick the editable application fields out of a request body. Each present field must be a string
+ * (or null, to clear an optional one); anything else is a 400. Unknown keys are ignored.
+ */
+function readApplicationFields(
+  body: Record<string, unknown>,
+): { ok: true; fields: ApplicationPatch } | { ok: false; error: string } {
+  const fields: ApplicationPatch = {};
+  for (const key of APPLICATION_TEXT_FIELDS) {
+    const value = body[key];
+    if (value === undefined) continue;
+    if (value === null && key !== "company" && key !== "role" && key !== "dateApplied") {
+      fields[key] = null;
+      continue;
+    }
+    if (typeof value !== "string") return { ok: false, error: `"${key}" must be a string` };
+    fields[key] = value;
+  }
+  return { ok: true, fields };
+}
+
+/** Application tracking: CRUD + status transitions + notes, over `repo.applications`. */
+function registerApplicationRoutes(app: Hono, repo: ServerDeps["repo"]): void {
+  const store = repo.applications;
+
+  const parseId = (raw: string): number | undefined => {
+    const id = Number(raw);
+    return Number.isInteger(id) && id > 0 && store.get(id) ? id : undefined;
+  };
+  const readBody = async (c: { req: { json: () => Promise<unknown> } }) => {
+    const body = await c.req.json().catch(() => null);
+    return typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : null;
+  };
+  // Domain validation failures (bad date, empty name, illegal archive) are the caller's fault.
+  const guard = <T>(fn: () => T): { ok: true; value: T } | { ok: false; error: string } => {
+    try {
+      return { ok: true, value: fn() };
+    } catch (error) {
+      if (error instanceof ApplicationError) return { ok: false, error: error.message };
+      throw error;
+    }
+  };
+
+  app.get("/api/applications", (c) => {
+    const rawStatus = c.req.query("status");
+    if (rawStatus !== undefined && !isApplicationStatus(rawStatus)) {
+      return c.json({ error: `unknown status: ${rawStatus}` }, 400);
+    }
+    const status: ApplicationStatus | undefined = rawStatus;
+    const search = c.req.query("search")?.trim();
+    if (search) return c.json(store.search(search));
+    return c.json(
+      store.list({
+        archived: c.req.query("archived") === "true",
+        ...(status ? { status } : {}),
+      }),
+    );
+  });
+
+  app.get("/api/applications/stats", (c) =>
+    c.json({
+      active: store.countsByStatus(),
+      archived: store.countsByStatus({ archived: true }),
+    }),
+  );
+
+  app.get("/api/applications/:id", (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    return c.json(store.get(id));
+  });
+
+  app.post("/api/applications", async (c) => {
+    const body = await readBody(c);
+    if (!body) return c.json({ error: "expected a JSON object body" }, 400);
+    const read = readApplicationFields(body);
+    if (!read.ok) return c.json({ error: read.error }, 400);
+    const { company, role, ...rest } = read.fields;
+    if (typeof company !== "string" || typeof role !== "string") {
+      return c.json({ error: '"company" and "role" are required' }, 400);
+    }
+    if (body.postingId !== undefined && typeof body.postingId !== "string") {
+      return c.json({ error: '"postingId" must be a string' }, 400);
+    }
+    const postingId = body.postingId as string | undefined;
+    const input: NewApplication = { company, role, ...rest, postingId: postingId ?? null };
+    const result = guard(() =>
+      repo.transaction(() => {
+        const created = store.add(input);
+        // Mirror the match action so the posting leaves the default matches list.
+        if (postingId) repo.setUserAction(postingId, "applied");
+        return created;
+      }),
+    );
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(store.get(result.value.id), 201);
+  });
+
+  // Edit fields and/or move status in one call. A status change is logged as a dated note
+  // (`statusDate`, default today), exactly like the CLI's `app status`.
+  app.patch("/api/applications/:id", async (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    const body = await readBody(c);
+    if (!body) return c.json({ error: "expected a JSON object body" }, 400);
+    const read = readApplicationFields(body);
+    if (!read.ok) return c.json({ error: read.error }, 400);
+    if (body.status !== undefined && !isApplicationStatus(body.status)) {
+      return c.json({ error: `unknown status: ${String(body.status)}` }, 400);
+    }
+    if (body.statusDate !== undefined && typeof body.statusDate !== "string") {
+      return c.json({ error: '"statusDate" must be a string' }, 400);
+    }
+    const result = guard(() =>
+      repo.transaction(() => {
+        store.update(id, read.fields);
+        if (isApplicationStatus(body.status)) {
+          store.setStatus(id, body.status, body.statusDate as string | undefined);
+        }
+        return store.get(id);
+      }),
+    );
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(result.value);
+  });
+
+  app.post("/api/applications/:id/notes", async (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    const body = await readBody(c);
+    if (!body || typeof body.content !== "string") {
+      return c.json({ error: 'expected { "content": string, "date"?: string }' }, 400);
+    }
+    if (body.date !== undefined && typeof body.date !== "string") {
+      return c.json({ error: '"date" must be a string' }, 400);
+    }
+    const content = body.content;
+    const date = body.date as string | undefined;
+    const result = guard(() => store.addNote(id, content, date));
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(store.get(id), 201);
+  });
+
+  app.post("/api/applications/:id/archive", (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    const result = guard(() => store.archive(id));
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(result.value);
+  });
+
+  app.post("/api/applications/:id/unarchive", (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    return c.json(store.unarchive(id));
+  });
+
+  // --- Documents (notes in the DB, other files under the data dir's docs/ folder) ---
+
+  app.get("/api/applications/:id/documents", (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    return c.json(repo.documents.list(id));
+  });
+
+  // Create (or replace, by name) a markdown note.
+  app.post("/api/applications/:id/documents", async (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    const body = await readBody(c);
+    if (!body || typeof body.name !== "string" || typeof body.content !== "string") {
+      return c.json({ error: 'expected { "name": string, "content": string }' }, 400);
+    }
+    const { name, content } = body;
+    const result = guard(() => repo.documents.saveNote(id, name, content));
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(result.value, 201);
+  });
+
+  // A note with its content; a file's metadata (its bytes come from /raw).
+  app.get("/api/applications/:id/documents/:docId", (c) => {
+    const id = parseId(c.req.param("id"));
+    const docId = Number(c.req.param("docId"));
+    const meta = id === undefined ? undefined : repo.documents.get(id, docId);
+    if (id === undefined || !meta) return c.json({ error: "document not found" }, 404);
+    return c.json(meta.kind === "note" ? repo.documents.getNote(id, docId) : meta);
+  });
+
+  app.put("/api/applications/:id/documents/:docId", async (c) => {
+    const id = parseId(c.req.param("id"));
+    const docId = Number(c.req.param("docId"));
+    if (id === undefined || !repo.documents.get(id, docId)) {
+      return c.json({ error: "document not found" }, 404);
+    }
+    const body = await readBody(c);
+    if (!body || typeof body.content !== "string") {
+      return c.json({ error: 'expected { "content": string }' }, 400);
+    }
+    const content = body.content;
+    const result = guard(() => repo.documents.updateNote(id, docId, content));
+    if (!result.ok) return c.json({ error: result.error }, 400);
+    return c.json(result.value);
+  });
+
+  app.delete("/api/applications/:id/documents/:docId", (c) => {
+    const id = parseId(c.req.param("id"));
+    const docId = Number(c.req.param("docId"));
+    if (id === undefined || !repo.documents.remove(id, docId)) {
+      return c.json({ error: "document not found" }, 404);
+    }
+    return c.json({ removed: true });
+  });
+
+  // The document's bytes, for opening in a new tab or downloading.
+  app.get("/api/applications/:id/documents/:docId/raw", (c) => {
+    const id = parseId(c.req.param("id"));
+    const doc =
+      id === undefined ? undefined : repo.documents.read(id, Number(c.req.param("docId")));
+    if (!doc) return c.json({ error: "document not found" }, 404);
+    return new Response(new Uint8Array(doc.body), {
+      headers: rawDocumentHeaders(doc.meta.name, doc.meta.mime),
+    });
+  });
+
+  // Delete an application; a linked match is un-marked applied so it doesn't dangle.
+  app.delete("/api/applications/:id", (c) => {
+    const id = parseId(c.req.param("id"));
+    if (id === undefined) return c.json({ error: "application not found" }, 404);
+    const existing = store.get(id);
+    repo.transaction(() => {
+      store.remove(id);
+      if (existing?.postingId) repo.clearUserAction(existing.postingId);
+    });
+    return c.json({ removed: true });
+  });
+}
+
+/** Types a browser renders natively and safely without script: PDFs, raster images, text, JSON. */
+const INLINE_SAFE =
+  /^(application\/pdf|image\/(png|jpeg|gif|webp)|text\/(plain|markdown)|application\/json)\b/;
+
+/**
+ * Headers for serving a stored document. This server is same-origin with the dashboard's API, so
+ * a document must never run script: `nosniff` stops content sniffing, and anything not known to be
+ * inert (SVG, HTML, unknown binaries) is sandboxed by CSP and sent as a download.
+ */
+export function rawDocumentHeaders(name: string, mime: string): Record<string, string> {
+  const filename = name.split("/").pop() ?? "document";
+  const inline = INLINE_SAFE.test(mime);
+  const headers: Record<string, string> = {
+    "content-type": mime,
+    "x-content-type-options": "nosniff",
+    "cache-control": "no-store",
+    "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(filename)}`,
+  };
+  if (!inline) headers["content-security-policy"] = "sandbox; default-src 'none'";
+  return headers;
 }
