@@ -111,17 +111,13 @@ export class DocumentStore {
   }
 
   getByName(applicationId: number, name: string): DocumentMeta | undefined {
-    const row = this.db
-      .prepare("SELECT * FROM application_documents WHERE application_id = ? AND name = ?")
-      .get(applicationId, cleanDocumentName(name)) as DocRow | undefined;
+    const row = this.rowByName(applicationId, cleanDocumentName(name));
     return row ? this.toMeta(row) : undefined;
   }
 
   /** A note with its markdown content, or undefined if the id isn't a note on this application. */
   getNote(applicationId: number, id: number): Note | undefined {
-    const row = this.row(applicationId, id);
-    if (row?.kind !== "note") return undefined;
-    return { ...this.toMeta(row), kind: "note", content: row.content ?? "" };
+    return this.toNote(this.row(applicationId, id));
   }
 
   /** Create or replace a note by name. */
@@ -130,9 +126,7 @@ export class DocumentStore {
     if (!isNoteName(clean)) {
       throw new ApplicationError(`notes must be .md, .markdown, or .txt: ${clean}`);
     }
-    const existing = this.db
-      .prepare("SELECT * FROM application_documents WHERE application_id = ? AND name = ?")
-      .get(applicationId, clean) as DocRow | undefined;
+    const existing = this.rowByName(applicationId, clean);
     if (existing && existing.kind !== "note") {
       throw new ApplicationError(`${clean} is a file, not a note`);
     }
@@ -144,8 +138,7 @@ export class DocumentStore {
            content = excluded.content, size = excluded.size, updated_at = datetime('now')`,
       )
       .run(applicationId, clean, content, mimeFor(clean), Buffer.byteLength(content));
-    const saved = this.getByName(applicationId, clean);
-    return justWritten(saved && this.getNote(applicationId, saved.id), clean);
+    return justWritten(this.toNote(this.rowByName(applicationId, clean)), clean);
   }
 
   /** Update an existing note's content by id. */
@@ -177,7 +170,8 @@ export class DocumentStore {
            size = excluded.size, updated_at = datetime('now')`,
       )
       .run(applicationId, clean, target, mimeFor(clean), size);
-    return justWritten(this.getByName(applicationId, clean), clean);
+    const saved = this.rowByName(applicationId, clean);
+    return justWritten(saved && this.toMeta(saved), clean);
   }
 
   /**
@@ -217,6 +211,18 @@ export class DocumentStore {
     return this.db
       .prepare("SELECT * FROM application_documents WHERE application_id = ? AND id = ?")
       .get(applicationId, id) as DocRow | undefined;
+  }
+
+  /** By an already-cleaned name. */
+  private rowByName(applicationId: number, name: string): DocRow | undefined {
+    return this.db
+      .prepare("SELECT * FROM application_documents WHERE application_id = ? AND name = ?")
+      .get(applicationId, name) as DocRow | undefined;
+  }
+
+  private toNote(row: DocRow | undefined): Note | undefined {
+    if (row?.kind !== "note") return undefined;
+    return { ...this.toMeta(row), kind: "note", content: row.content ?? "" };
   }
 
   private storagePath(applicationId: number, name: string): string {

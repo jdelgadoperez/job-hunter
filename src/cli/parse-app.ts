@@ -1,6 +1,11 @@
 import { parseArgs } from "node:util";
-import { APPLICATION_STATUSES, type ApplicationStatus } from "@app/applications/model";
+import {
+  APPLICATION_STATUSES,
+  type ApplicationPatch,
+  type ApplicationStatus,
+} from "@app/applications/model";
 import { isIsoDate } from "@app/applications/store";
+import { describeParseError } from "./parse-error";
 
 /** `job-hunter app <sub> …` — application tracking (the former `jt` CLI). */
 export type AppCommand =
@@ -23,15 +28,7 @@ export type AppCommand =
   | {
       sub: "edit";
       selector: string;
-      patch: {
-        company?: string;
-        role?: string;
-        url?: string;
-        source?: string;
-        salaryRange?: string;
-        recruiter?: string;
-        dateApplied?: string;
-      };
+      patch: ApplicationPatch;
     }
   | { sub: "search"; term: string; json: boolean }
   | { sub: "stats"; archived: boolean; json: boolean }
@@ -44,7 +41,7 @@ export type AppCommand =
   | { sub: "doc"; selector: string; name: string }
   | { sub: "import-docs"; path: string; into?: string; overwrite: boolean };
 
-export const APP_SUBCOMMANDS = [
+const APP_SUBCOMMANDS = [
   "add",
   "list",
   "view",
@@ -70,8 +67,7 @@ function parse(args: string[], options: Record<string, { type: "string" | "boole
     const { values, positionals } = parseArgs({ args, options, allowPositionals: true });
     return { values: values as Parsed["values"], positionals };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new AppParseError(message.split(". ")[0] ?? message);
+    throw new AppParseError(describeParseError(err));
   }
 }
 
@@ -123,25 +119,24 @@ export function parseAppCommand(rest: string[]): AppCommand {
       });
       const company = need(str(positionals[0]), "app add requires <company> <role>");
       const role = need(str(positionals.slice(1).join(" ")), "app add requires <company> <role>");
-      const cmd: Extract<AppCommand, { sub: "add" }> = {
-        sub: "add",
-        company,
-        role,
-        json: Boolean(values.json),
-      };
       const url = str(values.url);
       const source = str(values.source);
       const salaryRange = str(values.salary);
       const recruiter = str(values.recruiter);
       const date = checkDate(str(values.date));
       const postingId = str(values.posting);
-      if (url) cmd.url = url;
-      if (source) cmd.source = source;
-      if (salaryRange) cmd.salaryRange = salaryRange;
-      if (recruiter) cmd.recruiter = recruiter;
-      if (date) cmd.date = date;
-      if (postingId) cmd.postingId = postingId;
-      return cmd;
+      return {
+        sub: "add",
+        company,
+        role,
+        ...(url ? { url } : {}),
+        ...(source ? { source } : {}),
+        ...(salaryRange ? { salaryRange } : {}),
+        ...(recruiter ? { recruiter } : {}),
+        ...(date ? { date } : {}),
+        ...(postingId ? { postingId } : {}),
+        json: Boolean(values.json),
+      };
     }
     case "list": {
       const { values, positionals } = parse(args, {
@@ -198,7 +193,7 @@ export function parseAppCommand(rest: string[]): AppCommand {
         date: { type: "string" },
       });
       const selector = need(str(positionals.join(" ")), "app edit requires <company|id>");
-      const patch: Extract<AppCommand, { sub: "edit" }>["patch"] = {};
+      const patch: ApplicationPatch = {};
       // Pass-through (not `str`) so an explicit empty value clears an optional field.
       for (const [flag, key] of [
         ["company", "company"],

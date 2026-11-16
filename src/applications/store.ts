@@ -8,6 +8,7 @@ import {
   CLOSED_STATUSES,
   isApplicationStatus,
   type NewApplication,
+  statusLabel,
 } from "./model";
 
 /** Today's local calendar date as YYYY-MM-DD (the user's day, not UTC's). */
@@ -26,6 +27,12 @@ export function isIsoDate(value: string): boolean {
 }
 
 export class ApplicationError extends Error {}
+
+/** Throw the standard error unless `value` is a real YYYY-MM-DD date. */
+function requireIsoDate(value: string): string {
+  if (!isIsoDate(value)) throw new ApplicationError(`invalid date: ${value} (expected YYYY-MM-DD)`);
+  return value;
+}
 
 /** No application matched a selector or id (as opposed to bad input or an ambiguous match). */
 export class ApplicationNotFoundError extends ApplicationError {}
@@ -61,10 +68,6 @@ const PATCH_COLUMNS: Record<keyof ApplicationPatch, string> = {
   recruiter: "recruiter",
 };
 
-function titleCase(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
 function trimOrNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -94,15 +97,15 @@ export class ApplicationStore {
     const role = input.role.trim();
     if (!company) throw new ApplicationError("company is required");
     if (!role) throw new ApplicationError("role is required");
-    const dateApplied = input.dateApplied ?? this.today();
-    if (!isIsoDate(dateApplied)) {
-      throw new ApplicationError(`invalid date: ${dateApplied} (expected YYYY-MM-DD)`);
-    }
+    const dateApplied = requireIsoDate(input.dateApplied ?? this.today());
     const status = input.status ?? "applied";
     if (!isApplicationStatus(status)) throw new ApplicationError(`invalid status: ${status}`);
     const postingId = trimOrNull(input.postingId);
     if (postingId && this.getByPostingId(postingId)) {
       throw new ApplicationError(`posting ${postingId} already has an application`);
+    }
+    if (postingId && !this.db.prepare("SELECT 1 FROM postings WHERE id = ?").get(postingId)) {
+      throw new ApplicationError(`no stored posting with id ${postingId}`);
     }
 
     const insert = this.db.transaction(() => {
@@ -125,6 +128,16 @@ export class ApplicationStore {
         );
       const id = Number(info.lastInsertRowid);
       this.insertNote(id, APPLIED_NOTE, dateApplied);
+      // Keep the match list in step: a linked posting is marked applied (no-op if it already is).
+      if (postingId) {
+        this.db
+          .prepare(
+            `INSERT INTO user_actions (posting_id, action) VALUES (?, 'applied')
+             ON CONFLICT(posting_id) DO UPDATE SET action = 'applied', updated_at = datetime('now')
+             WHERE action != 'applied'`,
+          )
+          .run(postingId);
+      }
       return id;
     });
     return this.require(insert());
@@ -153,9 +166,7 @@ export class ApplicationStore {
       params.push(opts.status);
     }
     sql += " ORDER BY date_applied DESC, id DESC";
-    return (this.db.prepare(sql).all(...params) as ApplicationRow[]).map((r) =>
-      this.toApplication(r),
-    );
+    return this.toApplications(this.db.prepare(sql).all(...params) as ApplicationRow[]);
   }
 
   /** Case-insensitive search across every text field and note content, archived included. */
@@ -170,7 +181,7 @@ export class ApplicationStore {
          ORDER BY a.date_applied DESC, a.id DESC`,
       )
       .all(pattern, pattern, pattern, pattern, pattern, pattern, pattern) as ApplicationRow[];
-    return rows.map((r) => this.toApplication(r));
+    return this.toApplications(rows);
   }
 
   /**
@@ -204,6 +215,24 @@ export class ApplicationStore {
     );
   }
 
+  /**
+   * `resolve` over active applications, falling back to archived ones only when nothing active
+   * matches (documents and history outlive archiving). An ambiguous match stays an error in either
+   * scope; a miss in both reports the active miss.
+   */
+  resolveIncludingArchived(selector: string): Application {
+    try {
+      return this.resolve(selector);
+    } catch (activeError) {
+      if (!(activeError instanceof ApplicationNotFoundError)) throw activeError;
+      try {
+        return this.resolve(selector, { archived: true });
+      } catch (archivedError) {
+        throw archivedError instanceof ApplicationNotFoundError ? activeError : archivedError;
+      }
+    }
+  }
+
   /** Update descriptive fields. Unknown keys are ignored; returns the updated application. */
   update(id: number, patch: ApplicationPatch): Application {
     this.require(id);
@@ -213,16 +242,13 @@ export class ApplicationStore {
       keyof ApplicationPatch,
       string,
     ][]) {
-      if (!(key in patch) || patch[key] === undefined) continue;
+      if (patch[key] === undefined) continue;
       let value: string | null;
       if (key === "company" || key === "role") {
         value = (patch[key] ?? "").trim();
         if (!value) throw new ApplicationError(`${key} cannot be empty`);
       } else if (key === "dateApplied") {
-        value = patch.dateApplied ?? "";
-        if (!isIsoDate(value)) {
-          throw new ApplicationError(`invalid date: ${value} (expected YYYY-MM-DD)`);
-        }
+        value = requireIsoDate(patch.dateApplied ?? "");
       } else {
         value = trimOrNull(patch[key]);
       }
@@ -242,7 +268,7 @@ export class ApplicationStore {
   /** Move an application to a new status and record the change as a dated note. */
   setStatus(id: number, status: ApplicationStatus, date: string = this.today()): Application {
     if (!isApplicationStatus(status)) throw new ApplicationError(`invalid status: ${status}`);
-    if (!isIsoDate(date)) throw new ApplicationError(`invalid date: ${date} (expected YYYY-MM-DD)`);
+    requireIsoDate(date);
     const current = this.require(id);
     if (current.status === status) return current;
     this.db.transaction(() => {
@@ -251,7 +277,7 @@ export class ApplicationStore {
         .run(status, id);
       this.insertNote(
         id,
-        `Status changed from ${titleCase(current.status)} to ${titleCase(status)}`,
+        `Status changed from ${statusLabel(current.status)} to ${statusLabel(status)}`,
         date,
       );
     })();
@@ -261,7 +287,7 @@ export class ApplicationStore {
   addNote(id: number, content: string, date: string = this.today()): ApplicationNote {
     const text = content.trim();
     if (!text) throw new ApplicationError("note is empty");
-    if (!isIsoDate(date)) throw new ApplicationError(`invalid date: ${date} (expected YYYY-MM-DD)`);
+    requireIsoDate(date);
     this.require(id);
     const noteId = this.insertNote(id, text, date);
     this.touch(id);
@@ -291,12 +317,84 @@ export class ApplicationStore {
     return this.list().filter((a) => CLOSED_STATUSES.includes(a.status));
   }
 
-  /** Delete an application with its notes and documents; returns whether it existed. */
+  /**
+   * Delete an application with its notes and documents; returns whether it existed. A linked match
+   * is un-marked applied so it doesn't sit in "applied" with no application behind it.
+   */
   remove(id: number): boolean {
     return this.db.transaction(() => {
+      const linked = this.db.prepare("SELECT posting_id FROM applications WHERE id = ?").get(id) as
+        | { posting_id: string | null }
+        | undefined;
+      if (!linked) return false;
       this.removeDocuments(id);
       this.db.prepare("DELETE FROM application_notes WHERE application_id = ?").run(id);
-      return this.db.prepare("DELETE FROM applications WHERE id = ?").run(id).changes > 0;
+      this.db.prepare("DELETE FROM applications WHERE id = ?").run(id);
+      if (linked.posting_id) {
+        this.db
+          .prepare("DELETE FROM user_actions WHERE posting_id = ? AND action = 'applied'")
+          .run(linked.posting_id);
+      }
+      return true;
+    })();
+  }
+
+  /** Whether an application with this company, role, and date already exists (case-insensitive). */
+  hasMatching(company: string, role: string, dateApplied: string): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM applications WHERE lower(company) = lower(?) AND lower(role) = lower(?) AND date_applied = ?",
+        )
+        .get(company, role, dateApplied),
+    );
+  }
+
+  /**
+   * Insert a historical application verbatim (status, archive flag, timestamps, and dated notes),
+   * as an importer needs. Unlike `add`, no opening note is written: the record's own notes are the
+   * history. Unknown statuses fall back to "applied".
+   */
+  importRecord(
+    record: {
+      company: string;
+      role: string;
+      status: string;
+      dateApplied: string;
+      url: string | null;
+      source: string | null;
+      salaryRange: string | null;
+      recruiter: string | null;
+      archived: boolean;
+      createdAt: string | null;
+      updatedAt: string | null;
+    },
+    notes: { date: string; content: string }[],
+  ): number {
+    return this.db.transaction(() => {
+      const info = this.db
+        .prepare(
+          `INSERT INTO applications
+             (company, role, status, date_applied, url, source, salary_range, recruiter, archived,
+              created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(?, datetime('now')), coalesce(?, datetime('now')))`,
+        )
+        .run(
+          record.company,
+          record.role,
+          isApplicationStatus(record.status) ? record.status : "applied",
+          record.dateApplied,
+          record.url,
+          record.source,
+          record.salaryRange,
+          record.recruiter,
+          record.archived ? 1 : 0,
+          record.createdAt,
+          record.updatedAt,
+        );
+      const id = Number(info.lastInsertRowid);
+      for (const note of notes) this.insertNote(id, note.content, note.date);
+      return id;
     })();
   }
 
@@ -398,19 +496,35 @@ export class ApplicationStore {
     return app;
   }
 
-  private notesFor(applicationId: number): ApplicationNote[] {
+  /** Notes for many applications in one query (avoids a query per row), grouped by application. */
+  private notesByApplication(ids: number[]): Map<number, ApplicationNote[]> {
+    const byApp = new Map<number, ApplicationNote[]>();
+    if (ids.length === 0) return byApp;
     const rows = this.db
-      .prepare("SELECT * FROM application_notes WHERE application_id = ? ORDER BY date, id")
-      .all(applicationId) as NoteRow[];
-    return rows.map((r) => ({
-      id: r.id,
-      applicationId: r.application_id,
-      date: r.date,
-      content: r.content,
-    }));
+      .prepare(
+        `SELECT * FROM application_notes WHERE application_id IN (${ids.map(() => "?").join(",")})
+         ORDER BY date, id`,
+      )
+      .all(...ids) as NoteRow[];
+    for (const r of rows) {
+      const note = { id: r.id, applicationId: r.application_id, date: r.date, content: r.content };
+      const list = byApp.get(r.application_id);
+      if (list) list.push(note);
+      else byApp.set(r.application_id, [note]);
+    }
+    return byApp;
+  }
+
+  private toApplications(rows: ApplicationRow[]): Application[] {
+    const notes = this.notesByApplication(rows.map((r) => r.id));
+    return rows.map((r) => this.fromRow(r, notes.get(r.id) ?? []));
   }
 
   private toApplication(row: ApplicationRow): Application {
+    return this.fromRow(row, this.notesByApplication([row.id]).get(row.id) ?? []);
+  }
+
+  private fromRow(row: ApplicationRow, notes: ApplicationNote[]): Application {
     return {
       id: row.id,
       company: row.company,
@@ -425,7 +539,7 @@ export class ApplicationStore {
       archived: row.archived === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      notes: this.notesFor(row.id),
+      notes,
     };
   }
 }

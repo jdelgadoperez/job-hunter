@@ -42,3 +42,15 @@ export function formatAbsoluteTime(iso: string | null | undefined): string | nul
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleString();
 }
+
+/** A byte size for display: "512 B", "4.2 KB", "1.3 MB". */
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** An application status as people read it, e.g. "interviewed" → "Interviewed". */
+export function statusLabel(status: string): string {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}

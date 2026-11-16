@@ -1,8 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { applicationsToMarkdown } from "@app/applications/export-markdown";
 import { importJobHuntDocs, importWorkspace } from "@app/applications/import-docs";
+import type { JtImportResult } from "@app/applications/import-jt";
 import { APPLICATION_STATUSES, type Application } from "@app/applications/model";
-import { ApplicationError, ApplicationNotFoundError } from "@app/applications/store";
+import { ApplicationError } from "@app/applications/store";
 import type { Repository } from "@app/storage/repository";
 import type { Logger } from "./commands";
 import type { AppCommand } from "./parse-app";
@@ -15,12 +16,7 @@ export type AppCommandDeps = {
   /** stderr: hints and errors, kept out of `--json` output. */
   diag: Logger;
   /** Import a `jt` database into this one (injected so tests needn't touch the real home dir). */
-  importJt: (path: string | undefined) => {
-    imported: number;
-    skipped: number;
-    notes: number;
-    path: string;
-  };
+  importJt: (path: string | undefined) => JtImportResult & { path: string };
 };
 
 function line(app: Application): string {
@@ -49,22 +45,6 @@ function detail(app: Application): string[] {
   return out;
 }
 
-/** Resolve among active applications first, then archived ones (documents outlive archiving). */
-function resolveAny(store: Repository["applications"], selector: string): Application {
-  try {
-    return store.resolve(selector);
-  } catch (activeError) {
-    // Only a miss falls through; an ambiguous active match must stay an error, not pick an archived one.
-    if (!(activeError instanceof ApplicationNotFoundError)) throw activeError;
-    try {
-      return store.resolve(selector, { archived: true });
-    } catch (archivedError) {
-      // Missing from both: report the active miss. Ambiguous among archived: say so.
-      throw archivedError instanceof ApplicationNotFoundError ? activeError : archivedError;
-    }
-  }
-}
-
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -85,20 +65,16 @@ export function runAppCommand(cmd: AppCommand, deps: AppCommandDeps): number {
   try {
     switch (cmd.sub) {
       case "add": {
-        const app = repo.transaction(() => {
-          const created = store.add({
-            company: cmd.company,
-            role: cmd.role,
-            url: cmd.url ?? null,
-            source: cmd.source ?? null,
-            salaryRange: cmd.salaryRange ?? null,
-            recruiter: cmd.recruiter ?? null,
-            postingId: cmd.postingId ?? null,
-            ...(cmd.date ? { dateApplied: cmd.date } : {}),
-          });
-          // Keep the match list in step: a linked posting drops out of the default matches view.
-          if (cmd.postingId) repo.setUserAction(cmd.postingId, "applied");
-          return created;
+        // A linked posting is marked applied by the store, so it leaves the default matches view.
+        const app = store.add({
+          company: cmd.company,
+          role: cmd.role,
+          url: cmd.url ?? null,
+          source: cmd.source ?? null,
+          salaryRange: cmd.salaryRange ?? null,
+          recruiter: cmd.recruiter ?? null,
+          postingId: cmd.postingId ?? null,
+          ...(cmd.date ? { dateApplied: cmd.date } : {}),
         });
         if (cmd.json) log(JSON.stringify(app, null, 2));
         else log(style.success(`Added #${app.id}: ${app.company} — ${app.role}`));
@@ -198,11 +174,8 @@ export function runAppCommand(cmd: AppCommand, deps: AppCommandDeps): number {
       }
       case "remove": {
         const app = store.resolve(cmd.selector);
-        repo.transaction(() => {
-          store.remove(app.id);
-          // Un-mark the linked match too, so it doesn't sit in "applied" with no application.
-          if (app.postingId) repo.clearUserAction(app.postingId);
-        });
+        store.remove(app.id); // also un-marks a linked match
+
         log(style.success(`Removed ${app.company} — ${app.role}`));
         return 0;
       }
@@ -222,20 +195,21 @@ export function runAppCommand(cmd: AppCommand, deps: AppCommandDeps): number {
         return 0;
       }
       case "docs": {
-        const app = resolveAny(store, cmd.selector);
+        const app = store.resolveIncludingArchived(cmd.selector);
         const docs = repo.documents.list(app.id);
         if (cmd.json) log(JSON.stringify(docs, null, 2));
         else if (docs.length === 0) diag(style.dim(`No documents for ${app.company}.`));
         else {
           for (const doc of docs) {
-            const kind = doc.kind === "note" ? "note" : "file";
-            log(`  ${style.dim(kind.padEnd(5))} ${doc.name} ${style.dim(formatBytes(doc.size))}`);
+            log(
+              `  ${style.dim(doc.kind.padEnd(5))} ${doc.name} ${style.dim(formatBytes(doc.size))}`,
+            );
           }
         }
         return 0;
       }
       case "doc": {
-        const app = resolveAny(store, cmd.selector);
+        const app = store.resolveIncludingArchived(cmd.selector);
         const meta = repo.documents.getByName(app.id, cmd.name);
         if (!meta) throw new ApplicationError(`${app.company} has no document "${cmd.name}"`);
         const doc = repo.documents.read(app.id, meta.id);
@@ -254,7 +228,9 @@ export function runAppCommand(cmd: AppCommand, deps: AppCommandDeps): number {
         const opts = { overwrite: cmd.overwrite };
         const result = cmd.into
           ? {
-              workspaces: [importWorkspace(repo, cmd.path, resolveAny(store, cmd.into), opts)],
+              workspaces: [
+                importWorkspace(repo, cmd.path, store.resolveIncludingArchived(cmd.into), opts),
+              ],
               unmatched: [],
             }
           : importJobHuntDocs(repo, cmd.path, opts);

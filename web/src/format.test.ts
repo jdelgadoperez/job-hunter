@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatAbsoluteTime, formatCount, formatRelativeTime } from "./format";
+import {
+  formatAbsoluteTime,
+  formatBytes,
+  formatCount,
+  formatRelativeTime,
+  statusLabel,
+} from "./format";
 
 /** An ISO timestamp `secondsAgo` seconds before now, so tests read relative to the current clock
  *  rather than a hardcoded date. */
@@ -48,5 +54,19 @@ describe("formatAbsoluteTime", () => {
   it("returns null for missing or unparseable input", () => {
     expect(formatAbsoluteTime(null)).toBeNull();
     expect(formatAbsoluteTime("nonsense")).toBeNull();
+  });
+});
+
+describe("formatBytes", () => {
+  it("picks B, KB, or MB", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(2048)).toBe("2.0 KB");
+    expect(formatBytes(3 * 1024 * 1024)).toBe("3.0 MB");
+  });
+});
+
+describe("statusLabel", () => {
+  it("capitalizes a status", () => {
+    expect(statusLabel("interviewed")).toBe("Interviewed");
   });
 });

@@ -372,7 +372,7 @@ export async function main(): Promise<void> {
           diag: diagnostics.diag,
           importJt: (path) => {
             const source = path ?? defaultJtDbPath();
-            return { ...importJtDatabase(repo.connection, source), path: source };
+            return { ...importJtDatabase(repo.applications, source), path: source };
           },
         });
         break;

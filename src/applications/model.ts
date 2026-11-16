@@ -27,6 +27,11 @@ export function isApplicationStatus(value: unknown): value is ApplicationStatus 
   return typeof value === "string" && (APPLICATION_STATUSES as readonly string[]).includes(value);
 }
 
+/** A status as people read it, e.g. "interviewed" → "Interviewed" (notes and markdown export). */
+export function statusLabel(status: ApplicationStatus): string {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 export type ApplicationNote = {
   id: number;
   applicationId: number;

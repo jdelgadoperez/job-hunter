@@ -73,7 +73,7 @@ function makeJtDb(): string {
 
 describe("importJtDatabase", () => {
   it("copies applications and notes, preserving status, archive flag, and timestamps", () => {
-    const result = importJtDatabase(repo.connection, makeJtDb());
+    const result = importJtDatabase(repo.applications, makeJtDb());
     expect(result).toEqual({ imported: 3, skipped: 0, notes: 2 });
 
     const solace = repo.applications.resolve("solace");
@@ -94,21 +94,25 @@ describe("importJtDatabase", () => {
 
   it("is idempotent", () => {
     const path = makeJtDb();
-    importJtDatabase(repo.connection, path);
-    expect(importJtDatabase(repo.connection, path)).toEqual({ imported: 0, skipped: 3, notes: 0 });
+    importJtDatabase(repo.applications, path);
+    expect(importJtDatabase(repo.applications, path)).toEqual({
+      imported: 0,
+      skipped: 3,
+      notes: 0,
+    });
     expect(repo.applications.search("")).toHaveLength(3);
   });
 
   it("explains a missing file or a non-jt database", () => {
-    expect(() => importJtDatabase(repo.connection, join(dir, "missing.db"))).toThrow(
+    expect(() => importJtDatabase(repo.applications, join(dir, "missing.db"))).toThrow(
       "jt database not found",
     );
     const other = join(dir, "other.db");
     new Database(other).exec("CREATE TABLE x (y)");
-    expect(() => importJtDatabase(repo.connection, other)).toThrow("not a jt database");
+    expect(() => importJtDatabase(repo.applications, other)).toThrow("not a jt database");
     const junk = join(dir, "junk.db");
     writeFileSync(junk, "this is not sqlite at all, just some text padding it out a bit");
-    expect(() => importJtDatabase(repo.connection, junk)).toThrow("not a jt database");
+    expect(() => importJtDatabase(repo.applications, junk)).toThrow("not a jt database");
   });
 
   it("defaults to jt's own path and honors JOBTRACK_DB", () => {

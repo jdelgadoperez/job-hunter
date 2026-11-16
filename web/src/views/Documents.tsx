@@ -1,16 +1,11 @@
 import { type FormEvent, lazy, Suspense, useState } from "react";
-import { type DocumentMeta, documentRawUrl } from "../api";
-import { Button, ErrorNote, Loading } from "../components/ui";
+import { type DocumentMeta, documentRawUrl, NOTE_EXTENSION } from "../api";
+import { Button, ConfirmButton, ErrorNote, Loading } from "../components/ui";
+import { formatBytes } from "../format";
 import { useDocuments, useNote, useRemoveDocument, useSaveNote } from "../hooks";
 
 // The markdown renderer (react-markdown + GFM) is ~170 KB, so it loads only when a note is opened.
 const Markdown = lazy(() => import("./Markdown"));
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function NoteView({
   applicationId,
@@ -25,7 +20,6 @@ function NoteView({
   const save = useSaveNote(applicationId);
   const remove = useRemoveDocument(applicationId);
   const [draft, setDraft] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   if (note.isLoading) return <Loading label={`Loading ${doc.name}…`} />;
   if (note.error || !note.data) return <ErrorNote error={note.error} />;
@@ -41,25 +35,13 @@ function NoteView({
               <Button variant="ghost" onClick={() => setDraft(content)}>
                 Edit
               </Button>
-              {confirmingDelete ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    className="text-danger"
-                    disabled={remove.isPending}
-                    onClick={() => remove.mutate(doc.id, { onSuccess: onClose })}
-                  >
-                    Confirm delete
-                  </Button>
-                  <Button variant="ghost" onClick={() => setConfirmingDelete(false)}>
-                    Keep
-                  </Button>
-                </>
-              ) : (
-                <Button variant="ghost" onClick={() => setConfirmingDelete(true)}>
-                  Delete
-                </Button>
-              )}
+              <ConfirmButton
+                label="Delete"
+                confirmLabel="Confirm delete"
+                cancelLabel="Keep"
+                pending={remove.isPending}
+                onConfirm={() => remove.mutate(doc.id, { onSuccess: onClose })}
+              />
               <Button variant="ghost" onClick={onClose}>
                 Close
               </Button>
@@ -120,8 +102,8 @@ function NewNoteForm({
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    const fileName = /\.(md|markdown|txt)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
-    const title = fileName.replace(/\.(md|markdown|txt)$/i, "");
+    const fileName = NOTE_EXTENSION.test(trimmed) ? trimmed : `${trimmed}.md`;
+    const title = fileName.replace(NOTE_EXTENSION, "");
     save.mutate({ name: fileName, content: `# ${title}\n` }, { onSuccess: onCreated });
   }
 
@@ -200,7 +182,7 @@ export function Documents({ applicationId }: { applicationId: number }) {
                 </a>
               )}
               <span className="shrink-0 text-xs text-faint">
-                {doc.kind === "note" ? "note" : "file"} · {formatBytes(doc.size)}
+                {doc.kind} · {formatBytes(doc.size)}
               </span>
             </li>
           ))}
