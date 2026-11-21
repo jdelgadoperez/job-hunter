@@ -127,6 +127,7 @@ real browser, no live network.
   results — preserve this when touching the scan pipeline. A single company or a failed LLM call
   must not abort a scan.
 - **Commits:** Conventional Commits. Do NOT add a Claude co-authored footer.
+
 ## Backlog (GitHub Issues)
 
 Work ideas live as GitHub Issues on this repo, opened from the "Backlog item" form
