@@ -1,0 +1,31 @@
+[
+  {
+    "name": "status:idea",
+    "color": "d4c5f9",
+    "description": "Rough idea; needs a spec before work starts"
+  },
+  {
+    "name": "status:ready",
+    "color": "0e8a16",
+    "description": "Specced with acceptance criteria; ready to pick up"
+  },
+  {
+    "name": "status:in-progress",
+    "color": "fbca04",
+    "description": "Someone (or Claude) is actively working on it"
+  },
+  { "name": "priority:high", "color": "b60205", "description": "Do next" },
+  { "name": "priority:med", "color": "d93f0b", "description": "Soon" },
+  { "name": "priority:low", "color": "f9d0c4", "description": "Someday" },
+  { "name": "size:S", "color": "c2e0c6", "description": "Under an hour or two" },
+  { "name": "size:M", "color": "bfdadc", "description": "About a session" },
+  { "name": "size:L", "color": "c5def5", "description": "Multiple sessions; consider splitting" },
+  { "name": "feature", "color": "1d76db", "description": "New capability" },
+  { "name": "bug", "color": "d73a4a", "description": "Something is broken" },
+  { "name": "chore", "color": "ededed", "description": "Maintenance, refactor, tooling, deps" },
+  {
+    "name": "research",
+    "color": "5319e7",
+    "description": "Investigate before deciding what to build"
+  }
+]

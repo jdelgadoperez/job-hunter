@@ -1,0 +1,39 @@
+name: Backlog item
+description: An idea or task for the backlog (picked up by you or Claude)
+labels: ["status:idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Rough ideas are fine — fill in what you know. When the acceptance criteria are solid,
+        swap `status:idea` for `status:ready` and add a `priority:*` and `size:*` label.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's missing, annoying, or broken? Why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should be true once this is done?
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: A checklist that tells whoever picks this up when it's finished.
+      value: |
+        - [ ] 
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Links, constraints, related issues, ideas on approach.
+    validations:
+      required: false
