@@ -10,7 +10,11 @@ import { scanMethod } from "@app/discovery/scan-method";
 import { isUnscrapableHost } from "@app/discovery/unscrapable";
 import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
-import { resolveHomeCountry, settingsWithEnvKey } from "@app/matching/resolve-settings";
+import {
+  resolveHomeCountry,
+  resolveProvider,
+  settingsWithEnvKey,
+} from "@app/matching/resolve-settings";
 import { DEFAULT_SCORE_LIMIT } from "@app/matching/score-defaults";
 import {
   ANTHROPIC_KEY_SETTING,
@@ -35,12 +39,17 @@ import type { ScoreRunOptions, ServerDeps } from "./types";
 
 /** Settings shape returned to clients — secret keys are never echoed back, only their presence. */
 function readSettings(repo: ServerDeps["repo"]) {
+  // The active provider's model picker: its default and suggested models. Display only — the
+  // `scorerModel` setting still accepts any model ID.
+  const provider = resolveProvider(repo);
   return {
     // Resolve through the env fallback so the client's "deep-score available?" signal matches what
     // the score-runner actually sees (it uses settingsWithEnvKey too): a user with only the
     // ANTHROPIC_API_KEY env var set should read hasAnthropicKey: true.
     hasAnthropicKey: Boolean(settingsWithEnvKey(repo).getSetting(ANTHROPIC_KEY_SETTING)?.trim()),
     scorerModel: repo.getSetting(MODEL_SETTING) ?? null,
+    defaultScorerModel: provider.defaultModel,
+    scorerModels: provider.models,
     scorerProvider: repo.getSetting(PROVIDER_SETTING) ?? null,
     homeCountry: repo.getSetting(HOME_COUNTRY_SETTING) ?? null,
     scanFreshnessHours: repo.getSetting(SCAN_FRESHNESS_SETTING) ?? null,

@@ -103,9 +103,15 @@ export type SkillProfile = z.infer<typeof SkillProfileSchema>;
 
 // Mirrors the server's `readSettings` (src/server/app.ts): secret keys are reported by presence
 // only, the feed URL is echoed back (not secret).
+const ScorerModelOptionSchema = z.object({ id: z.string(), label: z.string(), note: z.string() });
+export type ScorerModelOption = z.infer<typeof ScorerModelOptionSchema>;
+
 const SettingsViewSchema = z.object({
   hasAnthropicKey: z.boolean(),
   scorerModel: z.string().nullable(),
+  /** What a blank `scorerModel` resolves to, and the models the Settings picker offers. */
+  defaultScorerModel: z.string(),
+  scorerModels: z.array(ScorerModelOptionSchema),
   scorerProvider: z.string().nullable(),
   homeCountry: z.string().nullable(),
   scanFreshnessHours: z.string().nullable(),

@@ -23,6 +23,11 @@ describe("api response validation", () => {
     const serverShape: SettingsView = {
       hasAnthropicKey: true,
       scorerModel: "claude-sonnet-5-5",
+      defaultScorerModel: "claude-sonnet-5-5",
+      scorerModels: [
+        { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", note: "Balanced." },
+        { id: "claude-haiku-5-5", label: "Claude Haiku 5.5", note: "Cheapest." },
+      ],
       scorerProvider: "anthropic",
       homeCountry: "US",
       scanFreshnessHours: "24",

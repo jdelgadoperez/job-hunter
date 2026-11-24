@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import type { SettingsUpdate } from "../api";
+import type { ScorerModelOption, SettingsUpdate } from "../api";
 import { Button, ErrorNote, Loading, PageHeader } from "../components/ui";
 import { useSettings, useUpdateSettings } from "../hooks";
 
@@ -9,6 +9,9 @@ export function Settings() {
 
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
+  // "Other model…" in the picker: the model is typed rather than chosen from the list. Starts on
+  // when the saved model isn't one of the suggestions.
+  const [customModel, setCustomModel] = useState(false);
   const [homeCountry, setHomeCountry] = useState("");
   const [scanFreshnessHours, setScanFreshnessHours] = useState("");
   const [theMuseKey, setTheMuseKey] = useState("");
@@ -19,7 +22,9 @@ export function Settings() {
   // they stay blank.
   useEffect(() => {
     if (settings.data) {
-      setModel(settings.data.scorerModel ?? "");
+      const saved = settings.data.scorerModel ?? "";
+      setModel(saved);
+      setCustomModel(saved !== "" && !settings.data.scorerModels.some((m) => m.id === saved));
       setHomeCountry(settings.data.homeCountry ?? "");
       setScanFreshnessHours(settings.data.scanFreshnessHours ?? "");
       setFeedUrl(settings.data.feedUrl ?? "");
@@ -86,15 +91,16 @@ export function Settings() {
               className="input"
             />
           </Field>
-          <Field label="Scorer model" hint="Defaults to the provider's model when blank.">
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => edited(setModel)(e.target.value)}
-              placeholder="claude-sonnet-5-5"
-              className="input"
-            />
-          </Field>
+          <ModelPicker
+            options={settings.data.scorerModels}
+            defaultModel={settings.data.defaultScorerModel}
+            model={model}
+            custom={customModel}
+            onChange={(next, custom) => {
+              edited(setModel)(next);
+              setCustomModel(custom);
+            }}
+          />
           <Field
             label="Home country"
             hint="Your country (e.g. US). Foreign on-site roles are ranked lower and skipped when deep-scoring. Auto-filled from your resume when possible."
@@ -250,5 +256,77 @@ function Field({
         <span className="mt-1.5 block text-xs leading-relaxed text-faint">{hint}</span>
       ) : null}
     </label>
+  );
+}
+
+const DEFAULT_CHOICE = "__default";
+const CUSTOM_CHOICE = "__custom";
+
+/**
+ * The scorer model: pick a suggested model, keep the provider default (stored as blank, so it
+ * follows future default bumps), or choose "Other model…" and type any model ID.
+ */
+function ModelPicker({
+  options,
+  defaultModel,
+  model,
+  custom,
+  onChange,
+}: {
+  options: ScorerModelOption[];
+  defaultModel: string;
+  model: string;
+  custom: boolean;
+  onChange: (model: string, custom: boolean) => void;
+}) {
+  const defaultLabel = options.find((m) => m.id === defaultModel)?.label ?? defaultModel;
+  const choice = custom ? CUSTOM_CHOICE : model === "" ? DEFAULT_CHOICE : model;
+  const chosen = options.find((m) => m.id === (model === "" ? defaultModel : model));
+  const hint = custom
+    ? "Any model ID your Anthropic key can use, e.g. claude-opus-4-8."
+    : model === ""
+      ? `Uses the default, ${defaultLabel}, and follows it when job-hunter's default changes. ${chosen?.note ?? ""}`
+      : (chosen?.note ?? "");
+
+  return (
+    <div>
+      <label htmlFor="scorer-model" className="text-sm font-medium text-fg">
+        Scorer model
+      </label>
+      <select
+        id="scorer-model"
+        value={choice}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (value === DEFAULT_CHOICE) onChange("", false);
+          else if (value === CUSTOM_CHOICE) onChange(custom ? model : "", true);
+          else onChange(value, false);
+        }}
+        className="select mt-2 w-full"
+      >
+        <option value={DEFAULT_CHOICE}>Default ({defaultLabel})</option>
+        {options.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.label}
+          </option>
+        ))}
+        <option value={CUSTOM_CHOICE}>Other model…</option>
+      </select>
+      {custom ? (
+        <input
+          type="text"
+          aria-label="Model ID"
+          value={model}
+          onChange={(e) => onChange(e.target.value, true)}
+          placeholder="claude-…"
+          spellCheck={false}
+          autoComplete="off"
+          className="input font-mono"
+        />
+      ) : null}
+      {hint.trim() ? (
+        <span className="mt-1.5 block text-xs leading-relaxed text-faint">{hint.trim()}</span>
+      ) : null}
+    </div>
   );
 }

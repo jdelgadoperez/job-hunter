@@ -66,6 +66,8 @@ function mockFetch(bodies: Bodies) {
           return {
             hasAnthropicKey: bodies.settings?.hasAnthropicKey ?? false,
             scorerModel: null,
+            defaultScorerModel: "claude-sonnet-5-5",
+            scorerModels: [],
             scorerProvider: null,
             homeCountry: null,
             scanFreshnessHours: null,
