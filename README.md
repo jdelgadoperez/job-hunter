@@ -196,7 +196,11 @@ and opens a React dashboard in your browser. It has six tabs:
   documents: open a markdown note to read it rendered, edit it, or create a new one, and open
   other files (PDFs, images) in a new tab. Marking a match applied puts it here automatically.
 - **Skills** — edit the skills on your profile and the skill dictionary the resume parser recognizes.
-- **Companies** — add or remove the companies you track by careers-page URL.
+- **Companies** — add or remove the companies you track by careers-page URL, see which ones need
+  attention or a manual look, and browse **All companies**: every company a scan covers (the
+  directory plus your tracked list), with how each is scanned (Greenhouse, Lever, Ashby, Workday,
+  a rendered web page, or not scanned), its open roles, when it was last checked, and whether it is
+  failing. Search it, or filter to tracked, failing, or not-scanned companies.
 - **Settings** — your Anthropic API key, scorer model, home country, scan-freshness window, and
   optional extra feed sources. Secret keys are write-only.
 
@@ -226,6 +230,7 @@ shows comes from the same local HTTP API:
 | `GET /api/matches?minScore=` | ranked matches |
 | `PUT\|DELETE /api/matches/:id/action` | save / dismiss / mark-applied a match (or clear the action) |
 | `GET\|POST /api/companies` · `DELETE /api/companies?url=` | tracked companies (add/remove) |
+| `GET /api/companies/all` | every known company with its scan method, open roles, last-checked time, and latest failure |
 | `GET /api/companies/manual-review` | directory companies on hosts we don't auto-scan (LinkedIn/Indeed/…) |
 | `GET /api/profile` · `PUT /api/profile/skills` | profile, and direct edits to its skill list |
 | `GET\|POST /api/skills` · `DELETE /api/skills/:name` | the skill dictionary |

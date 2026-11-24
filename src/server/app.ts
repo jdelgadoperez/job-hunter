@@ -6,6 +6,7 @@ import {
   type NewApplication,
 } from "@app/applications/model";
 import { ApplicationError } from "@app/applications/store";
+import { scanMethod } from "@app/discovery/scan-method";
 import { isUnscrapableHost } from "@app/discovery/unscrapable";
 import { normalizeSkill } from "@app/domain/normalize";
 import type { SkillProfile } from "@app/domain/types";
@@ -154,6 +155,17 @@ export function createApp(deps: ServerDeps): Hono {
   app.get("/api/companies/manual-review", (c) =>
     c.json(
       repo.listDirectoryCompanies().filter((company) => isUnscrapableHost(company.careersUrl)),
+    ),
+  );
+
+  // Every company the engine knows about (directory snapshot + tracked), with how each is scanned,
+  // when it was last checked, its open-posting count, and its latest failure.
+  app.get("/api/companies/all", (c) =>
+    c.json(
+      repo.listAllCompanies().map((company) => ({
+        ...company,
+        method: scanMethod(company.careersUrl),
+      })),
     ),
   );
 

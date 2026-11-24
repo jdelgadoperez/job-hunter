@@ -67,6 +67,19 @@ const NeedsAttentionEntrySchema = z.object({
 });
 export type NeedsAttentionEntry = z.infer<typeof NeedsAttentionEntrySchema>;
 
+/** One row of the All companies view (`GET /api/companies/all`). */
+const CompanyOverviewSchema = z.object({
+  careersUrl: z.string(),
+  name: z.string().optional(),
+  tracked: z.boolean(),
+  lastCheckedAt: z.string().nullable(),
+  openPostings: z.number(),
+  failure: z.object({ message: z.string(), consecutiveFailures: z.number() }).nullable(),
+  /** The ATS connector's source (e.g. "greenhouse"), "browser", or "manual" (not auto-scanned). */
+  method: z.string(),
+});
+export type CompanyOverview = z.infer<typeof CompanyOverviewSchema>;
+
 /** A finished scan's outcome: counts plus the directory delta vs. the previous scan. */
 const ScanRecordSchema = z.object({
   id: z.number(),
@@ -319,6 +332,7 @@ export const api = {
   getCompanies: () => request("/api/companies", z.array(TrackedCompanySchema)),
   getManualReviewCompanies: () =>
     request("/api/companies/manual-review", z.array(CompanyRefSchema)),
+  getAllCompanies: () => request("/api/companies/all", z.array(CompanyOverviewSchema)),
   getNeedsAttention: () =>
     request("/api/companies/needs-attention", z.array(NeedsAttentionEntrySchema)),
   addCompany: (careersUrl: string, name?: string) =>
