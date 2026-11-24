@@ -70,12 +70,13 @@ export function Pill({
   children,
   title,
 }: {
-  tone?: "neutral" | "positive" | "warning" | "negative";
+  tone?: "neutral" | "accent" | "positive" | "warning" | "negative";
   children: ReactNode;
   title?: string;
 }) {
   const tones = {
     neutral: "bg-subtle text-muted",
+    accent: "bg-accent-soft text-accent-ink",
     positive: "bg-pill-positive-bg text-pill-positive-ink",
     warning: "bg-pill-warning-bg text-pill-warning-ink",
     negative: "bg-pill-negative-bg text-pill-negative-ink",
@@ -110,7 +111,7 @@ export function Button({
         ? "border border-control bg-surface text-fg hover:border-faint hover:bg-raised"
         : variant === "toggle"
           ? pressed
-            ? "border border-fg/70 bg-active text-fg"
+            ? "border border-accent/60 bg-accent-soft text-accent-ink"
             : "border border-control bg-surface text-muted hover:border-faint hover:text-fg"
           : "px-2.5 text-muted hover:bg-subtle hover:text-fg";
   const ariaPressed = variant === "toggle" ? pressed : undefined;

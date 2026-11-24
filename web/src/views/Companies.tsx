@@ -497,7 +497,12 @@ function CompanyStatus({ company }: { company: CompanyOverview }) {
   }
   if (company.method === "manual") return <Pill>Review manually</Pill>;
   if (company.lastCheckedAt === null) return <span className="text-faint">Not checked yet</span>;
-  return <span className="text-faint">OK</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-muted">
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
+      OK
+    </span>
+  );
 }
 
 function CompanyRow({ company }: { company: CompanyOverview }) {
@@ -514,7 +519,7 @@ function CompanyRow({ company }: { company: CompanyOverview }) {
           >
             {label(company)}
           </a>
-          {company.tracked ? <Pill>Tracked</Pill> : null}
+          {company.tracked ? <Pill tone="accent">Tracked</Pill> : null}
         </div>
         <p className="truncate text-xs text-faint">{shortUrl(company.careersUrl)}</p>
         {/* Phone: the columns that fold away move to a second line, never dropped. */}

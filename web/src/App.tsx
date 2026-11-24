@@ -74,7 +74,9 @@ function NavItem({
       onClick={() => onSelect(tab)}
       aria-current={active ? "page" : undefined}
       className={`flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 ${
-        active ? "bg-active font-medium text-fg" : "text-muted hover:bg-subtle hover:text-fg"
+        active
+          ? "bg-accent-soft font-medium text-accent-ink"
+          : "text-muted hover:bg-subtle hover:text-fg"
       }`}
     >
       <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
@@ -104,7 +106,9 @@ function Wordmark() {
   return (
     <span className="flex items-center gap-2.5">
       <img src="/favicon-32x32.png" alt="" width={24} height={24} className="h-6 w-6 rounded-md" />
-      <span className="text-[15px] font-semibold tracking-[-0.01em] text-fg">job-hunter</span>
+      <span className="text-[15px] font-semibold tracking-[-0.01em] text-fg">
+        job<span className="text-accent">-hunter</span>
+      </span>
     </span>
   );
 }

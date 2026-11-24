@@ -108,7 +108,7 @@ const MatchCard = memo(function MatchCard({
             {posting.company}
             {posting.location ? ` · ${posting.location}` : ""}
           </span>
-          {posting.remote ? <Pill>Remote</Pill> : null}
+          {posting.remote ? <Pill tone="accent">Remote</Pill> : null}
           {showUnknownCountry ? (
             <Pill title="The location couldn't be matched to a country, so this role is shown for every country filter.">
               Unknown location
@@ -130,13 +130,13 @@ const MatchCard = memo(function MatchCard({
             <dl className="min-w-0 space-y-0.5 text-xs leading-relaxed">
               {result.matchedSkills.length > 0 ? (
                 <div className="flex gap-1.5">
-                  <dt className="flex-none font-medium text-fg">Matched:</dt>
+                  <dt className="flex-none font-medium text-success">Matched:</dt>
                   <dd className="text-muted">{result.matchedSkills.join(", ")}</dd>
                 </div>
               ) : null}
               {result.missingSkills.length > 0 ? (
                 <div className="flex gap-1.5">
-                  <dt className="flex-none font-medium text-fg">Missing:</dt>
+                  <dt className="flex-none font-medium text-warning">Missing:</dt>
                   <dd className="text-faint">{result.missingSkills.join(", ")}</dd>
                 </div>
               ) : null}
@@ -151,7 +151,7 @@ const MatchCard = memo(function MatchCard({
               disabled={pending}
               aria-pressed={saved}
               onClick={() => setAction.mutate({ id: posting.id, action: saved ? null : "saved" })}
-              className={`${rowButton} ${saved ? "text-fg" : ""}`}
+              className={`${rowButton} ${saved ? "text-accent-ink" : ""}`}
             >
               <Star
                 size={15}

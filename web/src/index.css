@@ -4,9 +4,10 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Semantic palette — "achromatic ledger". The chrome holds no colour: ink text, a near-black primary
- * action, neutral grey surfaces on a quiet blue-grey ground. The one hue (`accent`, a ledger blue)
- * marks the main data element — the match score — and status colours appear only on status.
+ * Semantic palette. Neutral grey surfaces on a quiet blue-grey ground, ink text, and one hue —
+ * `accent`, a ledger blue — used in small doses: the match score, the primary action, the selected
+ * nav item and pressed filters. Green marks good news (matched skills, healthy companies, an
+ * offer), amber marks gaps; status colours appear only on status.
  * Components use these tokens (bg-surface, text-fg, …), so light/dark is one set of overrides.
  *
  *   Light                                  Dark (soft charcoal, a cool hint of the light ground)
@@ -21,8 +22,9 @@
  *   fg       #0a0a0a primary text           #f5f5f5
  *   muted    #525252 secondary text         #b9bac0
  *   faint    #636363 meta (≥4.5:1 on canvas) #9d9ea5
- *   primary  #141414 near-black action      #f5f5f5 (inverted)
- *   accent   #1d5fbf the data hue           #6b9bf0
+ *   primary  #1d5fbf the one filled action  #6b9bf0
+ *   accent   #1d5fbf score, selection, focus #6b9bf0
+ *   accent-soft / accent-ink: pale tint + dark text for selected nav, pressed toggles, tags
  *   success / warning / danger: status text only; pill pairs below.
  */
 @theme {
@@ -41,11 +43,15 @@
   --color-muted: #525252;
   /* Meta text sits on the canvas as well as on white, so it is set to clear 4.5:1 on #f2f4f7. */
   --color-faint: #636363;
-  --color-primary: #141414;
-  --color-primary-hover: #333333;
+  /* The primary action takes the accent: the one place a fill of colour appears. */
+  --color-primary: #1d5fbf;
+  --color-primary-hover: #174f9f;
   --color-on-primary: #ffffff;
   --color-accent: #1d5fbf;
   --color-accent-track: #e3ebf7;
+  /* Pale accent tint + dark accent text: the selected nav item, pressed toggles, Remote/Tracked. */
+  --color-accent-soft: #e6eefa;
+  --color-accent-ink: #174f9f;
   --color-success: #2e7d32;
   --color-warning: #92400e;
   --color-danger: #c4242a;
@@ -77,11 +83,13 @@
   --color-fg: #f5f5f5;
   --color-muted: #b9bac0;
   --color-faint: #9d9ea5;
-  --color-primary: #f5f5f5;
-  --color-primary-hover: #d4d4d4;
-  --color-on-primary: #1b1c1f;
+  --color-primary: #6b9bf0;
+  --color-primary-hover: #8cb2f4;
+  --color-on-primary: #141518;
   --color-accent: #6b9bf0;
   --color-accent-track: #27324a;
+  --color-accent-soft: #2a3448;
+  --color-accent-ink: #a9c6f7;
   --color-success: #3fc07a;
   --color-warning: #e0a43a;
   --color-danger: #e5566f;
