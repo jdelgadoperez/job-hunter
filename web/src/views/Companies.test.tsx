@@ -7,6 +7,7 @@ import { Companies } from "./Companies";
 
 type Bodies = {
   companies?: { careersUrl: string; name?: string }[];
+  all?: unknown[];
   manualReview?: { careersUrl: string; name?: string }[];
   needsAttention?: {
     careersUrl: string;
@@ -21,6 +22,7 @@ function mockFetch(bodies: Bodies) {
     "fetch",
     vi.fn((url: string, init?: RequestInit) => {
       const body = (() => {
+        if (url.includes("/api/companies/all")) return bodies.all ?? [];
         if (url.includes("/api/companies/needs-attention")) return bodies.needsAttention ?? [];
         if (url.includes("/api/companies/manual-review")) return bodies.manualReview ?? [];
         if (url.includes("/api/scan/retry-failed") && init?.method === "POST") {
@@ -145,6 +147,7 @@ describe("Companies needs-attention panel", () => {
     mockFetchWith((url) => {
       if (url.includes("/api/companies/needs-attention")) return needsAttentionBody;
       if (url.includes("/api/companies/manual-review")) return [];
+      if (url.includes("/api/companies/all")) return [];
       if (url.includes("/api/scan/status")) {
         return {
           state: scanState,
@@ -228,5 +231,79 @@ describe("Companies remove confirm", () => {
           (call) => String(call[0]).includes("/api/companies?url=") && call[1]?.method === "DELETE",
         ),
     ).toBe(false);
+  });
+});
+
+describe("All companies", () => {
+  const overview = (over: Record<string, unknown>) => ({
+    careersUrl: "https://boards.greenhouse.io/acme",
+    name: "Acme",
+    tracked: false,
+    lastCheckedAt: "2026-07-01T00:00:00Z",
+    openPostings: 3,
+    failure: null,
+    method: "greenhouse",
+    ...over,
+  });
+
+  it("lists every company with how it is scanned, its open roles and status", async () => {
+    mockFetch({
+      all: [
+        overview({}),
+        overview({
+          careersUrl: "https://boom.example/careers",
+          name: "Boom",
+          method: "browser",
+          openPostings: 0,
+          failure: { message: "HTTP 503", consecutiveFailures: 2 },
+        }),
+        overview({
+          careersUrl: "https://www.linkedin.com/company/bigco/jobs",
+          name: "BigCo",
+          method: "manual",
+        }),
+      ],
+    });
+    renderCompanies();
+
+    expect(await screen.findByRole("heading", { name: "All companies" })).toBeInTheDocument();
+    const table = await screen.findByRole("table");
+    expect(table).toHaveTextContent("Acme");
+    expect(table).toHaveTextContent("Greenhouse");
+    expect(table).toHaveTextContent("Web page");
+    expect(table).toHaveTextContent("Failing · 2 scans");
+    expect(table).toHaveTextContent("Review manually");
+    expect(screen.getByText(/3 companies known/)).toBeInTheDocument();
+  });
+
+  it("filters to failing companies and searches by name", async () => {
+    mockFetch({
+      all: [
+        overview({}),
+        overview({
+          careersUrl: "https://boom.example/careers",
+          name: "Boom",
+          method: "browser",
+          failure: { message: "HTTP 503", consecutiveFailures: 1 },
+        }),
+      ],
+    });
+    renderCompanies();
+
+    const table = await screen.findByRole("table");
+    await userEvent.click(screen.getByRole("button", { name: /^Failing/ }));
+    expect(table).not.toHaveTextContent("Acme");
+    expect(table).toHaveTextContent("Boom");
+
+    await userEvent.click(screen.getByRole("button", { name: /^All/ }));
+    await userEvent.type(screen.getByLabelText(/search all companies/i), "acm");
+    expect(screen.getByRole("table")).toHaveTextContent("Acme");
+    expect(screen.getByRole("table")).not.toHaveTextContent("Boom");
+  });
+
+  it("explains an empty directory", async () => {
+    mockFetch({ all: [] });
+    renderCompanies();
+    expect(await screen.findByText(/Run a scan from the Home tab/i)).toBeInTheDocument();
   });
 });

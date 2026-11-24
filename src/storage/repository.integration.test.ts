@@ -202,6 +202,43 @@ describe("incremental scans — directory diff", () => {
     repo.close();
   });
 
+  it("listAllCompanies merges crawled and tracked companies with open roles and failures", () => {
+    const repo = newRepo();
+    const scanId = repo.startScan();
+    repo.recordDirectory(scanId, [
+      { careersUrl: "https://boards.greenhouse.io/acme", name: "Acme" },
+      { careersUrl: "https://beta.example/jobs", name: "beta" },
+    ]);
+    const acmeId = makeCompanyId("https://boards.greenhouse.io/acme");
+    repo.savePosting({ ...posting, id: "open", companyId: acmeId });
+    repo.savePosting({ ...posting, id: "gone", companyId: acmeId });
+    repo.markPostingExpired("gone");
+    repo.recordScanFailures(
+      scanId,
+      [{ careersUrl: "https://beta.example/jobs", company: "beta", message: "HTTP 503" }],
+      ["https://beta.example/jobs"],
+    );
+    // Tracked but never crawled yet, and tracked under a name that overrides the directory's.
+    repo.addTrackedCompany("https://zeta.example/careers", "Zeta");
+    repo.addTrackedCompany("https://boards.greenhouse.io/acme", "Acme Corp");
+
+    const all = repo.listAllCompanies();
+    expect(all.map((c) => c.name)).toEqual(["Acme Corp", "beta", "Zeta"]);
+    expect(all[0]).toMatchObject({
+      tracked: true,
+      openPostings: 1,
+      failure: null,
+    });
+    expect(all[0]?.lastCheckedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(all[1]).toMatchObject({
+      tracked: false,
+      openPostings: 0,
+      failure: { message: "HTTP 503", consecutiveFailures: 1 },
+    });
+    expect(all[2]).toMatchObject({ tracked: true, lastCheckedAt: null, openPostings: 0 });
+    repo.close();
+  });
+
   it("treats case/trailing-slash variants of a careers URL as the same company across scans", () => {
     const repo = newRepo();
     repo.recordDirectory(repo.startScan(), [{ careersUrl: "https://A.com/careers/", name: "A" }]);

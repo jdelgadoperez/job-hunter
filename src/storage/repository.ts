@@ -12,6 +12,20 @@ import { INDEXES, SCHEMA } from "./schema";
 /** A company referenced by its careers-page URL (the directory snapshot + diff unit). */
 export type CompanyRef = { careersUrl: string; name?: string };
 
+/** One row of the "All companies" view: every company a scan has seen, plus every tracked one. */
+export type CompanyOverview = {
+  careersUrl: string;
+  name?: string;
+  /** In the user's tracked list (always crawled, even on an incremental scan). */
+  tracked: boolean;
+  /** When a scan last crawled this company, as an ISO-8601 UTC timestamp; null if never crawled. */
+  lastCheckedAt: string | null;
+  /** Postings from this company that are still open (not expired). */
+  openPostings: number;
+  /** The latest fetch failure, when the company failed on its last attempt. */
+  failure: { message: string; consecutiveFailures: number } | null;
+};
+
 /** A user's disposition toward a match. */
 export type UserAction = "saved" | "dismissed" | "applied";
 
@@ -559,6 +573,59 @@ export class Repository {
       )
       .all(`-${freshnessHours} hours`) as { careers_url: string }[];
     return rows.map((r) => r.careers_url);
+  }
+
+  /**
+   * Every company the engine knows about: each one a scan has crawled (the `companies` snapshot
+   * table) merged with the user's tracked list, which may hold companies no scan has reached yet.
+   * Each row carries its open-posting count and its latest failure, so one query answers "what is
+   * being searched, and how is each one doing". Sorted by display name, case-insensitively.
+   */
+  listAllCompanies(): CompanyOverview[] {
+    const rows = this.db
+      .prepare(
+        `WITH urls AS (
+           SELECT careers_url FROM companies
+           UNION
+           SELECT careers_url FROM tracked_companies
+         )
+         SELECT
+           u.careers_url,
+           COALESCE(t.name, c.name, f.company) AS name,
+           t.careers_url IS NOT NULL AS tracked,
+           c.last_seen_at,
+           (SELECT COUNT(*) FROM postings p
+              WHERE p.company_id = COALESCE(c.id, f.company_id) AND p.expired_at IS NULL) AS open_postings,
+           f.message AS failure_message,
+           f.consecutive_failures
+         FROM urls u
+         LEFT JOIN companies c ON c.careers_url = u.careers_url
+         LEFT JOIN tracked_companies t ON t.careers_url = u.careers_url
+         LEFT JOIN failed_leads f ON f.careers_url = u.careers_url
+         ORDER BY LOWER(COALESCE(t.name, c.name, f.company, u.careers_url)), u.careers_url`,
+      )
+      .all() as {
+      careers_url: string;
+      name: string | null;
+      tracked: number;
+      last_seen_at: string | null;
+      open_postings: number;
+      failure_message: string | null;
+      consecutive_failures: number | null;
+    }[];
+    return rows.map((row) => ({
+      careersUrl: row.careers_url,
+      ...(row.name ? { name: row.name } : {}),
+      tracked: row.tracked === 1,
+      // SQLite's datetime('now') is UTC without a zone ("2026-11-24 16:31:00"); a browser parses
+      // that bare form as local time, so hand clients an explicit ISO-8601 UTC timestamp.
+      lastCheckedAt: row.last_seen_at ? `${row.last_seen_at.replace(" ", "T")}Z` : null,
+      openPostings: row.open_postings,
+      failure:
+        row.failure_message !== null
+          ? { message: row.failure_message, consecutiveFailures: row.consecutive_failures ?? 1 }
+          : null,
+    }));
   }
 
   /** Remove a tracked company; returns whether a row was deleted. */

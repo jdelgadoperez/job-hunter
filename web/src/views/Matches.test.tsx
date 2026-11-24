@@ -347,7 +347,7 @@ describe("Matches applied overwrites saved", () => {
     fireEvent.click(markApplied);
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /✓ Applied/i })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /^Applied$/ })).toBeInTheDocument(),
     );
     expect(screen.queryByText(/this will replace saved/i)).not.toBeInTheDocument();
   });
@@ -356,48 +356,48 @@ describe("Matches applied overwrites saved", () => {
     mockMatchesWithActions([{ id: "a", title: "Staff Platform Engineer", company: "Acme" }]);
     renderMatches();
 
-    fireEvent.click(await screen.findByRole("button", { name: "☆ Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /^Saved$/ })).toBeInTheDocument(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Mark applied" }));
 
     expect(screen.getByText(/this will replace saved/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /✓ Applied/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Applied$/ })).not.toBeInTheDocument();
     // The saved state is untouched until the user actually confirms.
-    expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Saved$/ })).toBeInTheDocument();
   });
 
   it("applies and drops the saved state once the overwrite is confirmed", async () => {
     mockMatchesWithActions([{ id: "a", title: "Staff Platform Engineer", company: "Acme" }]);
     renderMatches();
 
-    fireEvent.click(await screen.findByRole("button", { name: "☆ Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /^Saved$/ })).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("button", { name: "Mark applied" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /✓ Applied/i })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /^Applied$/ })).toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: "☆ Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
   it("backs out without applying when the confirm step is cancelled", async () => {
     mockMatchesWithActions([{ id: "a", title: "Staff Platform Engineer", company: "Acme" }]);
     renderMatches();
 
-    fireEvent.click(await screen.findByRole("button", { name: "☆ Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /^Saved$/ })).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByRole("button", { name: "Mark applied" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("button", { name: /★ Saved/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Saved$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark applied" })).toBeInTheDocument();
     expect(screen.queryByText(/this will replace saved/i)).not.toBeInTheDocument();
   });

@@ -317,6 +317,21 @@ describe("companies", () => {
     ]);
   });
 
+  it("lists every known company with how it is scanned", async () => {
+    repo.recordDirectory(repo.startScan(), [
+      { careersUrl: "https://boards.greenhouse.io/acme", name: "Acme" },
+      { careersUrl: "https://www.linkedin.com/company/bigco/jobs/", name: "BigCo" },
+      { careersUrl: "https://cobalt.example/careers", name: "Cobalt" },
+    ]);
+    const res = await makeApp().request("/api/companies/all");
+    const body = await json<{ name: string; method: string; tracked: boolean }[]>(res);
+    expect(body.map(({ name, method, tracked }) => ({ name, method, tracked }))).toEqual([
+      { name: "Acme", method: "greenhouse", tracked: false },
+      { name: "BigCo", method: "manual", tracked: false },
+      { name: "Cobalt", method: "browser", tracked: false },
+    ]);
+  });
+
   it("adds a company (201) and returns the updated list", async () => {
     const res = await makeApp().request("/api/companies", {
       method: "POST",

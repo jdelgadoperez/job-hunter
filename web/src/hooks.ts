@@ -79,6 +79,10 @@ export function useManualReviewCompanies() {
   });
 }
 
+export function useAllCompanies() {
+  return useQuery({ queryKey: ["companies", "all"], queryFn: api.getAllCompanies });
+}
+
 export function useNeedsAttention() {
   return useQuery({ queryKey: ["companies", "needs-attention"], queryFn: api.getNeedsAttention });
 }
@@ -88,7 +92,10 @@ export function useAddCompany() {
   return useMutation({
     mutationFn: ({ careersUrl, name }: { careersUrl: string; name?: string }) =>
       api.addCompany(careersUrl, name),
-    onSuccess: (companies) => qc.setQueryData(["companies"], companies),
+    onSuccess: (companies) => {
+      qc.setQueryData(["companies"], companies);
+      qc.invalidateQueries({ queryKey: ["companies", "all"] });
+    },
   });
 }
 
