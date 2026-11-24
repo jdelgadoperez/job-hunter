@@ -1,5 +1,6 @@
+import { X } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { Button, Card, Empty, ErrorNote, Loading } from "../components/ui";
+import { Button, Card, CardHeader, Empty, ErrorNote, Loading, PageHeader } from "../components/ui";
 import { formatCount } from "../format";
 import {
   useAddSkill,
@@ -11,15 +12,15 @@ import {
 
 function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-subtle px-2.5 py-1 text-sm text-fg">
+    <span className="inline-flex h-7 items-center gap-1 rounded-md bg-subtle pr-1 pl-2.5 text-sm text-fg">
       {label}
       <button
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${label}`}
-        className="rounded text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-5 w-5 items-center justify-center rounded text-faint transition-colors hover:bg-active hover:text-danger focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
       >
-        ×
+        <X size={13} aria-hidden="true" />
       </button>
     </span>
   );
@@ -47,8 +48,11 @@ function ProfileSkills() {
 
   return (
     <Card>
-      <h2 className="font-semibold text-fg">Your skills</h2>
-      <p className="mt-1 text-xs text-faint">
+      <CardHeader
+        title="Your skills"
+        meta={skills.length > 0 ? formatCount(skills.length) : undefined}
+      />
+      <p className="mt-1 text-sm text-muted">
         These are matched against every posting. Search the dictionary or type a brand-new skill —
         changes apply on the next scan.
       </p>
@@ -59,7 +63,7 @@ function ProfileSkills() {
         <ErrorNote error={profile.error} />
       ) : (
         <>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-1.5">
             {skills.length === 0 ? (
               <span className="text-sm text-faint">No skills yet.</span>
             ) : (
@@ -72,13 +76,13 @@ function ProfileSkills() {
               ))
             )}
           </div>
-          <form onSubmit={add} className="mt-3 flex gap-2">
+          <form onSubmit={add} className="mt-4 flex gap-2">
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               list="profile-skill-options"
               placeholder="Search the dictionary or add a new skill…"
-              className="input flex-1"
+              className="input mt-0 flex-1"
             />
             <datalist id="profile-skill-options">
               {suggestions.map((name) => (
@@ -119,26 +123,26 @@ function Dictionary() {
 
   return (
     <Card>
-      <h2 className="font-semibold text-fg">
-        Skill dictionary{dict.data ? ` (${formatCount(all.length)})` : ""}
-      </h2>
-      <p className="mt-1 text-xs text-faint">
+      <CardHeader title="Skill dictionary" meta={dict.data ? formatCount(all.length) : undefined} />
+      <p className="mt-1 text-sm text-muted">
         The vocabulary the resume parser recognizes. Adding a term here lets future resume uploads
         detect it.
       </p>
 
-      <form onSubmit={add} className="mt-3 flex flex-wrap gap-2">
+      <form onSubmit={add} className="mt-4 flex flex-wrap gap-2">
         <input
+          aria-label="Skill name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Skill name"
-          className="input flex-1"
+          className="input mt-0 min-w-40 flex-1"
         />
         <input
+          aria-label="Skill category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           placeholder="Category (optional)"
-          className="input w-44"
+          className="input mt-0 w-40"
         />
         <Button type="submit" disabled={addSkill.isPending || !name.trim()}>
           Add
@@ -150,21 +154,27 @@ function Dictionary() {
       ) : dict.isError ? (
         <ErrorNote error={dict.error} />
       ) : all.length === 0 ? (
-        <Empty>The dictionary is empty.</Empty>
+        <div className="mt-4">
+          <Empty>The dictionary is empty.</Empty>
+        </div>
       ) : (
         <>
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            aria-label="Filter the dictionary"
             placeholder="Filter…"
-            className="input mt-3"
+            className="input mt-4"
           />
-          <ul className="mt-2 max-h-80 divide-y divide-border overflow-auto rounded border border-border">
+          <ul className="mt-3 max-h-96 divide-y divide-rule overflow-auto rounded-md border border-border">
             {shown.map((s) => {
               const removing = removeSkill.isPending && removeSkill.variables === s.name;
               return (
-                <li key={s.name} className="flex items-center justify-between px-3 py-1.5 text-sm">
-                  <span>
+                <li
+                  key={s.name}
+                  className="flex h-9 items-center justify-between px-3 text-sm hover:bg-raised"
+                >
+                  <span className="min-w-0 truncate">
                     {s.name} <span className="text-xs text-faint">· {s.category}</span>
                   </span>
                   <button
@@ -172,9 +182,9 @@ function Dictionary() {
                     onClick={() => removeSkill.mutate(s.name)}
                     disabled={removing}
                     aria-label={`Remove ${s.name}`}
-                    className="rounded text-faint hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    className="flex h-6 w-6 items-center justify-center rounded text-faint transition-colors hover:bg-subtle hover:text-danger focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50"
                   >
-                    ×
+                    <X size={14} aria-hidden="true" />
                   </button>
                 </li>
               );
@@ -191,9 +201,15 @@ function Dictionary() {
 
 export function Skills() {
   return (
-    <section className="space-y-4">
-      <ProfileSkills />
-      <Dictionary />
+    <section className="space-y-5">
+      <PageHeader
+        title="Skills"
+        description="What every posting is matched against, and the vocabulary the resume parser knows."
+      />
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2">
+        <ProfileSkills />
+        <Dictionary />
+      </div>
     </section>
   );
 }

@@ -1,13 +1,24 @@
-import { Globe, type LucideIcon, Star, TrendingUp, Users } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Globe,
+  type LucideIcon,
+  RotateCcw,
+  Search,
+  Star,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 import type { ScoredPosting } from "../api";
 import { type CompanyLink, companyDisplayName, companyLinks } from "../company-links";
 import {
   Button,
-  Card,
   Empty,
   ErrorNote,
   Loading,
+  PageHeader,
+  Pill,
   SCORE_THRESHOLDS,
   ScorePill,
 } from "../components/ui";
@@ -28,7 +39,7 @@ function CompanyLinksRow({ posting }: { posting: ScoredPosting["posting"] }) {
   // `posting.company` slug, so the tooltip/screen-reader text matches the visible company name.
   const displayName = companyDisplayName(posting.company);
   return (
-    <div className="mt-1 flex items-center gap-1">
+    <div className="flex items-center gap-0.5">
       {companyLinks(posting).map((link) => {
         const Icon = LINK_ICONS[link.key];
         const title = `${link.label} — search for ${displayName}`;
@@ -40,9 +51,9 @@ function CompanyLinksRow({ posting }: { posting: ScoredPosting["posting"] }) {
             rel="noreferrer"
             aria-label={title}
             title={title}
-            className="rounded p-1.5 text-faint hover:bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-faint transition-colors hover:bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
           >
-            <Icon size={16} aria-hidden="true" />
+            <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
           </a>
         );
       })}
@@ -65,6 +76,8 @@ const MatchCard = memo(function MatchCard({
   countryFilterActive,
 }: ScoredPosting & { countryFilterActive: boolean }) {
   const setAction = useMatchAction();
+  // Row actions sit at 32px so a row stays compact; the toolbar keeps the 36px controls.
+  const rowButton = "h-8 px-2";
   const pending = setAction.isPending;
   const saved = action === "saved";
   // `action` is a single-value field (saved | dismissed | applied — see repository.ts's
@@ -77,127 +90,141 @@ const MatchCard = memo(function MatchCard({
   const showUnknownCountry = countryFilterActive && posting.country === undefined;
 
   return (
-    <Card className={expired ? "border-l-2 border-l-muted opacity-60" : ""}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <a
-            href={posting.url}
-            target="_blank"
-            rel="noreferrer"
-            className="font-medium text-link hover:underline"
-          >
-            {posting.title}
-          </a>
-          <p className="text-sm text-faint">
+    <li
+      className={`grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 px-5 py-4 transition-colors hover:bg-raised ${expired ? "opacity-60" : ""}`}
+    >
+      <ScorePill score={result.score} />
+      <div className="min-w-0">
+        <a
+          href={posting.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[15px] font-medium text-link hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 rounded-sm"
+        >
+          {posting.title}
+        </a>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+          <span>
             {posting.company}
             {posting.location ? ` · ${posting.location}` : ""}
-          </p>
-          <CompanyLinksRow posting={posting} />
-        </div>
-        <div className="flex items-center gap-2">
-          {posting.remote ? (
-            <span className="rounded-full bg-info-surface px-2 py-0.5 text-xs text-info">
-              Remote
-            </span>
-          ) : null}
+          </span>
+          {posting.remote ? <Pill>Remote</Pill> : null}
           {showUnknownCountry ? (
-            <span
-              className="rounded-full bg-subtle px-2 py-0.5 text-xs text-muted"
-              title="The location couldn't be matched to a country, so this role is shown for every country filter."
-            >
+            <Pill title="The location couldn't be matched to a country, so this role is shown for every country filter.">
               Unknown location
-            </span>
+            </Pill>
           ) : null}
           {expired ? (
-            <span
-              role="note"
-              aria-label="This role has expired"
-              className="rounded-full border border-border bg-subtle px-2 py-0.5 text-xs text-muted"
-            >
-              <span aria-hidden="true">⊘</span> expired
+            <span role="note" aria-label="This role has expired">
+              <Pill tone="warning">
+                <span aria-hidden="true">⊘&nbsp;</span>expired
+              </Pill>
             </span>
           ) : null}
-          <ScorePill score={result.score} />
         </div>
-      </div>
-      {result.rationale ? <p className="mt-2 text-sm text-fg">{result.rationale}</p> : null}
-      {result.matchedSkills.length > 0 ? (
-        <p className="mt-2 text-xs text-faint">
-          <span className="font-semibold text-success">Matched:</span>{" "}
-          {result.matchedSkills.join(", ")}
-        </p>
-      ) : null}
-      {result.missingSkills.length > 0 ? (
-        <p className="mt-1 text-xs text-faint">
-          <span className="font-semibold text-warning">Missing:</span>{" "}
-          {result.missingSkills.join(", ")}
-        </p>
-      ) : null}
+        {result.rationale ? (
+          <p className="mt-2 max-w-[72ch] text-sm leading-relaxed text-fg">{result.rationale}</p>
+        ) : null}
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          {result.matchedSkills.length > 0 || result.missingSkills.length > 0 ? (
+            <dl className="min-w-0 space-y-0.5 text-xs leading-relaxed">
+              {result.matchedSkills.length > 0 ? (
+                <div className="flex gap-1.5">
+                  <dt className="flex-none font-medium text-fg">Matched:</dt>
+                  <dd className="text-muted">{result.matchedSkills.join(", ")}</dd>
+                </div>
+              ) : null}
+              {result.missingSkills.length > 0 ? (
+                <div className="flex gap-1.5">
+                  <dt className="flex-none font-medium text-fg">Missing:</dt>
+                  <dd className="text-faint">{result.missingSkills.join(", ")}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : (
+            <span />
+          )}
 
-      <div className="mt-3 flex items-center gap-2">
-        <Button
-          variant="ghost"
-          disabled={pending}
-          onClick={() => setAction.mutate({ id: posting.id, action: saved ? null : "saved" })}
-          className={saved ? "text-success" : ""}
-        >
-          {saved ? "★ Saved" : "☆ Save"}
-        </Button>
-        {confirmingApply ? (
-          <span className="flex items-center gap-2 text-sm">
-            <span className="text-muted">This will replace Saved.</span>
+          <div className="-mr-2 -mb-1 flex flex-wrap items-center gap-0.5">
             <Button
               variant="ghost"
               disabled={pending}
-              onClick={() => {
-                setConfirmingApply(false);
-                setAction.mutate({ id: posting.id, action: "applied" });
-              }}
-              className="text-danger"
+              aria-pressed={saved}
+              onClick={() => setAction.mutate({ id: posting.id, action: saved ? null : "saved" })}
+              className={`${rowButton} ${saved ? "text-fg" : ""}`}
             >
-              Confirm
+              <Star
+                size={15}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                className={saved ? "fill-current" : ""}
+              />
+              {saved ? "Saved" : "Save"}
             </Button>
-            <Button variant="ghost" onClick={() => setConfirmingApply(false)}>
-              Cancel
-            </Button>
-          </span>
-        ) : (
-          <Button
-            variant="ghost"
-            disabled={pending}
-            onClick={() => {
-              if (action === "applied") {
-                setAction.mutate({ id: posting.id, action: null });
-              } else if (saved) {
-                setConfirmingApply(true);
-              } else {
-                setAction.mutate({ id: posting.id, action: "applied" });
-              }
-            }}
-            className={action === "applied" ? "text-success" : ""}
-          >
-            {action === "applied" ? "✓ Applied" : "Mark applied"}
-          </Button>
-        )}
-        {action === "dismissed" ? (
-          <Button
-            variant="ghost"
-            disabled={pending}
-            onClick={() => setAction.mutate({ id: posting.id, action: null })}
-          >
-            Undismiss
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            disabled={pending}
-            onClick={() => setAction.mutate({ id: posting.id, action: "dismissed" })}
-          >
-            Dismiss
-          </Button>
-        )}
+            {confirmingApply ? (
+              <span className="flex items-center gap-1 text-sm">
+                <span className="px-1 text-muted">This will replace Saved.</span>
+                <Button
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    setConfirmingApply(false);
+                    setAction.mutate({ id: posting.id, action: "applied" });
+                  }}
+                  className="text-danger"
+                >
+                  Confirm
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirmingApply(false)}>
+                  Cancel
+                </Button>
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                disabled={pending}
+                onClick={() => {
+                  if (action === "applied") {
+                    setAction.mutate({ id: posting.id, action: null });
+                  } else if (saved) {
+                    setConfirmingApply(true);
+                  } else {
+                    setAction.mutate({ id: posting.id, action: "applied" });
+                  }
+                }}
+                className={`${rowButton} ${action === "applied" ? "text-success" : ""}`}
+              >
+                <Check size={15} strokeWidth={1.75} aria-hidden="true" />
+                {action === "applied" ? "Applied" : "Mark applied"}
+              </Button>
+            )}
+            {action === "dismissed" ? (
+              <Button
+                variant="ghost"
+                disabled={pending}
+                onClick={() => setAction.mutate({ id: posting.id, action: null })}
+                className={rowButton}
+              >
+                <RotateCcw size={15} strokeWidth={1.75} aria-hidden="true" />
+                Undismiss
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                disabled={pending}
+                onClick={() => setAction.mutate({ id: posting.id, action: "dismissed" })}
+                className={rowButton}
+              >
+                <Ban size={15} strokeWidth={1.75} aria-hidden="true" />
+                Dismiss
+              </Button>
+            )}
+            <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
+            <CompanyLinksRow posting={posting} />
+          </div>
+        </div>
       </div>
-    </Card>
+    </li>
   );
 });
 
@@ -315,112 +342,132 @@ export function Matches() {
     setSearch(undefined);
   };
 
+  const checkLabel =
+    "flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-muted hover:text-fg";
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <input
-          type="text"
-          aria-label="Search matches"
-          placeholder="Search title, company, location…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitSearch();
-          }}
-          onBlur={commitSearch}
-          className="select w-64"
-        />
-        <label htmlFor="minScore" className="text-sm text-muted">
-          Minimum score: <span className="font-semibold">{minScore}</span>
-        </label>
-        <input
-          id="minScore"
-          type="range"
-          min={0}
-          max={100}
-          step={5}
-          value={minScore}
-          onChange={(e) => setMinScore(Number(e.target.value))}
-          className="control w-48"
-        />
-        {/* Show expired / Show dismissed are no-ops in the Applied view (it shows exactly the applied
-            set, expired included), so hide them there. Remote/Country still narrow the applied set. */}
-        {!onlyApplied ? (
-          <>
-            <label className="flex items-center gap-1 text-sm text-muted">
-              <input
-                type="checkbox"
-                className="control"
-                checked={includeExpired}
-                onChange={(e) => setIncludeExpired(e.target.checked)}
-              />
-              Show expired
+    <section className="space-y-5">
+      <PageHeader
+        title="Matches"
+        description="Open roles ranked against your resume, best first."
+      />
+      <div className="rounded-lg border border-border bg-surface">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
+          <div className="relative">
+            <Search
+              size={15}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint"
+            />
+            <input
+              type="text"
+              aria-label="Search matches"
+              placeholder="Search title, company, location…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitSearch();
+              }}
+              onBlur={commitSearch}
+              className="select w-64 max-w-full pl-9"
+            />
+          </div>
+          <div className="flex h-9 items-center gap-3 px-1">
+            <label htmlFor="minScore" className="num text-sm whitespace-nowrap text-muted">
+              Minimum score: <span className="font-semibold text-fg">{minScore}</span>
             </label>
-            <label className="flex items-center gap-1 text-sm text-muted">
-              <input
-                type="checkbox"
-                className="control"
-                checked={includeDismissed}
-                onChange={(e) => setIncludeDismissed(e.target.checked)}
-              />
-              Show dismissed
+            <input
+              id="minScore"
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={minScore}
+              onChange={(e) => setMinScore(Number(e.target.value))}
+              className="control w-32"
+            />
+          </div>
+          {countryOptions.length > 0 && (
+            <label className="flex items-center gap-2 text-sm text-muted">
+              Country:{" "}
+              <select
+                value={country ?? ""}
+                onChange={(e) => setCountry(e.target.value || undefined)}
+                className="select"
+              >
+                <option value="">All countries</option>
+                {countryOptions.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </label>
-          </>
-        ) : null}
-        <label className="flex items-center gap-1 text-sm text-muted">
-          <input
-            type="checkbox"
-            className="control"
-            checked={remoteOnly}
-            onChange={(e) => setRemoteOnly(e.target.checked)}
-          />
-          Remote only
-        </label>
-        {countryOptions.length > 0 && (
-          <label className="flex items-center gap-1 text-sm text-muted">
-            Country:{" "}
-            <select
-              value={country ?? ""}
-              onChange={(e) => setCountry(e.target.value || undefined)}
-              className="select ml-1"
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {filtersAreActive ? (
+              <Button variant="ghost" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
+            <Button
+              variant="toggle"
+              pressed={onlyApplied}
+              onClick={() => setOnlyApplied((v) => !v)}
             >
-              <option value="">All countries</option>
-              {countryOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <Button
-          variant="toggle"
-          pressed={onlyApplied}
-          onClick={() => setOnlyApplied((v) => !v)}
-          className="px-2 py-0.5"
-        >
-          Applied ({formatCount(appliedCount)})
-        </Button>
-        {!onlyApplied ? (
-          <label className="flex items-center gap-1 text-sm text-muted">
+              Applied <span className="num text-faint">{formatCount(appliedCount)}</span>
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 border-t border-rule px-3 py-1">
+          <label className={checkLabel}>
             <input
               type="checkbox"
               className="control"
-              checked={includeApplied}
-              onChange={(e) => setIncludeApplied(e.target.checked)}
+              checked={remoteOnly}
+              onChange={(e) => setRemoteOnly(e.target.checked)}
             />
-            Show applied
+            Remote only
           </label>
-        ) : null}
-        {filtersAreActive ? (
-          <Button variant="ghost" onClick={clearFilters} className="px-2 py-0.5">
-            Clear filters
-          </Button>
-        ) : null}
+          {/* Show expired / Show dismissed are no-ops in the Applied view (it shows exactly the applied
+            set, expired included), so hide them there. Remote/Country still narrow the applied set. */}
+          {!onlyApplied ? (
+            <>
+              <label className={checkLabel}>
+                <input
+                  type="checkbox"
+                  className="control"
+                  checked={includeExpired}
+                  onChange={(e) => setIncludeExpired(e.target.checked)}
+                />
+                Show expired
+              </label>
+              <label className={checkLabel}>
+                <input
+                  type="checkbox"
+                  className="control"
+                  checked={includeDismissed}
+                  onChange={(e) => setIncludeDismissed(e.target.checked)}
+                />
+                Show dismissed
+              </label>
+              <label className={checkLabel}>
+                <input
+                  type="checkbox"
+                  className="control"
+                  checked={includeApplied}
+                  onChange={(e) => setIncludeApplied(e.target.checked)}
+                />
+                Show applied
+              </label>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {matches.data && matches.data.length > 0 ? (
-        <p className="text-sm text-muted">
+        <p className="num text-sm text-muted">
           Showing{" "}
           <span className="font-semibold text-fg">
             {hasMore
@@ -447,7 +494,7 @@ export function Matches() {
         </Empty>
       ) : (
         <>
-          <div className="space-y-3">
+          <ul className="divide-y divide-rule overflow-hidden rounded-lg border border-border bg-surface">
             {visibleMatches.map((m) => (
               <MatchCard
                 key={m.posting.id}
@@ -458,10 +505,10 @@ export function Matches() {
                 countryFilterActive={country !== undefined}
               />
             ))}
-          </div>
+          </ul>
           {hasMore ? (
             <div className="flex justify-center">
-              <Button variant="ghost" onClick={() => setVisiblePages((n) => n + 1)}>
+              <Button variant="secondary" onClick={() => setVisiblePages((n) => n + 1)}>
                 Show more ({formatCount(matches.data.length - visibleMatches.length)} remaining)
               </Button>
             </div>

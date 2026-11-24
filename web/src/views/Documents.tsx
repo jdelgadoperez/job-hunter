@@ -26,9 +26,9 @@ function NoteView({
   const content = note.data.content;
 
   return (
-    <section aria-label={doc.name} className="rounded-md border border-border">
+    <section aria-label={doc.name} className="rounded-md border border-border bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <h3 className="font-mono text-xs text-muted">{doc.name}</h3>
+        <h3 className="text-xs font-medium text-muted">{doc.name}</h3>
         <div className="flex flex-wrap gap-1">
           {draft === null ? (
             <>
@@ -77,7 +77,7 @@ function NoteView({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={20}
-            className="input w-full font-mono text-xs"
+            className="input mt-0 h-auto w-full py-2 font-mono text-xs leading-relaxed"
           />
         )}
         {save.error || remove.error ? <ErrorNote error={save.error ?? remove.error} /> : null}
@@ -114,7 +114,7 @@ function NewNoteForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. onsite-prep.md"
-        className="input flex-1"
+        className="input mt-0 flex-1"
       />
       <Button type="submit" disabled={save.isPending || !name.trim()}>
         Create
@@ -159,7 +159,7 @@ export function Documents({ applicationId }: { applicationId: number }) {
       ) : docs.error ? (
         <ErrorNote error={docs.error} />
       ) : docs.data && docs.data.length > 0 ? (
-        <ul aria-label="Documents" className="space-y-0.5">
+        <ul aria-label="Documents" className="space-y-1">
           {docs.data.map((doc) => (
             <li key={doc.id} className="flex items-baseline justify-between gap-3">
               {doc.kind === "note" ? (
@@ -167,7 +167,7 @@ export function Documents({ applicationId }: { applicationId: number }) {
                   type="button"
                   aria-pressed={openId === doc.id}
                   onClick={() => setOpenId(openId === doc.id ? null : doc.id)}
-                  className="truncate text-left text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="truncate rounded-sm text-left font-medium text-fg hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
                 >
                   {doc.name}
                 </button>
@@ -181,7 +181,7 @@ export function Documents({ applicationId }: { applicationId: number }) {
                   {doc.name}
                 </a>
               )}
-              <span className="shrink-0 text-xs text-faint">
+              <span className="num shrink-0 text-xs text-faint">
                 {doc.kind} · {formatBytes(doc.size)}
               </span>
             </li>
