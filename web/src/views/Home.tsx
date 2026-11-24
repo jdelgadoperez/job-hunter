@@ -12,6 +12,7 @@ import {
   PageHeader,
   ProgressBar,
 } from "../components/ui";
+import { summarizeFailure } from "../failure-message";
 import { formatAbsoluteTime, formatCount, formatRelativeTime } from "../format";
 import {
   useLatestScan,
@@ -188,9 +189,13 @@ export function Home({ active = true }: { active?: boolean } = {}) {
                     </summary>
                     <ul className="mt-1 list-disc pl-5 text-faint">
                       {status.warnings.map((w) => (
-                        <li key={`${w.source}:${w.message}`}>
+                        <li
+                          key={`${w.source}:${w.message}`}
+                          title={w.message}
+                          className="[overflow-wrap:anywhere]"
+                        >
                           {w.source ? `${w.source}: ` : ""}
-                          {w.message}
+                          {summarizeFailure(w.message).summary}
                         </li>
                       ))}
                     </ul>

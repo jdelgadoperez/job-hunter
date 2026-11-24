@@ -307,3 +307,28 @@ describe("All companies", () => {
     expect(await screen.findByText(/Run a scan from the Home tab/i)).toBeInTheDocument();
   });
 });
+
+describe("Needs attention with a missing scan browser", () => {
+  const banner = (n: number) => ({
+    careersUrl: `https://c${n}.example/careers`,
+    company: `Company ${n}`,
+    message:
+      "browserType.launch: Executable doesn't exist at /x/chrome-headless-shell\n╔══╗\n║ Looks like Playwright was just installed or updated. ║\n╚══╝",
+    consecutiveFailures: 7,
+  });
+
+  it("shows one install notice instead of Playwright's banner, and caps the list", async () => {
+    mockFetch({ needsAttention: Array.from({ length: 8 }, (_, i) => banner(i)) });
+    renderCompanies();
+
+    expect(await screen.findByText(/8 of these failed because the browser/)).toBeInTheDocument();
+    expect(
+      screen.getByText("npx playwright install chromium chromium-headless-shell"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Looks like Playwright/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("The scan browser isn't installed.")).toHaveLength(6);
+
+    await userEvent.click(screen.getByRole("button", { name: "Show all 8" }));
+    expect(screen.getAllByText("The scan browser isn't installed.")).toHaveLength(8);
+  });
+});
