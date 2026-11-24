@@ -43,7 +43,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const model = process.env.SCORER_MODEL?.trim() || "claude-sonnet-4-6";
+  const model = process.env.SCORER_MODEL?.trim() || "claude-sonnet-5-5";
   const warnings: Warning[] = [];
   const scorer = new LlmScorer(
     new AnthropicLlmClient({ apiKey, model }),

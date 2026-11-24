@@ -19,6 +19,7 @@ Anthropic prompt caching only engages when the cached prefix meets a **minimum c
 
 | Model | Minimum cacheable prefix |
 | --- | --- |
+| Sonnet 5.5, Opus 5.5 | 512 tokens |
 | Sonnet 4.6 / Fable 5 | 2048 tokens |
 | Opus 4.8 / 4.7 / 4.6, Haiku 4.5 | 4096 tokens |
 
@@ -26,11 +27,13 @@ If the cached `system` block is **below** that threshold, the marker is **silent
 returns `cache_creation_input_tokens: 0` and `cache_read_input_tokens: 0`, and you pay full price on
 every call with nothing cached.
 
-job-hunter's default model is `claude-sonnet-5` (see `llm-providers.ts`), so the prefix must clear
-**2048 tokens** to cache at all. The cached prefix is just the instructions (~200 tokens) plus your
-serialized profile (skills / role keywords / categories — typically a few hundred tokens). For most
-profiles that total is **well under 2048 tokens**, so caching never engages. That is the most likely
-explanation for a low cache hit rate on this app specifically.
+job-hunter's default model is `claude-sonnet-5-5` (see `llm-providers.ts`), whose minimum is
+**512 tokens** (check Anthropic's prompt caching docs for the current value). The cached prefix is
+just the instructions (~200 tokens) plus your serialized profile (skills / role keywords /
+categories — typically a few hundred tokens), so on the default model it now usually clears the
+minimum and caches. On an older model with a 1024–4096-token minimum, most profiles fall **well
+under** it and caching never engages — the most likely explanation for a low cache hit rate if you
+have overridden `scorerModel`.
 
 The flip side: the *expensive* tokens in a deep score are the **job description**, which is unique per
 posting and therefore inherently uncacheable. So even when the prefix does cross the threshold, the
