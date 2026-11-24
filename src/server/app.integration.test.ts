@@ -1,3 +1,4 @@
+import { LLM_PROVIDERS } from "@app/matching/llm-providers";
 import { ANTHROPIC_KEY_SETTING } from "@app/matching/settings-keys";
 import { buildProfile } from "@app/profile/build-profile";
 import { Repository } from "@app/storage/repository";
@@ -430,6 +431,8 @@ describe("settings", () => {
     expect(body).toEqual({
       hasAnthropicKey: true,
       scorerModel: null,
+      defaultScorerModel: LLM_PROVIDERS.anthropic.defaultModel,
+      scorerModels: LLM_PROVIDERS.anthropic.models,
       scorerProvider: null,
       homeCountry: null,
       scanFreshnessHours: null,

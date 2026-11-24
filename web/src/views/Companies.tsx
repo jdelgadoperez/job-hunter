@@ -12,6 +12,7 @@ import {
   PageHeader,
   Pill,
 } from "../components/ui";
+import { BROWSER_INSTALL_COMMAND, summarizeFailure } from "../failure-message";
 import { formatAbsoluteTime, formatCount, formatRelativeTime } from "../format";
 import {
   useAddCompany,
@@ -111,6 +112,7 @@ export function Companies({ active = true }: { active?: boolean } = {}) {
   const [name, setName] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [showAllManual, setShowAllManual] = useState(false);
+  const [showAllNeedsAttention, setShowAllNeedsAttention] = useState(false);
 
   const qc = useQueryClient();
   const scanStatus = useScanStatus({ enabled: active });
@@ -161,6 +163,14 @@ export function Companies({ active = true }: { active?: boolean } = {}) {
   }
 
   const hasNeedsAttention = (needsAttention.data?.length ?? 0) > 0;
+  const shownNeedsAttention = showAllNeedsAttention
+    ? (needsAttention.data ?? [])
+    : (needsAttention.data ?? []).slice(0, SIDE_LIST_CAP);
+  // Failures that are really one setup problem (the scan browser isn't installed) get one
+  // actionable notice instead of the same raw Playwright banner repeated per company.
+  const missingBrowserCount = (needsAttention.data ?? []).filter(
+    (c) => summarizeFailure(c.message).missingBrowser,
+  ).length;
   const hasManualReview = sortedManualReview.length > 0;
   const hasSidePanels = hasNeedsAttention || hasManualReview;
 
@@ -278,16 +288,48 @@ export function Companies({ active = true }: { active?: boolean } = {}) {
                   crawled normally, but no longer auto-retried within a run. Rescan to try them
                   again now.
                 </p>
-                <ul className="mt-3 space-y-2">
-                  {needsAttention.data.map((c) => (
-                    <li key={c.careersUrl} className="text-sm">
-                      <span className="font-medium text-fg">{c.company}</span>{" "}
-                      <span className="text-muted">
-                        — {c.message} ({c.consecutiveFailures} scans)
-                      </span>
-                    </li>
-                  ))}
+                {missingBrowserCount > 0 ? (
+                  <div className="mt-3 rounded-md bg-pill-warning-bg px-3 py-2.5 text-sm text-pill-warning-ink">
+                    <p>
+                      {formatCount(missingBrowserCount)} of these failed because the browser scans
+                      use to read careers pages isn't installed — usually after Playwright updates.
+                      Install it, then Rescan:
+                    </p>
+                    <code className="mt-1.5 block font-mono text-xs [overflow-wrap:anywhere]">
+                      {BROWSER_INSTALL_COMMAND}
+                    </code>
+                  </div>
+                ) : null}
+                <ul className="mt-3 divide-y divide-rule">
+                  {shownNeedsAttention.map((c) => {
+                    const { summary } = summarizeFailure(c.message);
+                    return (
+                      <li key={c.careersUrl} className="min-w-0 py-2 text-sm">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="min-w-0 truncate font-medium text-fg">{c.company}</span>
+                          <span className="num flex-none text-xs text-faint">
+                            ({c.consecutiveFailures} scans)
+                          </span>
+                        </div>
+                        <p className="truncate text-xs text-faint">{shortUrl(c.careersUrl)}</p>
+                        <p className="mt-0.5 text-muted [overflow-wrap:anywhere]" title={c.message}>
+                          {summary}
+                        </p>
+                      </li>
+                    );
+                  })}
                 </ul>
+                {needsAttention.data.length > SIDE_LIST_CAP ? (
+                  <Button
+                    variant="ghost"
+                    className="mt-1 -ml-2.5"
+                    onClick={() => setShowAllNeedsAttention((v) => !v)}
+                  >
+                    {showAllNeedsAttention
+                      ? "Show fewer"
+                      : `Show all ${formatCount(needsAttention.data.length)}`}
+                  </Button>
+                ) : null}
               </Card>
             ) : null}
 
@@ -489,7 +531,7 @@ function AllCompanies({ query }: { query: ReturnType<typeof useAllCompanies> }) 
 function CompanyStatus({ company }: { company: CompanyOverview }) {
   if (company.failure) {
     return (
-      <Pill tone="negative" title={company.failure.message}>
+      <Pill tone="negative" title={summarizeFailure(company.failure.message).summary}>
         Failing · {company.failure.consecutiveFailures}{" "}
         {company.failure.consecutiveFailures === 1 ? "scan" : "scans"}
       </Pill>

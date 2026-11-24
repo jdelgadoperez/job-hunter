@@ -27,6 +27,8 @@ function bodyFor(url: string): unknown {
     return {
       hasAnthropicKey: false,
       scorerModel: null,
+      defaultScorerModel: "claude-sonnet-5-5",
+      scorerModels: [],
       scorerProvider: null,
       homeCountry: null,
       hasTheMuseKey: false,

@@ -201,8 +201,9 @@ and opens a React dashboard in your browser. It has six tabs:
   directory plus your tracked list), with how each is scanned (Greenhouse, Lever, Ashby, Workday,
   a rendered web page, or not scanned), its open roles, when it was last checked, and whether it is
   failing. Search it, or filter to tracked, failing, or not-scanned companies.
-- **Settings** — your Anthropic API key, scorer model, home country, scan-freshness window, and
-  optional extra feed sources. Secret keys are write-only.
+- **Settings** — your Anthropic API key, scorer model (pick Claude Sonnet 5.5, Haiku 5.5 or
+  Opus 5.5 from the list, or choose "Other model…" and type any model ID), home country,
+  scan-freshness window, and optional extra feed sources. Secret keys are write-only.
 
 For the full walkthrough of every tab, see the
 **[Using the Dashboard](https://github.com/jdelgadoperez/job-hunter/wiki/Using-the-Dashboard)** guide.
