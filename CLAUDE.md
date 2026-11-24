@@ -43,7 +43,7 @@ Match `.nvmrc` (Node 24; 22+ required).
 
 ```bash
 npm run smoke:airtable   # read the live Airtable directory (WRITE_FIXTURE=1 refreshes the fixture)
-npm run smoke:scorer     # exercise the live LLM scorer (needs ANTHROPIC_API_KEY)
+npm run smoke:scorer     # exercise the live LLM scorer (ANTHROPIC_API_KEY, else the key saved in Settings)
 npm run smoke:scan       # a full live scan against a throwaway DB
 ```
 

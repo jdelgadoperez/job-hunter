@@ -312,7 +312,7 @@ Opt-in, network-bound checks (excluded from CI):
 
 ```bash
 npm run smoke:airtable    # read the live Airtable share (WRITE_FIXTURE=1 to refresh the fixture)
-npm run smoke:scorer      # exercise the live Claude scorer (needs ANTHROPIC_API_KEY)
+npm run smoke:scorer      # exercise the live Claude scorer (ANTHROPIC_API_KEY, or the key saved in Settings)
 npm run smoke:scan        # a full live scan against a throwaway database
 npm run smoke:postgres    # exercise the hosted Postgres store (needs DATABASE_URL)
 ```

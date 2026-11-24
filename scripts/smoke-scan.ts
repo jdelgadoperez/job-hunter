@@ -1,7 +1,9 @@
 /**
  * Opt-in, manual smoke test for a full live `scan`. NOT part of `npm test`.
  *
- *   ANTHROPIC_API_KEY=sk-... RESUME=/path/to/resume.pdf npm run smoke:scan
+ *   RESUME=/path/to/resume.pdf npm run smoke:scan
+ *
+ * The LLM key comes from ANTHROPIC_API_KEY, or else the one saved in the dashboard's Settings.
  *
  * Runs the real engine end to end against a throwaway temp database: builds a profile from a
  * resume, discovers companies (live Playwright Airtable read of the community directory + ATS
@@ -20,6 +22,7 @@ import { HttpFetcher } from "../src/net/fetcher";
 import { PlaywrightRenderer } from "../src/net/playwright-renderer";
 import { buildProfile } from "../src/profile/build-profile";
 import { readResumeText } from "../src/profile/read-resume";
+import { resolveAnthropicApiKey } from "../src/runtime/saved-api-key";
 import { Repository } from "../src/storage/repository";
 
 async function main(): Promise<void> {
@@ -39,8 +42,8 @@ async function main(): Promise<void> {
     console.log(`Profile: ${profile.skills.length} skill(s).`);
 
     const warnings: Warning[] = [];
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-    if (apiKey) repo.setSetting("anthropicApiKey", apiKey);
+    const key = resolveAnthropicApiKey();
+    if (key) repo.setSetting("anthropicApiKey", key.apiKey);
     const scorer = resolveScorer({ settings: repo, onWarning: (w) => warnings.push(w) });
 
     const { discover } = await import("../src/discovery/discover");

@@ -2,7 +2,7 @@
  * Opt-in, manual Phase 0 probe for the beta **advisor tool** on the deep-score call. NOT part
  * of `npm test`.
  *
- *   ANTHROPIC_API_KEY=sk-... npm run smoke:advisor
+ *   npm run smoke:advisor   (key from ANTHROPIC_API_KEY, or else the one saved in Settings)
  *
  * Answers the questions from docs/advisor-tool-scoring-exploration.md against the live API:
  *
@@ -35,6 +35,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { JobPosting, SkillProfile } from "../src/domain/types";
 import { type LlmMatchPayload, MatchPayloadSchema } from "../src/matching/llm-schema";
 import { buildScorePrompt } from "../src/matching/score-prompt";
+import { NO_ANTHROPIC_KEY_MESSAGE, resolveAnthropicApiKey } from "../src/runtime/saved-api-key";
 
 const ADVISOR_BETA = "advisor-tool-2026-03-01";
 const MAX_TOKENS = 2048;
@@ -279,14 +280,15 @@ async function tryCreatePath(
 }
 
 async function main(): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) {
-    console.error("ANTHROPIC_API_KEY is not set — skipping live advisor-tool probe.");
+  const key = resolveAnthropicApiKey();
+  if (!key) {
+    console.error(`${NO_ANTHROPIC_KEY_MESSAGE} Skipping live advisor-tool probe.`);
     process.exitCode = 1;
     return;
   }
 
-  const client = new Anthropic({ apiKey });
+  console.log(`Using the API key from ${key.source === "env" ? "ANTHROPIC_API_KEY" : "Settings"}.`);
+  const client = new Anthropic({ apiKey: key.apiKey });
 
   // The re-probe's real question: does the agent CONSULT THE ADVISOR ON ITS OWN (unforced) when the
   // score is a genuine judgment call? So the unforced path runs for every scenario × pair. The
