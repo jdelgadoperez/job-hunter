@@ -1,6 +1,7 @@
 import { Anthropic } from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { type LlmUsage, toLlmUsage } from "./llm-usage";
+import { noThinkingParam } from "./thinking-config";
 import type { LlmTriageRequest } from "./triage-prompt";
 import { type LlmTriagePayload, TriagePayloadSchema } from "./triage-schema";
 
@@ -31,7 +32,7 @@ export class AnthropicTriageClient implements TriageClient {
     const response = await this.client.messages.parse({
       model: this.model,
       max_tokens: MAX_TOKENS,
-      thinking: { type: "disabled" },
+      ...noThinkingParam(this.model),
       output_config: {
         effort: "low",
         format: zodOutputFormat(TriagePayloadSchema),

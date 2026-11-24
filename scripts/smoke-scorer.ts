@@ -1,19 +1,21 @@
 /**
  * Opt-in, manual smoke test for the live LLM scorer. NOT part of `npm test`.
  *
- *   ANTHROPIC_API_KEY=sk-... npm run smoke:scorer
+ *   npm run smoke:scorer
  *
  * Scores a sample profile against a sample posting using the real `AnthropicLlmClient`
  * (the only place the live SDK path runs), printing the `MatchResult` and any warnings.
  * Verifies the prompt + structured-output contract still holds against the real API when
  * run intentionally. Exits cleanly with a message if no key is present — never throws.
  *
- * No key is ever committed; the key is read from the environment.
+ * No key is ever committed. The key comes from ANTHROPIC_API_KEY, or else from the one saved in the
+ * dashboard's Settings (read-only from the local DB). Set SCORER_MODEL to try another model.
  */
 import type { JobPosting, SkillProfile, Warning } from "../src/domain/types";
 import { HeuristicScorer } from "../src/matching/heuristic-scorer";
 import { AnthropicLlmClient } from "../src/matching/llm-client";
 import { LlmScorer } from "../src/matching/llm-scorer";
+import { NO_ANTHROPIC_KEY_MESSAGE, resolveAnthropicApiKey } from "../src/runtime/saved-api-key";
 
 const profile: SkillProfile = {
   skills: ["typescript", "react", "node.js", "postgresql", "aws"],
@@ -36,17 +38,20 @@ const posting: JobPosting = {
 };
 
 async function main(): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) {
-    console.error("ANTHROPIC_API_KEY is not set — skipping live scorer smoke test.");
+  const key = resolveAnthropicApiKey();
+  if (!key) {
+    console.error(`${NO_ANTHROPIC_KEY_MESSAGE} Skipping live scorer smoke test.`);
     process.exitCode = 1;
     return;
   }
 
-  const model = process.env.SCORER_MODEL?.trim() || "claude-sonnet-4-6";
+  const model = process.env.SCORER_MODEL?.trim() || "claude-sonnet-5-5";
+  console.log(
+    `Scoring with ${model}, using the API key from ${key.source === "env" ? "ANTHROPIC_API_KEY" : "Settings"}.`,
+  );
   const warnings: Warning[] = [];
   const scorer = new LlmScorer(
-    new AnthropicLlmClient({ apiKey, model }),
+    new AnthropicLlmClient({ apiKey: key.apiKey, model }),
     new HeuristicScorer(),
     (w) => warnings.push(w),
   );
