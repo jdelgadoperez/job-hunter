@@ -4,7 +4,6 @@ import { resolveShareUrl } from "@app/discovery/sources/airtable";
 import { PlaywrightSharedViewReader } from "@app/discovery/sources/airtable-playwright";
 import { formatProgress } from "@app/domain/scan-progress";
 import type { SettingsReader } from "@app/matching/resolve-settings";
-import { THE_MUSE_KEY_SETTING } from "@app/matching/settings-keys";
 import { errorMessage } from "@app/net/error-message";
 import { HttpFetcher } from "@app/net/fetcher";
 import { PlaywrightRenderer } from "@app/net/playwright-renderer";
@@ -17,8 +16,7 @@ import { runScannerOnce } from "./run-once";
  * (Fly.io/Railway cron or a GitHub Action) can invoke it on an interval. Crawls with a real browser +
  * live network, so it must run in a container with Chromium — never a serverless function.
  *
- * Env: DATABASE_URL (service-role Postgres connection, required); JOB_HUNTER_THE_MUSE_API_KEY
- * (optional, enables The Muse lead source); JOB_HUNTER_SCAN_BUDGET_MS (optional, overrides the
+ * Env: DATABASE_URL (service-role Postgres connection, required); JOB_HUNTER_SCAN_BUDGET_MS (optional, overrides the
  * wall-clock crawl budget below); JOB_HUNTER_POSTING_RETENTION_DAYS (optional, days to keep expired
  * postings before deleting them; default 30, 0 disables). See docs/backend/worker-runbook.md.
  */
@@ -42,13 +40,9 @@ const retentionEnv = process.env.JOB_HUNTER_POSTING_RETENTION_DAYS?.trim();
 const parsedRetention = retentionEnv ? Number(retentionEnv) : Number.NaN;
 const retentionDays = Number.isFinite(parsedRetention) ? parsedRetention : DEFAULT_RETENTION_DAYS;
 
-/** Lead-source settings come from env in the worker (no per-user DB); only key-gated sources read it. */
-const envSettings: SettingsReader = {
-  getSetting: (key) =>
-    key === THE_MUSE_KEY_SETTING
-      ? process.env.JOB_HUNTER_THE_MUSE_API_KEY?.trim() || undefined
-      : undefined,
-};
+/** The worker has no per-user settings: it runs only shared sources (`runScannerOnce` drops personal
+ *  ones like The Muse, so their leads never reach the public feed), and none of those read a key. */
+const envSettings: SettingsReader = { getSetting: () => undefined };
 
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;

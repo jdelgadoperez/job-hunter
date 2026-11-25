@@ -33,19 +33,38 @@ function pagedFetcher(opts: { fail?: number; garble?: number } = {}): Fetcher {
 }
 
 describe("TheMuseSource", () => {
-  it("self-skips with a warning and makes no request when no key is configured", async () => {
+  it("calls the API keyless (no api_key param) when no key is configured", async () => {
+    const seen: string[] = [];
     const source = new TheMuseSource();
+    const inner = pagedFetcher();
     const fetcher: Fetcher = {
-      fetch: async () => {
-        throw new Error("must not fetch without a key");
+      fetch: async (url: string) => {
+        seen.push(url);
+        return inner.fetch(url);
       },
     };
 
     const result = await source.fetch(deps({ fetcher }));
 
-    expect(result.leads).toEqual([]);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]?.source).toBe("themuse");
+    expect(result.warnings).toEqual([]);
+    expect(result.leads.length).toBeGreaterThan(0);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((u) => !new URL(u).searchParams.has("api_key"))).toBe(true);
+  });
+
+  it("treats a blank key as no key", async () => {
+    const seen: string[] = [];
+    const source = new TheMuseSource();
+    const fetcher: Fetcher = {
+      fetch: async (url: string) => {
+        seen.push(url);
+        return { statusCode: 200, finalUrl: url, bodyText: fixture("themuse-page1.json") };
+      },
+    };
+
+    await source.fetch(deps({ key: "   ", fetcher }));
+
+    expect(seen.every((u) => !new URL(u).searchParams.has("api_key"))).toBe(true);
   });
 
   it("follows pagination and maps company/url/categories, skipping blank landing pages", async () => {

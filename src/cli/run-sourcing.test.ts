@@ -3,6 +3,7 @@ import { FakePostingFeed } from "@app/discovery/feed/posting-feed";
 import type { ScanStore } from "@app/discovery/scan-store";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
+import type { LeadSource } from "@app/discovery/sources/types";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
 import type { JobPosting } from "@app/domain/types";
 import type { Fetcher, FetchResponse } from "@app/net/fetcher";
@@ -173,7 +174,7 @@ describe("runSourcing", () => {
           "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true": greenhouse,
         }),
         renderer: new NullRenderer(),
-        // Not consulted in remote mode (sources is forced to [] so only tracked companies crawl).
+        // Not consulted in remote mode (only personal sources + tracked companies crawl locally).
         sharedViewReader: new FakeSharedViewReader({}),
         shareUrl: "",
         settings: { getSetting: () => undefined },
@@ -246,6 +247,63 @@ describe("runSourcing", () => {
     });
 
     expect(events).toContainEqual({ kind: "persisting", total: outcome.postings.length });
+  });
+
+  it("hybrid remote mode still crawls personal lead sources locally, but not shared ones", async () => {
+    const feed = new FakePostingFeed({ postings: [], warnings: [] });
+    const greenhouse = JSON.stringify({
+      jobs: [
+        {
+          title: "Platform Engineer",
+          absolute_url: "https://boards.greenhouse.io/musey/jobs/1",
+          content: "Node and AWS.",
+        },
+      ],
+    });
+    const called: string[] = [];
+    const shared: LeadSource = {
+      name: "shared-dir",
+      fetch: async () => {
+        called.push("shared-dir");
+        return { leads: [], warnings: [] };
+      },
+    };
+    const personal: LeadSource = {
+      name: "personal-agg",
+      personal: true,
+      fetch: async () => {
+        called.push("personal-agg");
+        return {
+          leads: [
+            { company: "Musey", careersUrl: "https://boards.greenhouse.io/musey", categories: [] },
+          ],
+          warnings: [],
+        };
+      },
+    };
+    const { store } = fakeStore();
+
+    const outcome = await runSourcing({
+      repo: store,
+      feed,
+      discoverDeps: {
+        fetcher: new RouteFetcher({
+          "https://boards-api.greenhouse.io/v1/boards/musey/jobs?content=true": greenhouse,
+        }),
+        renderer: new NullRenderer(),
+        sharedViewReader: new FakeSharedViewReader({}),
+        shareUrl: "",
+        settings: { getSetting: () => undefined },
+        sources: [shared, personal],
+        delayMs: 0,
+      },
+    });
+
+    // The cloud worker covers the shared directory; the personal source is ours to crawl.
+    expect(called).toEqual(["personal-agg"]);
+    expect(outcome.postings.map((p) => p.url)).toEqual([
+      "https://boards.greenhouse.io/musey/jobs/1",
+    ]);
   });
 
   it("skips liveness re-check and expiry on a retry-scope sourcing run", async () => {

@@ -30,5 +30,12 @@ export type LeadSourceDeps = {
  */
 export interface LeadSource {
   readonly name: string;
+  /**
+   * A personal source runs only on the user's own local scans: its leads stay in the local DB and
+   * are never published to the shared hosted feed. The hosted worker drops these (`sharedOnly`), and
+   * hybrid remote mode crawls them locally next to tracked companies (`personalOnly`), since the
+   * feed can't contain them. Absent/false means a shared, public directory source.
+   */
+  readonly personal?: boolean;
   fetch(deps: LeadSourceDeps): Promise<LeadSourceResult>;
 }

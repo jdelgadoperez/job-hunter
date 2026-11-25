@@ -419,4 +419,19 @@ describe("settingsWithEnvKey", () => {
     expect(settingsWithEnvKey(repo).getSetting("anthropicApiKey")).toBe("sk-stored");
     repo.close();
   });
+
+  it("falls back to JOB_HUNTER_THE_MUSE_API_KEY for The Muse key, preferring a stored one", () => {
+    const repo = openDb();
+    const reader = settingsWithEnvKey(repo);
+
+    vi.stubEnv("JOB_HUNTER_THE_MUSE_API_KEY", undefined);
+    expect(reader.getSetting("theMuseApiKey")).toBeUndefined();
+
+    vi.stubEnv("JOB_HUNTER_THE_MUSE_API_KEY", "  muse-env  ");
+    expect(reader.getSetting("theMuseApiKey")).toBe("muse-env");
+
+    repo.setSetting("theMuseApiKey", "muse-stored");
+    expect(reader.getSetting("theMuseApiKey")).toBe("muse-stored");
+    repo.close();
+  });
 });

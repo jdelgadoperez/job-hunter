@@ -16,10 +16,13 @@ Run it where a real browser is available — a container or a CI runner with the
 
 ## Environment
 
+The worker runs only **shared** lead sources (stillhiring.today, Remotive). Personal sources such as
+The Muse (`LeadSource.personal`) are dropped by `runScannerOnce`, so their leads never reach the
+public feed; they run on each user's own local scans instead.
+
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Service-role Postgres connection (writes bypass RLS). From Supabase → Project Settings → Database. **Secret.** |
-| `JOB_HUNTER_THE_MUSE_API_KEY` | no | Enables The Muse lead source; omit to skip it. |
 | `JOB_HUNTER_SCAN_BUDGET_MS` | no | Wall-clock budget for the crawl (default 25 min). When reached, the crawl stops and the worker persists a partial feed instead of overrunning the job timeout. Keep it below the scheduler's timeout. |
 | `JOB_HUNTER_POSTING_RETENTION_DAYS` | no | Days to keep an expired posting before the worker deletes it (default 30; `0` disables). Expired rows are never served by the feed but hold most of the database's size, so pruning keeps the hosted DB under its storage quota. A pruned posting that reappears is simply re-inserted. |
 | `PLAYWRIGHT_BROWSERS_PATH` | env-specific | Where Chromium is installed (set by the base image). |
@@ -71,7 +74,6 @@ crawls never overlap.
 | Secret | Required | Value |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | Service-role Postgres connection string (Supabase → Project Settings → Database). |
-| `THE_MUSE_API_KEY` | no | The Muse API key, to enable that lead source. |
 
 Until `DATABASE_URL` is set the scheduled run exits 1 with a clear message (it does nothing
 destructive). Trigger a first run by hand from the Actions tab (`Run workflow`) once the secret is in

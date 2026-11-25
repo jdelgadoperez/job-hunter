@@ -138,7 +138,8 @@ export function Settings() {
                 "A key is set. Leave blank to keep it."
               ) : (
                 <>
-                  Optional — adds The Muse as a lead source.{" "}
+                  Optional — The Muse runs on your local scans without a key; a key raises its rate
+                  limit.{" "}
                   <a
                     href="https://www.themuse.com/developers/api/v2"
                     target="_blank"
