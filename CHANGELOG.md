@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.10.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.9.0...job-hunter-v0.10.0) (2026-11-26)
+
+
+### Features
+
+* **scoring:** default the scorer to Claude Sonnet 5.5 ([#180](https://github.com/jdelgadoperez/job-hunter/issues/180)) ([dfa4d38](https://github.com/jdelgadoperez/job-hunter/commit/dfa4d38e514e5949737118f7fa9fb91e904704df))
+* **settings:** scorer model picker, plus readable scan failures in Needs attention ([#181](https://github.com/jdelgadoperez/job-hunter/issues/181)) ([83c2323](https://github.com/jdelgadoperez/job-hunter/commit/83c2323abe352e63b6b7cdce63ec3331c01621db))
+* **sources:** run The Muse keyless and keep it out of the hosted feed ([#182](https://github.com/jdelgadoperez/job-hunter/issues/182)) ([0e9fa99](https://github.com/jdelgadoperez/job-hunter/commit/0e9fa998f00b9f583e00c50bd15854bb39a9bb57))
+* **web:** redesign the dashboard and add an All companies view ([#178](https://github.com/jdelgadoperez/job-hunter/issues/178)) ([4505e39](https://github.com/jdelgadoperez/job-hunter/commit/4505e39adc6a5ef5211dcac68c4fc5eb92175ef6))
+
 ## [0.9.0](https://github.com/jdelgadoperez/job-hunter/compare/job-hunter-v0.8.0...job-hunter-v0.9.0) (2026-11-21)
 
 
