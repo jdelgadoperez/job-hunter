@@ -25,28 +25,26 @@ const MusePage = z
   .passthrough();
 
 /**
- * The Muse jobs aggregator (`api-v2.themuse.com/jobs`) as a key-gated `LeadSource`. Mirrors the LLM
- * scorer's no-key fallback: with no `theMuseApiKey` setting it self-skips with a `Warning` and makes
- * no request, so it can be registered unconditionally. Emits one `CompanyLead` per listing that has a
+ * The Muse jobs aggregator (`api-v2.themuse.com/jobs`) as a personal `LeadSource` (see
+ * `PERSONAL_LEAD_SOURCES`: local scans only, never the hosted feed). The API key is optional: keyless
+ * calls are allowed at a lower rate limit (500 req/hour vs 3600 with a key), so with no
+ * `theMuseApiKey` setting (or `JOB_HUNTER_THE_MUSE_API_KEY` env var, via `settingsWithEnvKey`) it
+ * simply omits `api_key`. Emits one `CompanyLead` per listing that has a
  * landing page — staying "dumb" about ATS platforms; `resolve-ats` classifies each URL downstream and
  * `collectLeads`' dedup collapses repeats. A page failure mid-pagination keeps the leads gathered so
  * far plus a warning. Never throws.
  */
 export class TheMuseSource implements LeadSource {
   readonly name = SOURCE;
+  readonly personal = true;
 
   async fetch(deps: LeadSourceDeps): Promise<LeadSourceResult> {
     const key = deps.settings.getSetting(THE_MUSE_KEY_SETTING)?.trim();
-    if (!key) {
-      return {
-        leads: [],
-        warnings: [{ source: SOURCE, message: "no API key configured; skipping" }],
-      };
-    }
+    const keyParam = key ? `api_key=${encodeURIComponent(key)}&` : "";
 
     const leads: CompanyLead[] = [];
     for (let page = 0; page < MAX_PAGES; page += 1) {
-      const url = `${BASE_URL}?api_key=${encodeURIComponent(key)}&page=${page}`;
+      const url = `${BASE_URL}?${keyParam}page=${page}`;
       const result = await fetchFeed(deps.fetcher, url, MusePage);
       if (!result.ok) {
         return { leads, warnings: [{ source: SOURCE, message: result.warning }] };

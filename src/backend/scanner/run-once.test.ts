@@ -2,6 +2,7 @@ import type { PageRenderer } from "@app/discovery/connectors/browser";
 import type { ScanStore } from "@app/discovery/scan-store";
 import { FakeSharedViewReader } from "@app/discovery/sources/airtable";
 import { AirtableSource } from "@app/discovery/sources/airtable-source";
+import type { LeadSource } from "@app/discovery/sources/types";
 import type { JobPosting } from "@app/domain/types";
 import type { Fetcher, FetchResponse } from "@app/net/fetcher";
 import type { CompanyRef } from "@app/storage/repository";
@@ -94,5 +95,40 @@ describe("runScannerOnce", () => {
 
     expect(outcome.postings).toHaveLength(1);
     expect(saved.map((p) => p.id)).toEqual(outcome.postings.map((p) => p.id));
+  });
+
+  it("never runs personal lead sources, so their leads can't reach the shared feed", async () => {
+    const called: string[] = [];
+    const personal: LeadSource = {
+      name: "themuse",
+      personal: true,
+      fetch: async () => {
+        called.push("themuse");
+        return {
+          leads: [
+            { company: "Musey", careersUrl: "https://boards.greenhouse.io/musey", categories: [] },
+          ],
+          warnings: [],
+        };
+      },
+    };
+    const { store, saved } = fakeStore();
+
+    const outcome = await runScannerOnce({
+      store,
+      discoverDeps: {
+        fetcher: new RouteFetcher({}),
+        renderer: new NullRenderer(),
+        sharedViewReader: new FakeSharedViewReader(airtableData([])),
+        shareUrl: "https://airtable.com/appX/shrX/tblX",
+        delayMs: 0,
+        settings: { getSetting: () => undefined },
+        sources: [new AirtableSource(), personal],
+      },
+    });
+
+    expect(called).toEqual([]);
+    expect(outcome.companies.map((c) => c.company)).not.toContain("Musey");
+    expect(saved).toEqual([]);
   });
 });

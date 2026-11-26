@@ -274,7 +274,8 @@ pipeline (`scan`, `score`, `config`, `list`, `profile`, `track`, `app`, with col
 help) — plus incremental scans with directory diffing and posting expiry, per-posting liveness
 re-checks, and smooth in-place updates. Scanning is split into a free `scan` and a budget-aware
 `score` (offline-score gate → batch Claude triage → concurrent deep score). Discovery fans out over
-multiple lead sources (stillhiring.today, Remotive, and the key-gated The Muse) and resolves 11 ATS
+multiple lead sources (stillhiring.today, Remotive, and The Muse, which runs on your local scans only
+and is never published to the hosted feed) and resolves 11 ATS
 platforms (Greenhouse, Lever, Ashby, Workday, Rippling, Recruitee, SmartRecruiters, BambooHR, UKG,
 Breezy, Workable) with a JSON-LD / browser fallback. The lead-source architecture — and how to add a
 new one — is documented in [`docs/career-page-resources.md`](docs/career-page-resources.md); Claude

@@ -11,6 +11,7 @@ import {
   MODEL_SETTING,
   PROVIDER_SETTING,
   SCAN_FRESHNESS_SETTING,
+  THE_MUSE_KEY_SETTING,
 } from "./settings-keys";
 
 // Re-exported so existing importers (and tests) can keep reaching these via resolve-settings.
@@ -23,7 +24,8 @@ export interface SettingsReader {
 
 /**
  * Wrap a `SettingsReader` so a missing Anthropic API key falls back to the `ANTHROPIC_API_KEY`
- * env var. Stored settings always win; the env var is only consulted when the key is unset.
+ * env var, and a missing The Muse key to `JOB_HUNTER_THE_MUSE_API_KEY`. Stored settings always win;
+ * the env var is only consulted when the key is unset.
  * Shared by the CLI and the web server so both resolve the key identically.
  */
 export function settingsWithEnvKey(base: SettingsReader): SettingsReader {
@@ -32,6 +34,9 @@ export function settingsWithEnvKey(base: SettingsReader): SettingsReader {
       const stored = base.getSetting(key);
       if (stored !== undefined) return stored;
       if (key === ANTHROPIC_KEY_SETTING) return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
+      if (key === THE_MUSE_KEY_SETTING) {
+        return process.env.JOB_HUNTER_THE_MUSE_API_KEY?.trim() || undefined;
+      }
       return undefined;
     },
   };

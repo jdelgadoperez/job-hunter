@@ -6,7 +6,7 @@ name: scan-worker
 # See docs/backend/worker-runbook.md.
 #
 # Requires the repo Actions secret DATABASE_URL (service-role Postgres connection). Without it the
-# worker exits 1 with a clear message. THE_MUSE_API_KEY is optional (enables The Muse lead source).
+# worker exits 1 with a clear message. Personal lead sources (The Muse) never run here.
 
 on:
   schedule:
@@ -52,7 +52,6 @@ jobs:
           npm run scan:worker 2>&1 | tee scan.log
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JOB_HUNTER_THE_MUSE_API_KEY: ${{ secrets.THE_MUSE_API_KEY }}
 
       - name: Run summary
         # Render a quick, human-readable summary on the run's page (no log-digging). Runs even on

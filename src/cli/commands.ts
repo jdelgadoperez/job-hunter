@@ -2,6 +2,7 @@ import { makeCompanyId } from "@app/discovery/company-id";
 import { type DiscoverDeps, discover } from "@app/discovery/discover";
 import type { PostingFeed } from "@app/discovery/feed/posting-feed";
 import type { ScanScope, ScanStore } from "@app/discovery/scan-store";
+import { LEAD_SOURCES, personalOnly } from "@app/discovery/sources/registry";
 import type { CompanyLead } from "@app/discovery/sources/types";
 import { normalizeCareersUrl } from "@app/domain/normalize";
 import type { ScanProgressEvent } from "@app/domain/scan-progress";
@@ -113,8 +114,9 @@ export type SourcingDeps = {
   discoverDeps: DiscoverDeps;
   /**
    * Optional remote feed. When set, the scan runs in **hybrid remote mode**: pull the shared feed
-   * AND locally crawl only the user's tracked companies (the cloud worker already covers the shared
-   * directory). When absent, run the full local crawl.
+   * AND locally crawl only the user's tracked companies plus any personal lead sources (the cloud
+   * worker already covers the shared directory, and never runs personal sources). When absent, run
+   * the full local crawl.
    */
   feed?: PostingFeed;
   onProgress?: (event: ScanProgressEvent) => void;
@@ -266,9 +268,11 @@ async function sourceFromFullCrawl(
 }
 
 /**
- * Hybrid remote mode: the shared feed plus a local crawl of ONLY the user's tracked companies.
- * `sources: []` makes `collectLeads` contribute just the tracked companies, so the client skips the
- * shared directory the cloud worker already crawls. Feed + local postings merge by id (a posting in
+ * Hybrid remote mode: the shared feed plus a local crawl of ONLY the user's tracked companies and
+ * personal lead sources (e.g. The Muse). Filtering `sources` down to the personal ones makes
+ * `collectLeads` skip the shared directory the cloud worker already crawls, while still running the
+ * sources the worker never publishes. A retry scan passes `sources: []`, so it stays scoped to the
+ * needs-attention companies. Feed + local postings merge by id (a posting in
  * both — e.g. a tracked company also in the feed — collapses to one).
  *
  * `companyIdFilter`, when present (a `"retry"` scan), restricts the feed to postings belonging to
@@ -292,7 +296,8 @@ async function sourceFromFeedAndTracked(
         (p) => p.companyId !== undefined && companyIdFilter.has(p.companyId),
       )
     : feedResult.postings;
-  const local = await discover({ ...discoverDeps, sources: [], onProgress });
+  const sources = personalOnly(discoverDeps.sources ?? LEAD_SOURCES);
+  const local = await discover({ ...discoverDeps, sources, onProgress });
   const byId = new Map<string, JobPosting>();
   for (const posting of [...feedPostings, ...local.postings]) byId.set(posting.id, posting);
 

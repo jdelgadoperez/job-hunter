@@ -5,7 +5,7 @@ URL — and resolving each one to an ATS connector (or a browser fallback). Toda
 directory source plus your own tracked companies. This doc catalogues **other resources you could
 add** to widen the funnel, and explains how each fits the existing architecture.
 
-Some of these are now wired up — the **Remotive** and (key-gated) **The Muse** lead sources and a
+Some of these are now wired up — the **Remotive** and (personal, local-only) **The Muse** lead sources and a
 **Workable** connector all shipped (called out below). The rest remain a reference: the goal is to
 make the tradeoffs explicit so adding a source stays a small, well-understood change.
 
@@ -15,9 +15,15 @@ Discovery is a two-step seam (`src/discovery/`):
 
 1. **Sources** produce `CompanyLead`s — `{ company, careersUrl, categories }` (see
    `src/discovery/sources/types.ts`). Production sources today: `airtable.ts` (the community
-   **stillhiring.today** directory, a public Airtable shared view), `remotive.ts`, and the key-gated
+   **stillhiring.today** directory, a public Airtable shared view), `remotive.ts`, and
    `themuse.ts` — each a `LeadSource` run by `discover.ts` (`collectLeads`). User-tracked companies
    are merged in too, de-duplicated by normalized careers URL.
+
+   A source can be **shared** (the default: its leads may be published to the hosted feed) or
+   **personal** (`readonly personal = true`). Personal sources run only on a user's own local scans:
+   the hosted worker drops them (`sharedOnly` in `runScannerOnce`), and hybrid remote mode crawls
+   them locally next to tracked companies (`personalOnly`), since the feed can't contain them. The
+   Muse is personal.
 2. **Connectors** resolve each lead's careers URL to a known ATS and fetch its postings
    (`resolve-ats.ts` → `connectors/`), falling back to a headless browser render, and skipping hosts
    we don't scrape (`unscrapable.ts`).
@@ -66,7 +72,7 @@ anti-bot and against ToS — keep those on the `unscrapable` list). Each is a ne
 
 | Source | Endpoint | Notes |
 | --- | --- | --- |
-| **The Muse** | `https://api-v2.themuse.com/jobs` | Free API key; companies + listings, paginated. **✅ shipped** (`themuse.ts`). |
+| **The Muse** | `https://api-v2.themuse.com/jobs` | Works keyless (500 req/hour); an optional key raises it to 3600. Companies + listings, paginated. **✅ shipped** (`themuse.ts`, personal/local-only). |
 | **Remotive** | `https://remotive.com/api/remote-jobs` | Free, no auth; remote roles with company name + URL. **✅ shipped** (`remotive.ts`). |
 | **RemoteOK** | `https://remoteok.com/api` | Free JSON; first element is metadata. Attribution required. |
 | **Arbeitnow** | `https://www.arbeitnow.com/api/job-board-api` | Free, no auth; EU-heavy. |
@@ -82,20 +88,19 @@ lots of direct ATS board links the resolver picks up automatically. The pattern 
 source emits a careers URL and lets `resolve-ats` + `detect-ats-fingerprint` classify it — the source
 stays dumb.
 
-### Worked example: a key-gated source (The Muse)
+### Worked example: an optional-key, personal source (The Muse)
 
-> **Now implemented** in `src/discovery/sources/themuse.ts` exactly along these lines — kept here as
-> the reference template for the next key-gated source (Adzuna, USAJobs).
+> **Now implemented** in `src/discovery/sources/themuse.ts` along these lines. For a source whose
+> key is *required* (Adzuna, USAJobs), self-skip with a warning when the key is unset instead —
+> mirroring the LLM scorer's no-key fallback.
 
-Sources that need an API key follow the same `LeadSource` contract as Remotive, plus a self-skip when
-the key is unset — mirroring the LLM scorer's no-key fallback. The shape:
-
-- **Endpoint:** `https://api-v2.themuse.com/jobs?api_key={key}&page={n}` — paginated, returns
+- **Endpoint:** `https://api-v2.themuse.com/jobs?[api_key={key}&]page={n}` — paginated, returns
   `{ results: [{ company: { name }, refs: { landing_page }, categories, levels }], page_count }`.
-- **Key:** read from `LeadSourceDeps.settings` under a `theMuseApiKey` setting (add to
-  `src/matching/settings-keys.ts`). When unset, return
-  `{ leads: [], warnings: [{ source: "themuse", message: "no API key configured; skipping" }] }` —
-  never an error. The source is registered unconditionally in `LEAD_SOURCES`; the key check gates it.
+- **Key (optional):** read from `LeadSourceDeps.settings` under a `theMuseApiKey` setting (the
+  dashboard's Settings, or the `JOB_HUNTER_THE_MUSE_API_KEY` env var via `settingsWithEnvKey`). With
+  no key the request just omits `api_key`; The Muse allows that at a lower rate limit.
+- **Personal:** `readonly personal = true`, so it runs on local scans only and never feeds the
+  hosted worker's public database.
 - **Mapping:** one `CompanyLead` per listing — `company ← results[].company.name`,
   `careersUrl ← results[].refs.landing_page`, `categories ← results[].categories[].name`. Stay dumb
   about ATS specifics; let `resolve-ats` classify the landing page.
@@ -103,7 +108,8 @@ the key is unset — mirroring the LLM scorer's no-key fallback. The shape:
 - **Attribution / ToS:** The Muse API key is tied to their terms — honor rate limits and attribution.
 
 This is the template for Adzuna and USAJobs too (both key-gated): a new file under
-`src/discovery/sources/`, a settings key, registration in `LEAD_SOURCES`, and the self-skip guard.
+`src/discovery/sources/`, a settings key, registration in `LEAD_SOURCES`, and a self-skip guard
+when the key is required.
 
 ---
 
